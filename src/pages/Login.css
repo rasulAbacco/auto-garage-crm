@@ -1,0 +1,114 @@
+/* Layout */
+.login-container {
+  position: relative;
+  height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #f9fafb;
+  overflow: hidden;
+}
+
+/* Floating Shapes */
+.animated-shapes {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  z-index: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.shape {
+  position: absolute;
+  width: 180px;
+  height: 180px;
+  border-radius: 50%;
+  opacity: 0.15;
+  animation: float 10s infinite ease-in-out;
+}
+
+.shape1 {
+  background-color: #6366f1;
+  top: 10%;
+  left: -60px;
+  animation-delay: 0s;
+}
+.shape2 {
+  background-color: #f59e0b;
+  bottom: 15%;
+  right: -80px;
+  animation-delay: 2s;
+}
+.shape3 {
+  background-color: #10b981;
+  top: 30%;
+  right: 10%;
+  animation-delay: 4s;
+}
+
+/* Float Animation */
+@keyframes float {
+  0%, 100% {
+    transform: translateY(0) rotate(0deg);
+  }
+  50% {
+    transform: translateY(-40px) rotate(15deg);
+  }
+}
+
+/* Login Box */
+.login-box {
+  position: relative;
+  z-index: 1;
+  background: white;
+  padding: 2rem;
+  border-radius: 1.5rem;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+  width: 100%;
+  max-width: 600px;
+  height: 600;
+  animation: fadeIn 0.8s ease-in-out;
+}
+
+/* Input */
+.login-input {
+  width: 100%;
+  padding: 0.6rem 0.75rem;
+  border-radius: 0.75rem;
+  border: 1px solid #9b9c9e;
+  transition: 0.3s;
+}
+
+.login-input:focus {
+  border-color: #6366f1;
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2);
+  outline: none;
+}
+
+/* Button */
+.login-button {
+  width: 100%;
+  padding: 0.6rem 1rem;
+  background-color: #6366f1;
+  color: white;
+  border: none;
+  border-radius: 0.75rem;
+  font-weight: 600;
+  transition: 0.3s;
+}
+
+.login-button:hover {
+  background-color: #4f46e5;
+}
+
+/* Fade in */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  } to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}

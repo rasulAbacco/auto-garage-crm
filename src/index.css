@@ -1,0 +1,14 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --sidebar-width: 250px;
+}
+
+/* Print styles for invoice */
+@media print {
+  .no-print { display: none !important; }
+  .print-p-0 { padding: 0 !important; }
+  body { background: white !important; }
+}
