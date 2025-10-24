@@ -1,3 +1,4 @@
+// BillingList.jsx (unchanged)
 import React, { useState, useMemo } from 'react'
 import { listBilling, deleteInvoice, listClients } from '../../lib/storage.js'
 import Table from '../../components/Table.jsx'
