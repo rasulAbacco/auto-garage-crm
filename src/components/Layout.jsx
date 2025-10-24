@@ -1,3 +1,4 @@
+// Layout.js (fixed)
 import React, { useState } from 'react'
 import { Outlet, NavLink, useNavigate } from 'react-router-dom'
 import {
@@ -10,8 +11,11 @@ import {
   LogOut,
   LayoutDashboard,
   Menu,
-  X
-} from 'lucide-react'
+  X,
+  FileText
+} from 'lucide-react';
+import motorDesk from "../../public/Motor desk.png";
+
 
 export default function Layout() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
@@ -24,6 +28,7 @@ export default function Layout() {
     { to: '/billing', label: 'Billing', icon: Receipt },
     { to: '/reminders', label: 'Reminders', icon: Bell },
     { to: '/reports', label: 'Reports', icon: BarChart2 },
+    { to: '/details', label: 'Details', icon: FileText },
   ]
 
   const logout = () => {
@@ -32,7 +37,7 @@ export default function Layout() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 flex">
+    <div className="min-h-screen bg-black flex">
       {/* Overlay for mobile */}
       {sidebarOpen && (
         <div
@@ -52,10 +57,17 @@ export default function Layout() {
           {/* Logo */}
           <div className="flex items-center justify-between h-16 px-6 border-b border-slate-200">
             <div className="flex items-center gap-3">
-              <div className="w-8 h-8 bg-gradient-to-br from-blue-600 to-purple-600 rounded-lg flex items-center justify-center">
-                <Car className="w-5 h-5 text-white" />
+              <div className="w-8 h-8 bg-gradient-to-br rounded-lg flex items-center justify-center">
+                <img
+                  src="/Motor desk.png"
+                  alt="Motor Desk Logo"
+                  className="w-10 h-10"
+                />
               </div>
-              <div className="font-bold text-slate-800 text-lg">Auto Garage</div>
+              <div className="font-poppins font-bold text-slate-800 text-2xl">
+  Motor Desk
+</div>
+
             </div>
             <button
               onClick={() => setSidebarOpen(false)}
@@ -83,9 +95,13 @@ export default function Layout() {
               >
                 {({ isActive }) => {
                   const Icon = item.icon
-                  return <Icon className={`w-5 h-5 ${isActive ? 'text-white' : 'text-slate-500'}`} />
+                  return (
+                    <>
+                      <Icon className={`w-5 h-5 ${isActive ? 'text-white' : 'text-slate-500'}`} />
+                      <span>{item.label}</span>
+                    </>
+                  )
                 }}
-                <span>{item.label}</span>
               </NavLink>
             ))}
           </nav>

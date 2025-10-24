@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react'
+import React, { useMemo, useState, useEffect } from 'react'
 import { listReminders, upsertReminder, deleteReminder, listClients } from '../../lib/storage.js'
 import Table from '../../components/Table.jsx'
 import SearchBar from '../../components/SearchBar.jsx'
@@ -12,23 +12,32 @@ export default function RemindersList() {
     warrantyExpiry: '',
     notify: 'SMS'
   })
+  const [reminders, setReminders] = useState([])
+  const [clients, setClients] = useState([])
 
-  const data = listReminders()
-  const clients = listClients()
-  const nameById = Object.fromEntries(clients.map(c => [String(c.id), c.fullName]))
+  useEffect(() => {
+    setReminders(listReminders())
+    setClients(listClients())
+  }, [])
+
+  const nameById = useMemo(() => {
+    return Object.fromEntries(clients.map(c => [String(c.id), c.fullName]))
+  }, [clients])
 
   const filtered = useMemo(() => {
     const term = q.toLowerCase()
-    return data.filter(r =>
+    return reminders.filter(r =>
       [nameById[String(r.customerId)] || '', r.nextService, r.insuranceRenewal, r.warrantyExpiry, r.notify].some(v =>
         String(v).toLowerCase().includes(term)
       )
     )
-  }, [q, data])
+  }, [q, reminders, nameById])
 
   const submit = (e) => {
     e.preventDefault()
-    upsertReminder({ ...form, customerId: Number(form.customerId) })
+    const newReminder = { ...form, customerId: Number(form.customerId) }
+    upsertReminder(newReminder)
+    setReminders(prev => [...prev, newReminder])
     setForm({
       customerId: '',
       nextService: '',
@@ -36,7 +45,60 @@ export default function RemindersList() {
       warrantyExpiry: '',
       notify: 'SMS'
     })
-    location.reload()
+  }
+
+  // Function to send notifications via all channels
+  const sendNotifications = (client, message) => {
+    // In a real implementation, you would integrate with:
+    // - SMS APIs (Twilio, Vonage, etc.)
+    // - Email services (SendGrid, Mailgun, etc.)
+    // - WhatsApp Business API
+    
+    // For now, we'll simulate by logging to console
+    console.log(`SMS sent to ${client.fullName}: ${message}`)
+    console.log(`Email sent to ${client.fullName}: ${message}`)
+    console.log(`WhatsApp sent to ${client.fullName}: ${message}`)
+    
+    // In a real app, you would make API calls like:
+    // fetch('/api/send-sms', { method: 'POST', body: JSON.stringify({ to: client.phone, message }) })
+    // fetch('/api/send-email', { method: 'POST', body: JSON.stringify({ to: client.email, message }) })
+    // fetch('/api/send-whatsapp', { method: 'POST', body: JSON.stringify({ to: client.phone, message }) })
+  }
+
+  // Function to mark service as done and set next reminder
+  const markServiceDone = (reminder) => {
+    const client = clients.find(c => c.id === reminder.customerId)
+    if (!client) return
+    
+    // Send completion notification
+    const completionMessage = `Your service has been completed. Thank you for your business!`
+    sendNotifications(client, completionMessage)
+    
+    // Calculate next service date (6 months from current service date)
+    const currentDate = new Date(reminder.nextService)
+    const nextDate = new Date(currentDate)
+    nextDate.setMonth(currentDate.getMonth() + 6)
+    
+    // Format as YYYY-MM-DD for input
+    const nextServiceDate = nextDate.toISOString().split('T')[0]
+    
+    // Update reminder with new service date
+    const updatedReminder = {
+      ...reminder,
+      nextService: nextServiceDate
+    }
+    
+    upsertReminder(updatedReminder)
+    setReminders(prev => prev.map(r => r.id === reminder.id ? updatedReminder : r))
+    
+    // Send next service notification
+    const nextServiceMessage = `Your next service is scheduled for ${nextDate.toLocaleDateString()}. We look forward to seeing you then!`
+    sendNotifications(client, nextServiceMessage)
+  }
+
+  const handleDelete = (id) => {
+    deleteReminder(id)
+    setReminders(prev => prev.filter(r => r.id !== id))
   }
 
   const columns = [
@@ -61,10 +123,13 @@ export default function RemindersList() {
         actions={(row) => (
           <div className="flex gap-2">
             <button
-              onClick={() => {
-                deleteReminder(row.id)
-                location.reload()
-              }}
+              onClick={() => markServiceDone(row)}
+              className="text-green-600 hover:underline text-sm font-medium"
+            >
+              Mark Done
+            </button>
+            <button
+              onClick={() => handleDelete(row.id)}
               className="text-red-600 hover:underline text-sm font-medium"
             >
               Delete
