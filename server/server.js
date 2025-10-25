@@ -4,7 +4,7 @@ const port = 5000;
 
 // Define a route for the root URL
 app.get('/', (req, res) => {
-  res.send('Hello from Express!');
+  res.send('Backend is Up and Running!');
 });
 
 // Start the server and listen for connections
