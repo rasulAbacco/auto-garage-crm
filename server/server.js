@@ -1,13 +1,26 @@
-import express from'express';
+import express from "express";
+import cors from "cors";
+import dotenv from "dotenv";
+import authRoutes from "./routes/authRoutes.js";
+
+dotenv.config();
+
 const app = express();
-const port = 5000;
+app.use(cors());
+app.use(express.json());
 
-// Define a route for the root URL
-app.get('/', (req, res) => {
-  res.send('Backend is Up and Running!');
+// Base Route
+app.get("/", (req, res) => res.send("🚀 MotorDesk API is running..."));
+
+// API Routes
+app.use("/api/auth", authRoutes);
+
+// Global Error Handling (optional)
+app.use((err, req, res, next) => {
+  console.error(err);
+  res.status(500).json({ message: "Internal Server Error" });
 });
 
-// Start the server and listen for connections
-app.listen(port, () => {
-  console.log(`Server is listening on port ${port}`);
-});
+// Start Server
+const PORT = process.env.PORT || 5000;
+app.listen(PORT, () => console.log(`✅ Server running on port ${PORT}`));

@@ -4,7 +4,7 @@ import { Outlet } from "react-router-dom";
 import PublicNavbar from "../components/PublicNavbar.jsx";
 import { useTheme } from "../contexts/ThemeContext";
 
-export default function PublicLayout() {
+export default function PublicLayout({ children }) {
     const { isDark } = useTheme();
 
     return (
@@ -32,6 +32,7 @@ export default function PublicLayout() {
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 10l7-7m0 0l7 7m-7-7v18" />
                 </svg>
             </button>
+            <main className="relative">{children}</main>
         </div>
     );
 }
