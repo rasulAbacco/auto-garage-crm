@@ -2,18 +2,17 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useTheme } from "../contexts/ThemeContext";
-import { 
-    ArrowRight, Play, Shield, Zap, Users, BarChart3, 
-    CheckCircle, Star, Clock, Wrench, FileText, 
+import {
+    ArrowRight, Play, Shield, Zap, Users, BarChart3,
+    CheckCircle, Star, Clock, Wrench, FileText,
     TrendingUp, Award, Headphones, Gauge, Car,
     Calendar, CreditCard, Bell, Settings
 } from "lucide-react";
 
-export default function Landing() {
+export default function LandingPage() {
     const navigate = useNavigate();
     const { isDark } = useTheme();
     const [activeFeature, setActiveFeature] = useState(0);
-    const [isVideoPlaying, setIsVideoPlaying] = useState(false);
 
     // Auto-rotate features
     useEffect(() => {
@@ -88,75 +87,70 @@ export default function Landing() {
     return (
         <div className={`min-h-screen ${isDark ? 'text-white' : 'text-gray-900'}`}>
             {/* Hero Section */}
-            <section className="relative min-h-screen flex items-center justify-center px-6 pt-20 pb-20 overflow-hidden">
-                {/* Animated background elements */}
-                <div className="absolute inset-0 overflow-hidden">
-                    <div className="absolute -top-40 -right-40 w-80 h-80 bg-purple-500 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-float"></div>
-                    <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-indigo-500 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-float animation-delay-2000"></div>
-                    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-80 h-80 bg-pink-500 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-float animation-delay-4000"></div>
+            <section className="relative min-h-screen flex items-center justify-center px-6 pt-32 pb-20">
+                {/* Background Decoration */}
+                <div className="absolute inset-0 overflow-hidden pointer-events-none">
+                    <div className="absolute top-20 right-20 w-96 h-96 bg-gradient-to-br from-indigo-500/20 to-purple-500/20 rounded-full blur-3xl"></div>
+                    <div className="absolute bottom-20 left-20 w-96 h-96 bg-gradient-to-br from-pink-500/20 to-orange-500/20 rounded-full blur-3xl"></div>
                 </div>
 
                 <div className="relative z-10 max-w-7xl mx-auto grid lg:grid-cols-2 gap-12 items-center">
                     {/* Left Content */}
-                    <div className="space-y-8 animate-fadeInUp">
-                        <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-gradient-to-r from-indigo-500/10 to-purple-500/10 border border-indigo-500/20">
-                            <Zap className="w-4 h-4 text-indigo-500" />
-                            <span className="text-sm font-medium bg-gradient-to-r from-indigo-500 to-purple-500 bg-clip-text text-transparent">
+                    <div className="space-y-8">
+                        <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-gradient-to-r from-indigo-500 to-purple-500 text-white shadow-lg">
+                            <Zap className="w-4 h-4" />
+                            <span className="text-sm font-medium">
                                 Trusted by 10,000+ garages worldwide
                             </span>
                         </div>
 
                         <h1 className="text-5xl lg:text-7xl font-bold leading-tight">
                             <span className="block">The Future of</span>
-                            <span className="block bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 bg-clip-text text-transparent animate-gradient">
+                            <span className="block bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 bg-clip-text text-transparent">
                                 Garage Management
                             </span>
                         </h1>
 
-                        <p className={`text-xl ${isDark ? 'text-gray-300' : 'text-gray-600'} max-w-lg`}>
+                        <p className={`text-xl ${isDark ? 'text-gray-300' : 'text-gray-600'} max-w-lg leading-relaxed`}>
                             Streamline operations, delight customers, and grow your automotive business with our AI-powered CRM platform.
                         </p>
 
                         <div className="flex flex-wrap gap-4">
                             <button
                                 onClick={() => navigate("/pricing")}
-                                className="group px-8 py-4 rounded-2xl bg-gradient-to-r from-indigo-600 to-purple-600 text-white font-semibold shadow-2xl hover:shadow-3xl transform hover:-translate-y-1 transition-all duration-300 flex items-center gap-3"
+                                className="group px-8 py-4 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 text-white font-semibold shadow-lg hover:shadow-2xl hover:scale-105 transition-all flex items-center gap-3"
                             >
                                 <span>Start Free Trial</span>
                                 <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
                             </button>
 
                             <button
-                                onClick={() => setIsVideoPlaying(true)}
-                                className={`group px-8 py-4 rounded-2xl border-2 font-semibold backdrop-blur-sm transition-all duration-300 flex items-center gap-3 ${
-                                    isDark 
-                                        ? 'border-white/20 hover:bg-white/10' 
-                                        : 'border-gray-300 hover:bg-gray-100'
-                                }`}
+                                className={`px-8 py-4 rounded-xl border-2 font-semibold transition-all flex items-center gap-3 ${isDark
+                                        ? 'border-gray-700 hover:bg-gray-800 text-white'
+                                        : 'border-gray-300 hover:bg-white text-gray-900 shadow-sm'
+                                    }`}
                             >
                                 <Play className="w-5 h-5" />
                                 <span>Watch Demo</span>
                             </button>
                         </div>
 
-                        <div className={`flex items-center gap-8 pt-4 ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+                        <div className="flex items-center gap-8 pt-4">
                             <div className="flex items-center gap-2">
                                 <Shield className="w-5 h-5 text-green-500" />
-                                <span className="text-sm">Bank-level Security</span>
+                                <span className={`text-sm ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>Bank-level Security</span>
                             </div>
                             <div className="flex items-center gap-2">
                                 <Clock className="w-5 h-5 text-blue-500" />
-                                <span className="text-sm">24/7 Support</span>
+                                <span className={`text-sm ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>24/7 Support</span>
                             </div>
                         </div>
                     </div>
 
-                    {/* Right Content - Interactive Feature Display */}
-                    <div className="relative animate-fadeInUp animation-delay-200">
-                        <div className={`relative rounded-3xl overflow-hidden shadow-2xl ${
-                            isDark ? 'bg-gray-800/50' : 'bg-white'
-                        } backdrop-blur-xl border ${isDark ? 'border-white/10' : 'border-gray-200'}`}>
-                            {/* Feature Tabs */}
+                    {/* Right Content - Feature Display */}
+                    <div className="relative">
+                        <div className={`rounded-3xl overflow-hidden shadow-2xl ${isDark ? 'bg-gray-900 border border-gray-800' : 'bg-white border border-gray-200'
+                            }`}>
                             <div className="p-8">
                                 <div className="grid grid-cols-2 gap-4 mb-8">
                                     {features.map((feature, index) => {
@@ -165,13 +159,12 @@ export default function Landing() {
                                             <button
                                                 key={index}
                                                 onClick={() => setActiveFeature(index)}
-                                                className={`p-4 rounded-2xl transition-all duration-300 ${
-                                                    activeFeature === index
+                                                className={`p-4 rounded-2xl transition-all ${activeFeature === index
                                                         ? `bg-gradient-to-r ${feature.color} text-white shadow-lg scale-105`
-                                                        : isDark 
-                                                            ? 'bg-gray-700/50 hover:bg-gray-700' 
-                                                            : 'bg-gray-100 hover:bg-gray-200'
-                                                }`}
+                                                        : isDark
+                                                            ? 'bg-gray-800 hover:bg-gray-750 text-gray-300'
+                                                            : 'bg-gray-100 hover:bg-gray-200 text-gray-700'
+                                                    }`}
                                             >
                                                 <Icon className="w-8 h-8 mx-auto mb-2" />
                                                 <p className="text-xs font-medium">{feature.title}</p>
@@ -180,15 +173,15 @@ export default function Landing() {
                                     })}
                                 </div>
 
-                                {/* Active Feature Details */}
-                                <div className="space-y-4 animate-fadeIn">
-                                    <h3 className="text-2xl font-bold">{features[activeFeature].title}</h3>
+                                <div className="space-y-4">
+                                    <h3 className={`text-2xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                                        {features[activeFeature].title}
+                                    </h3>
                                     <p className={isDark ? 'text-gray-300' : 'text-gray-600'}>
                                         {features[activeFeature].description}
                                     </p>
-                                    <div className={`inline-flex items-center gap-2 px-4 py-2 rounded-full ${
-                                        isDark ? 'bg-white/10' : 'bg-gray-100'
-                                    }`}>
+                                    <div className={`inline-flex items-center gap-2 px-4 py-2 rounded-full ${isDark ? 'bg-gray-800 text-gray-300' : 'bg-gray-100 text-gray-700'
+                                        }`}>
                                         <TrendingUp className="w-4 h-4 text-green-500" />
                                         <span className="text-sm font-medium">{features[activeFeature].stats}</span>
                                     </div>
@@ -196,7 +189,6 @@ export default function Landing() {
                             </div>
                         </div>
 
-                        {/* Floating badges */}
                         <div className="absolute -top-4 -right-4 px-4 py-2 rounded-full bg-gradient-to-r from-green-500 to-emerald-500 text-white text-sm font-semibold shadow-lg animate-bounce">
                             Live Now!
                         </div>
@@ -205,7 +197,7 @@ export default function Landing() {
             </section>
 
             {/* Stats Section */}
-            <section className={`py-20 px-6 ${isDark ? 'bg-gray-800/50' : 'bg-gray-50'}`}>
+            <section className={`py-20 px-6 ${isDark ? 'bg-gray-900' : 'bg-white'}`}>
                 <div className="max-w-7xl mx-auto">
                     <div className="grid md:grid-cols-4 gap-8">
                         {stats.map((stat, index) => {
@@ -213,11 +205,10 @@ export default function Landing() {
                             return (
                                 <div
                                     key={index}
-                                    className={`text-center p-8 rounded-2xl backdrop-blur-xl border transition-all duration-300 hover:scale-105 ${
-                                        isDark 
-                                            ? 'bg-white/5 border-white/10' 
-                                            : 'bg-white border-gray-200 shadow-lg'
-                                    }`}
+                                    className={`text-center p-8 rounded-2xl transition-all hover:scale-105 ${isDark
+                                            ? 'bg-gray-800 border border-gray-700'
+                                            : 'bg-gray-50 border border-gray-200 shadow-lg'
+                                        }`}
                                 >
                                     <Icon className="w-12 h-12 mx-auto mb-4 text-indigo-500" />
                                     <div className="text-4xl font-bold bg-gradient-to-r from-indigo-500 to-purple-500 bg-clip-text text-transparent">
@@ -261,16 +252,17 @@ export default function Landing() {
                             return (
                                 <div
                                     key={index}
-                                    className={`group p-8 rounded-2xl backdrop-blur-xl border transition-all duration-300 hover:scale-105 ${
-                                        isDark 
-                                            ? 'bg-white/5 border-white/10 hover:bg-white/10' 
-                                            : 'bg-white border-gray-200 shadow-lg hover:shadow-xl'
-                                    }`}
+                                    className={`group p-8 rounded-2xl transition-all hover:scale-105 ${isDark
+                                            ? 'bg-gray-900 border border-gray-800 hover:border-gray-700'
+                                            : 'bg-white border border-gray-200 shadow-lg hover:shadow-xl'
+                                        }`}
                                 >
                                     <div className="w-14 h-14 rounded-xl bg-gradient-to-r from-indigo-500 to-purple-500 flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
                                         <Icon className="w-7 h-7 text-white" />
                                     </div>
-                                    <h3 className="text-xl font-semibold mb-3">{item.title}</h3>
+                                    <h3 className={`text-xl font-semibold mb-3 ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                                        {item.title}
+                                    </h3>
                                     <p className={isDark ? 'text-gray-400' : 'text-gray-600'}>
                                         {item.desc}
                                     </p>
@@ -282,7 +274,7 @@ export default function Landing() {
             </section>
 
             {/* Testimonials */}
-            <section className={`py-20 px-6 ${isDark ? 'bg-gray-800/50' : 'bg-gray-50'}`}>
+            <section className={`py-20 px-6 ${isDark ? 'bg-gray-900' : 'bg-white'}`}>
                 <div className="max-w-7xl mx-auto">
                     <div className="text-center mb-16 space-y-4">
                         <h2 className="text-4xl lg:text-5xl font-bold">
@@ -297,20 +289,21 @@ export default function Landing() {
                         {testimonials.map((testimonial, index) => (
                             <div
                                 key={index}
-                                className={`p-8 rounded-2xl backdrop-blur-xl border transition-all duration-300 hover:scale-105 ${
-                                    isDark 
-                                        ? 'bg-white/5 border-white/10' 
-                                        : 'bg-white border-gray-200 shadow-lg'
-                                }`}
+                                className={`p-8 rounded-2xl transition-all hover:scale-105 ${isDark
+                                        ? 'bg-gray-800 border border-gray-700'
+                                        : 'bg-gray-50 border border-gray-200 shadow-lg'
+                                    }`}
                             >
                                 <div className="flex items-center gap-4 mb-6">
-                                    <img 
-                                        src={testimonial.image} 
+                                    <img
+                                        src={testimonial.image}
                                         alt={testimonial.name}
-                                        className="w-14 h-14 rounded-full"
+                                        className="w-14 h-14 rounded-full border-2 border-indigo-500"
                                     />
                                     <div>
-                                        <h4 className="font-semibold">{testimonial.name}</h4>
+                                        <h4 className={`font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                                            {testimonial.name}
+                                        </h4>
                                         <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
                                             {testimonial.company}
                                         </p>
@@ -333,8 +326,7 @@ export default function Landing() {
             {/* CTA Section */}
             <section className="py-20 px-6">
                 <div className="max-w-4xl mx-auto text-center">
-                    <div className={`p-12 rounded-3xl bg-gradient-to-r from-indigo-600 to-purple-600 relative overflow-hidden`}>
-                        <div className="absolute inset-0 bg-grid-white/10"></div>
+                    <div className="p-12 rounded-3xl bg-gradient-to-r from-indigo-600 to-purple-600 relative overflow-hidden shadow-2xl">
                         <div className="relative z-10 space-y-6">
                             <Award className="w-16 h-16 mx-auto text-yellow-400" />
                             <h2 className="text-4xl lg:text-5xl font-bold text-white">
@@ -346,25 +338,34 @@ export default function Landing() {
                             <div className="flex flex-wrap gap-4 justify-center pt-4">
                                 <button
                                     onClick={() => navigate("/pricing")}
-                                    className="group px-8 py-4 rounded-2xl bg-white text-indigo-600 font-semibold shadow-2xl hover:shadow-3xl transform hover:-translate-y-1 transition-all duration-300 flex items-center gap-3"
+                                    className="group px-8 py-4 rounded-xl bg-white text-indigo-600 font-semibold shadow-lg hover:shadow-2xl hover:scale-105 transition-all flex items-center gap-3"
                                 >
                                     <span>Start Free Trial</span>
                                     <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
                                 </button>
                                 <button
                                     onClick={() => navigate("/login")}
-                                    className="px-8 py-4 rounded-2xl border-2 border-white/30 text-white font-semibold backdrop-blur-sm hover:bg-white/10 transition-all duration-300"
+                                    className="px-8 py-4 rounded-xl border-2 border-white/30 text-white font-semibold hover:bg-white/10 transition-all"
                                 >
                                     Sign In
                                 </button>
                             </div>
-                            <p className="text-sm text-white/70 pt-4">
+                            <p className="text-sm text-white/80 pt-4">
                                 No credit card required • 14-day free trial • Cancel anytime
                             </p>
                         </div>
                     </div>
                 </div>
             </section>
+            {/* Footer */}
+            <footer className={`relative z-10 px-4 sm:px-6 py-8 border-t ${isDark ? 'border-gray-800' : 'border-gray-200'
+                }`}>
+                <div className="max-w-7xl mx-auto text-center">
+                    <p className={`text-sm ${isDark ? 'text-gray-500' : 'text-gray-600'}`}>
+                        © 2025 MotorDesk. All rights reserved.
+                    </p>
+                </div>
+            </footer>
         </div>
     );
 }
