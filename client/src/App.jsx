@@ -6,7 +6,7 @@ import { Routes, Route, Navigate } from "react-router-dom";
 import PublicLayout from "./components/PublicLayout.jsx";
 import Landing from "./pages/LandinPage.jsx";
 import PricingPage from "./payment/PricingPage.jsx";
-
+import ScrollToTop from "./components/ScrollToTop.jsx";
 /* Auth / App */
 import Login from "./pages/Login.jsx";
 import Layout from "./components/Layout.jsx";
@@ -38,6 +38,7 @@ import ContactUs from "./pages/ContactUs.jsx";
 function App() {
   return (
     <ThemeProvider>
+        <ScrollToTop />
       <Routes>
         {/* Public pages (landing, pricing) */}
         <Route element={<PublicLayout />}>
