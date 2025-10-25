@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { Navigate, useLocation } from "react-router-dom";
 import {jwtDecode} from "jwt-decode";
-
+const API_URL = import.meta.env.VITE_API_BASE_URL;
 export default function ProtectedRoute({ children }) {
   const location = useLocation();
   const [isValid, setIsValid] = useState(null);
@@ -33,7 +33,7 @@ export default function ProtectedRoute({ children }) {
 
   const verifyToken = async () => {
     try {
-      const res = await fetch("http://localhost:5000/api/auth/verify", {
+      const res = await fetch(`${API_URL}/api/auth/verify`, {
         headers: { Authorization: `Bearer ${token}` },
       });
 
