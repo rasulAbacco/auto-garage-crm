@@ -6,6 +6,26 @@
   --sidebar-width: 250px;
 }
 
+/* Force dark input background and text color in dark mode */
+.dark input,
+.dark textarea,
+.dark select {
+  background-color: rgba(255, 255, 255, 0.05) !important;
+  color: white !important;
+}
+
+/* Prevent browser autofill from turning input white/yellow */
+input:-webkit-autofill,
+input:-webkit-autofill:focus,
+textarea:-webkit-autofill,
+select:-webkit-autofill {
+  -webkit-box-shadow: 0 0 0px 1000px rgba(255, 255, 255, 0.05) inset !important;
+  -webkit-text-fill-color: white !important;
+  transition: background-color 5000s ease-in-out 0s;
+}
+
+
+
 /* Print styles for invoice */
 @media print {
   .no-print { display: none !important; }

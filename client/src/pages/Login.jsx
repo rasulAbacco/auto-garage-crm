@@ -95,7 +95,7 @@ export default function Login() {
 
     return (
         <PublicLayout>
-            <div className={` mt-[8%] min-h-screen relative overflow-hidden transition-all duration-700 ${isDark
+            <div className={` mt-[8%] pt-[5%] min-h-screen relative overflow-hidden transition-all duration-700 ${isDark
                 ? 'bg-gradient-to-br from-slate-950 via-indigo-950 to-slate-950'
                 : 'bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50'
                 }`}>
@@ -159,7 +159,7 @@ export default function Login() {
                                             ? 'bg-white/10 border-white/20'
                                             : 'bg-white/80 border-white/40'
                                             } shadow-2xl transform group-hover:scale-110 transition-all duration-300`}>
-                                            <Car className={`w-10 h-10 ${isDark ? 'text-white' : 'text-[#5247e6]' }`} strokeWidth={2.5} />
+                                            <Car className={`w-10 h-10 ${isDark ? 'text-white' : 'text-[#5247e6]'}`} strokeWidth={2.5} />
                                         </div>
                                     </div>
                                     <div>
@@ -313,7 +313,7 @@ export default function Login() {
                                                     <div className="relative group">
                                                         <User className={`absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 transition-all duration-300 ${focusedInput === 'username'
                                                             ? 'text-indigo-500 scale-110'
-                                                            : isDark ? 'text-gray-500' : 'text-gray-400'
+                                                            : isDark ? 'text-gray-100' : 'text-gray-400'
                                                             }`} />
                                                         <input
                                                             type="text"
@@ -325,13 +325,13 @@ export default function Login() {
                                                             placeholder="Enter your username"
                                                             required
                                                             className={`w-full pl-12 pr-4 py-4 rounded-xl border-2 transition-all duration-300 ${focusedInput === 'username'
-                                                                ? 'border-indigo-500 shadow-lg shadow-indigo-500/20 scale-[1.01]'
-                                                                : error
-                                                                    ? 'border-red-400'
-                                                                    : isDark
-                                                                        ? 'bg-white/5 border-white/10 focus:border-indigo-500'
-                                                                        : 'bg-white/50 border-gray-200 focus:border-indigo-500'
-                                                                } focus:outline-none ${isDark ? 'text-white placeholder-gray-500' : 'text-gray-900 placeholder-gray-400'
+                                                                    ? 'border-indigo-500 shadow-lg shadow-indigo-500/20 scale-[1.01]'
+                                                                    : error
+                                                                        ? 'border-red-400'
+                                                                        : isDark
+                                                                            ? 'bg-white/5 border-white/10 focus:border-indigo-500 focus:bg-white/5'
+                                                                            : 'bg-white/50 border-gray-200 focus:border-indigo-500 focus:bg-white/50'
+                                                                } focus:outline-none ${isDark ? 'text-white placeholder-gray-100' : 'text-gray-900 placeholder-gray-400'
                                                                 }`}
                                                         />
                                                     </div>
@@ -354,7 +354,7 @@ export default function Login() {
                                                     <div className="relative group">
                                                         <Lock className={`absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 transition-all duration-300 ${focusedInput === 'password'
                                                             ? 'text-indigo-500 scale-110'
-                                                            : isDark ? 'text-gray-500' : 'text-gray-400'
+                                                            : isDark ? 'text-gray-100' : 'text-gray-400'
                                                             }`} />
                                                         <input
                                                             type={showPassword ? "text" : "password"}
@@ -372,7 +372,7 @@ export default function Login() {
                                                                     : isDark
                                                                         ? 'bg-white/5 border-white/10 focus:border-indigo-500'
                                                                         : 'bg-white/50 border-gray-200 focus:border-indigo-500'
-                                                                } focus:outline-none ${isDark ? 'text-white placeholder-gray-500' : 'text-gray-900 placeholder-gray-400'
+                                                                } focus:outline-none ${isDark ? 'text-white placeholder-gray-100' : 'text-gray-900 placeholder-gray-400'
                                                                 }`}
                                                         />
                                                         <button
@@ -606,6 +606,6 @@ export default function Login() {
                 }
             `}</style>
             </div>
-      </PublicLayout>
+        </PublicLayout>
     );
 }
