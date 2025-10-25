@@ -11,6 +11,8 @@ import {
 
 import PublicLayout from "../components/PublicLayout";
 import { useTheme } from "../contexts/ThemeContext";
+
+const API_URL = import.meta.env.VITE_API_BASE_URL;
 export default function Login() {
 
     const [formData, setFormData] = useState({
@@ -48,7 +50,7 @@ export default function Login() {
         setIsLoading(true);
 
         try {
-            const response = await fetch("http://localhost:5000/api/auth/login", {
+            const response = await fetch(`${API_URL}/api/auth/login`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify(formData),
@@ -93,7 +95,7 @@ export default function Login() {
 
     return (
         <PublicLayout>
-            <div className={` pt-[5%] min-h-screen relative overflow-hidden transition-all duration-700 ${isDark
+            <div className={` mt-[8%] min-h-screen relative overflow-hidden transition-all duration-700 ${isDark
                 ? 'bg-gradient-to-br from-slate-950 via-indigo-950 to-slate-950'
                 : 'bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50'
                 }`}>
