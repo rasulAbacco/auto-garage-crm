@@ -27,6 +27,14 @@ import RemindersList from "./pages/reminders/RemindersList.jsx";
 import Reports from "./pages/reports/Reports.jsx";
 import DetailsPage from "./pages/details/DetailsPage.jsx";
 import { ThemeProvider } from './contexts/ThemeContext';
+
+import CarGarage from "./pages/garages/CarGarage.jsx";
+import BikeGarage from "./pages/garages/BikeGarage.jsx";
+import WashingCenter from "./pages/garages/WashingCenter.jsx";
+import BikeSpareParts from "./pages/spareparts/BikeSpareParts.jsx";
+import CarSpareParts from "./pages/spareparts/CarSpareParts.jsx";
+import ContactUs from "./pages/ContactUs.jsx";
+
 function App() {
   return (
     <ThemeProvider>
@@ -35,6 +43,12 @@ function App() {
         <Route element={<PublicLayout />}>
           <Route index element={<Landing />} />
           <Route path="/pricing" element={<PricingPage />} />
+          <Route path="/car-garage" element={<CarGarage />} />
+          <Route path="/bike-garage" element={<BikeGarage />} />
+          <Route path="/washing-center" element={<WashingCenter />} />
+          <Route path="/spare-parts/bike" element={<BikeSpareParts />} />
+          <Route path="/spare-parts/car" element={<CarSpareParts />} />
+          <Route path="/contactus" element={<ContactUs />} />
         </Route>
 
         {/* Login route (public) */}

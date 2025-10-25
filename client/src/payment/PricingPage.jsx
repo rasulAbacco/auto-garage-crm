@@ -666,7 +666,7 @@ export default function ModernPricingPage() {
       id: 'standard',
       name: 'Standard',
       tagline: 'Most popular choice',
-      numericPrice: 1000,
+      numericPrice: 1500,
       icon: Star,
       badge: 'POPULAR',
       features: [
@@ -675,23 +675,27 @@ export default function ModernPricingPage() {
         'Priority support',
         'Export CSV, JSON, PDF',
         'API access (Limited)',
-        'Team accounts (up to 3)'
+        'SMS/WhatsApp Alerts',
+        'Team accounts (up to 3)',
       ]
     },
     {
       id: 'premium',
       name: 'Premium',
       tagline: 'For growing businesses',
-      numericPrice: 1500,
+      numericPrice: 2500,
       icon: Crown,
       badge: 'BEST VALUE',
       features: [
         'Everything in Standard',
         'Team accounts (up to 10)',
         'Unlimited API access',
-        'Custom integrations',
+        'Maintenance Alert SMS',
         'Bulk processing',
-        'Dedicated manager'
+        'Dedicated manager',
+        'Auto Invoice',
+        'Staff Salary Managements',
+        'Online Payment Options'
       ]
     }
   ];
@@ -708,7 +712,7 @@ export default function ModernPricingPage() {
   };
 
   return (
-    <div className={`min-h-screen transition-colors duration-300 ${isDark
+    <div className={`min-h-screen transition-colors duration-300 mt-[7%] ${isDark
         ? 'bg-gradient-to-b from-gray-900 via-gray-800 to-gray-900 text-white'
         : 'bg-gradient-to-b from-white via-gray-50 to-white text-gray-900'
       }`}>

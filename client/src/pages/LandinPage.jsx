@@ -85,7 +85,7 @@ export default function LandingPage() {
     ];
 
     return (
-        <div className={`min-h-screen ${isDark ? 'text-white' : 'text-gray-900'}`}>
+        <div className={`min-h-screen ${isDark ? 'text-white' : 'text-gray-900'} pt-[5%]`}>
             {/* Hero Section */}
             <section className="relative min-h-screen flex items-center justify-center px-6 pt-32 pb-20">
                 {/* Background Decoration */}
