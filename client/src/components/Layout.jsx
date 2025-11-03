@@ -1,5 +1,5 @@
-// Layout.js (fixed)
-import React, { useState } from 'react'
+// Layout.js (redesigned)
+import React, { useState, useContext } from 'react'
 import { Outlet, NavLink, useNavigate } from 'react-router-dom'
 import {
   Car,
@@ -12,14 +12,17 @@ import {
   LayoutDashboard,
   Menu,
   X,
-  FileText
+  FileText,
+  Sun,
+  Moon
 } from 'lucide-react';
-import motorDesk from "../../public/Motor desk.png";
-
+import { useTheme } from '../contexts/ThemeContext';
 
 export default function Layout() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [sidebarExpanded, setSidebarExpanded] = useState(false)
   const navigate = useNavigate()
+  const { isDark, toggleTheme } = useTheme()
 
   const menu = [
     { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -37,7 +40,7 @@ export default function Layout() {
   }
 
   return (
-    <div className="min-h-screen bg-black flex">
+    <div className={`min-h-screen flex ${isDark ? 'dark bg-gray-900' : 'bg-gray-50'}`}>
       {/* Overlay for mobile */}
       {sidebarOpen && (
         <div
@@ -47,38 +50,41 @@ export default function Layout() {
       )}
 
       {/* Sidebar */}
-      <aside className={`
-  fixed top-0 left-0 z-50 w-64 h-full bg-white shadow-xl transform transition-transform duration-300 ease-in-out
-  lg:translate-x-0
-  ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}
-`}>
-
+      <aside
+        className={`
+          fixed top-0 left-0 z-50 h-full transition-all duration-300 ease-in-out
+          ${sidebarExpanded ? 'w-64' : 'w-16'}
+          lg:translate-x-0
+          ${sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
+          ${isDark ? 'bg-gray-800' : 'bg-white'}
+          shadow-xl
+        `}
+        onMouseEnter={() => setSidebarExpanded(true)}
+        onMouseLeave={() => setSidebarExpanded(false)}
+      >
         <div className="flex flex-col h-screen">
           {/* Logo */}
-          <div className="flex items-center justify-between h-16 px-6 border-b border-slate-200">
+          <div className={`flex items-center justify-between h-16 px-4 border-b ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
             <div className="flex items-center gap-3">
-              <div className="w-8 h-8 bg-gradient-to-br rounded-lg flex items-center justify-center">
-                <img
-                  src="/Motor desk.png"
-                  alt="Motor Desk Logo"
-                  className="w-10 h-10"
-                />
+              <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg flex items-center justify-center shadow-lg">
+                <Car className="w-6 h-6 text-white" />
               </div>
-              <div className="font-poppins font-bold text-slate-800 text-2xl">
-  Motor Desk
-</div>
-
+              {sidebarExpanded && (
+                <div className={`font-poppins font-bold ${isDark ? 'text-white' : 'text-gray-800'} text-xl transition-opacity duration-300`}>
+                  Motor Desk
+                </div>
+              )}
             </div>
             <button
               onClick={() => setSidebarOpen(false)}
-              className="lg:hidden p-1 rounded-lg hover:bg-slate-100 transition-colors"
+              className="lg:hidden p-1 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
             >
-              <X className="w-5 h-5 text-slate-500" />
+              <X className={`w-5 h-5 ${isDark ? 'text-gray-400' : 'text-gray-500'}`} />
             </button>
           </div>
 
           {/* Navigation */}
-          <nav className="flex-1 px-4 py-6 space-y-2 overflow-y-auto">
+          <nav className="flex-1 px-2 py-6 space-y-2 overflow-y-auto">
             {menu.map(item => (
               <NavLink
                 key={item.to}
@@ -86,10 +92,12 @@ export default function Layout() {
                 onClick={() => setSidebarOpen(false)}
                 className={({ isActive }) =>
                   `
-                  flex items-center gap-3 px-4 py-3 rounded-xl font-medium transition-all duration-200
+                  flex items-center gap-3 px-3 py-3 rounded-xl font-medium transition-all duration-200
                   ${isActive
                     ? 'bg-gradient-to-r from-blue-600 to-purple-600 text-white shadow-lg'
-                    : 'text-slate-700 hover:bg-slate-100 hover:text-slate-900'}
+                    : isDark
+                      ? 'text-gray-300 hover:bg-gray-700 hover:text-white'
+                      : 'text-gray-700 hover:bg-gray-100 hover:text-gray-900'}
                   `
                 }
               >
@@ -97,8 +105,10 @@ export default function Layout() {
                   const Icon = item.icon
                   return (
                     <>
-                      <Icon className={`w-5 h-5 ${isActive ? 'text-white' : 'text-slate-500'}`} />
-                      <span>{item.label}</span>
+                      <Icon className={`w-5 h-5 flex-shrink-0 ${isActive ? 'text-white' : isDark ? 'text-gray-400' : 'text-gray-500'}`} />
+                      {sidebarExpanded && (
+                        <span className="transition-opacity duration-300">{item.label}</span>
+                      )}
                     </>
                   )
                 }}
@@ -107,64 +117,72 @@ export default function Layout() {
           </nav>
 
           {/* Logout */}
-          <div className="p-4 border-t border-slate-200">
-            <button
-              onClick={logout}
-              className="
-      w-full flex items-center justify-center gap-2
-      px-4 py-3
+          <div className={`p-4 border-t ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
+  <button
+    onClick={logout}
+    className={`
+      w-full flex items-center justify-center
+      ${sidebarExpanded ? 'gap-2 px-4' : 'px-3'}
+      py-3
       rounded-xl font-medium
-      text-[#ff0000]
-      bg-red-100
-      hover:bg-red-200/50
-      backdrop-blur
-      border border-red-200/50
-      shadow-sm hover:shadow-md
       transition-all duration-200
-    "
-            >
-              <LogOut className="w-4 h-3" />
-              Logout
-            </button>
-          </div>
-
+      ${isDark
+        ? 'text-red-400 bg-red-900/20 hover:bg-red-900/30 border border-red-800/30'
+        : 'text-red-600 bg-red-50 hover:bg-red-100 border border-red-200'}
+    `}
+  >
+    <LogOut className={`w-5 h-5 flex-shrink-0 ${sidebarExpanded ? 'mr-1' : ''}`} />
+    {sidebarExpanded && <span>Logout</span>}
+  </button>
+</div>
         </div>
       </aside>
 
       {/* Main content */}
-      <div className=" flex flex-col min-h-screen w-full">
+      <div className="flex flex-col min-h-screen w-full lg:ml-0">
         {/* Header */}
-        <header className="bg-white shadow-sm border-b border-slate-200">
+        <header className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} shadow-sm border-b`}>
           <div className="flex items-center justify-between h-16 px-6">
             <div className="flex items-center gap-4">
               <button
                 onClick={() => setSidebarOpen(true)}
-                className="lg:hidden p-2 rounded-lg hover:bg-slate-100 transition-colors"
+                className="lg:hidden p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
               >
-                <Menu className="w-5 h-5 text-slate-600" />
+                <Menu className={`w-5 h-5 ${isDark ? 'text-gray-400' : 'text-gray-600'}`} />
               </button>
               <div className="lg:hidden flex items-center gap-3">
-                <div className="w-8 h-8 bg-gradient-to-br from-blue-600 to-purple-600 rounded-lg flex items-center justify-center">
+                <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg flex items-center justify-center">
                   <Car className="w-5 h-5 text-white" />
                 </div>
-                <div className="font-bold text-slate-800">Auto Garage</div>
+                <div className={`font-bold ${isDark ? 'text-white' : 'text-gray-800'}`}>Motor Desk</div>
               </div>
             </div>
 
             <div className="flex items-center gap-4">
-              <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 bg-amber-50 text-amber-700 rounded-full text-sm font-medium border border-amber-200">
-                <div className="w-2 h-2 bg-amber-400 rounded-full animate-pulse"></div>
-                Demo Environment
-              </div>
-              <div className="w-8 h-8 bg-gradient-to-br from-slate-600 to-slate-700 rounded-full flex items-center justify-center">
-                <span className="text-white text-sm font-medium">A</span>
+              {/* Theme Toggle */}
+              <button
+                onClick={toggleTheme}
+                className={`p-2 rounded-lg transition-colors ${isDark ? 'bg-gray-700 text-yellow-400 hover:bg-gray-600' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
+              >
+                {isDark ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+              </button>
+
+              {/* User Profile */}
+              <div className="flex items-center gap-3">
+                <div className={`w-10 h-10 rounded-full flex items-center justify-center ${isDark ? 'bg-gradient-to-br from-blue-600 to-purple-600' : 'bg-gradient-to-br from-blue-500 to-purple-500'}`}>
+                  <span className="text-white font-medium">A</span>
+                </div>
+                <div className={`hidden sm:block ${isDark ? 'text-white' : 'text-gray-800'}`}>
+                  <div className="font-medium">Admin User</div>
+                  <div className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>admin@motordesk.com</div>
+                </div>
               </div>
             </div>
           </div>
         </header>
 
         {/* Page content */}
-        <main className="flex-1 p-6 pt-8 bg-slate-50">
+        <main className={`flex-1 p-6 pt-8 ${isDark ? 'bg-gray-900' : 'bg-gray-50'}`}>
           <Outlet />
         </main>
       </div>
