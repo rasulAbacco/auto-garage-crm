@@ -1,6 +1,30 @@
+//client/src/pages/clients/ClientForm.jsx
 import React, { useEffect, useState, useRef } from 'react'
 import { getClient, upsertClient } from '../../lib/storage.js'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useParams, Link } from 'react-router-dom'
+import {
+  FiUser,
+  FiPhone,
+  FiMail,
+  FiMapPin,
+  FiCalendar,
+  FiHash,
+  FiSave,
+  FiX,
+  FiCamera,
+  FiImage,
+  FiTrash2,
+  FiRotateCw,
+  FiZoomIn,
+  FiZoomOut,
+  FiArrowLeft,
+  FiUpload,
+  FiEye,
+  FiMove,
+  FiUsers
+} from 'react-icons/fi'
+import { FaCar } from "react-icons/fa";
+import { useTheme } from '../../contexts/ThemeContext'
 
 const empty = {
   fullName: '',
@@ -14,23 +38,22 @@ const empty = {
   vin: '',
   carImage: '',
   adImage: '',
-  staffPerson: '', // New field added
+  staffPerson: '',
 }
 
 export default function ClientForm() {
   const { id } = useParams()
   const navigate = useNavigate()
+  const { isDark } = useTheme()
   const [form, setForm] = useState(empty)
   const [isLoadingImage, setIsLoadingImage] = useState(false)
   const [isLoadingAdImage, setIsLoadingAdImage] = useState(false)
   const [imageError, setImageError] = useState(false)
   const [adImageError, setAdImageError] = useState(false)
-  
-  // New state for manual image uploads
+
   const [isImageUploaded, setIsImageUploaded] = useState(false)
   const [showCameraOptions, setShowCameraOptions] = useState(false)
-  
-  // 3D viewer state remains unchanged...
+
   const [rotation, setRotation] = useState({ x: -20, y: 0 })
   const [scale, setScale] = useState(1)
   const [isDragging, setIsDragging] = useState(false)
@@ -38,7 +61,7 @@ export default function ClientForm() {
   const [startRotation, setStartRotation] = useState({ x: 0, y: 0 })
   const [currentView, setCurrentView] = useState('Front')
   const [isZooming, setIsZooming] = useState(false)
-  
+
   const containerRef = useRef(null)
   const modelRef = useRef(null)
   const isDraggingRef = useRef(false)
@@ -51,7 +74,6 @@ export default function ClientForm() {
       const existing = getClient(id)
       if (existing) {
         setForm(existing)
-        // Check if images are uploaded (data URLs)
         setIsImageUploaded(existing.carImage && existing.carImage.startsWith('data:'))
       }
     }
@@ -68,29 +90,22 @@ export default function ClientForm() {
     }
   }, [form.vehicleMake, form.vehicleModel, isImageUploaded])
 
-  // Image fetching functions remain unchanged...
   const fetchCarImage = async (make, model) => {
     setIsLoadingImage(true)
     setImageError(false)
-    
+
     try {
       const response = await fetch(
         `https://cdn.imagin.studio/getImage?customer=hrjavascript-mastery&make=${encodeURIComponent(make)}&modelFamily=${encodeURIComponent(model)}`
       )
-      
-      if (!response.ok) {
-        throw new Error('Failed to fetch car image')
-      }
-      
-      const imageUrl = response.url
-      setForm(prev => ({ ...prev, carImage: imageUrl }))
+
+      if (!response.ok) throw new Error('Failed to fetch car image')
+
+      setForm(prev => ({ ...prev, carImage: response.url }))
     } catch (error) {
       console.error('Error fetching car image:', error)
       setImageError(true)
-      
-      const makeEncoded = encodeURIComponent(make.trim());
-      const modelEncoded = encodeURIComponent(model.trim());
-      const fallbackUrl = `https://via.placeholder.com/800x400.png?text=${makeEncoded}+${modelEncoded}&bg=4f46e5&fc=ffffff`
+      const fallbackUrl = `https://via.placeholder.com/800x400.png?text=${encodeURIComponent(make)}+${encodeURIComponent(model)}&bg=4f46e5&fc=ffffff`
       setForm(prev => ({ ...prev, carImage: fallbackUrl }))
     } finally {
       setIsLoadingImage(false)
@@ -100,41 +115,33 @@ export default function ClientForm() {
   const fetchAdvertisementImage = async (make, model) => {
     setIsLoadingAdImage(true)
     setAdImageError(false)
-    
+
     try {
       const response = await fetch(
         `https://cdn.imagin.studio/getImage?customer=hrjavascript-mastery&make=${encodeURIComponent(make)}&modelFamily=${encodeURIComponent(model)}&angle=27&transparentBackground=true`
       )
-      
-      if (!response.ok) {
-        throw new Error('Failed to fetch advertisement image')
-      }
-      
-      const imageUrl = response.url
-      setForm(prev => ({ ...prev, adImage: imageUrl }))
+
+      if (!response.ok) throw new Error('Failed to fetch advertisement image')
+
+      setForm(prev => ({ ...prev, adImage: response.url }))
     } catch (error) {
       console.error('Error fetching advertisement image:', error)
       setAdImageError(true)
-      
-      const makeEncoded = encodeURIComponent(make.trim());
-      const modelEncoded = encodeURIComponent(model.trim());
-      const fallbackUrl = `https://via.placeholder.com/800x400.png?text=${makeEncoded}+${modelEncoded}&bg=transparent&fc=4f46e5&border=4f46e5`
+      const fallbackUrl = `https://via.placeholder.com/800x400.png?text=${encodeURIComponent(make)}+${encodeURIComponent(model)}&bg=transparent&fc=4f46e5`
       setForm(prev => ({ ...prev, adImage: fallbackUrl }))
     } finally {
       setIsLoadingAdImage(false)
     }
   }
 
-  // New functions for handling image uploads
   const handleImageUpload = (e) => {
     const file = e.target.files[0]
     if (file) {
       const reader = new FileReader()
       reader.onload = (event) => {
         const dataUrl = event.target.result
-        // Set both carImage and adImage to the uploaded image
-        setForm(prev => ({ 
-          ...prev, 
+        setForm(prev => ({
+          ...prev,
           carImage: dataUrl,
           adImage: dataUrl
         }))
@@ -164,10 +171,7 @@ export default function ClientForm() {
   const openCamera = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ video: true })
-      // In a real app, you would capture the image from the stream here
-      // For this example, we'll just trigger the file input
       triggerFileInput()
-      // Close the stream
       stream.getTracks().forEach(track => track.stop())
     } catch (err) {
       console.error("Error accessing camera:", err)
@@ -185,18 +189,15 @@ export default function ClientForm() {
     navigate(`/clients/${saved.id || form.id}`)
   }
 
-  // 3D viewer functions remain unchanged...
-  // Update current view based on rotation
+  // 3D viewer functions
   useEffect(() => {
-    // Check if we're in top view (x rotation is -90)
     if (rotation.x <= -85) {
       setCurrentView('Top')
       return
     }
-    
-    // Otherwise, determine side view based on y rotation
-    const y = ((rotation.y % 360) + 360) % 360; // Normalize to 0-360
-    
+
+    const y = ((rotation.y % 360) + 360) % 360;
+
     if (y >= 315 || y < 45) {
       setCurrentView('Front');
     } else if (y >= 45 && y < 135) {
@@ -208,46 +209,33 @@ export default function ClientForm() {
     }
   }, [rotation]);
 
-  // 3D viewer handlers
   const handleDragStart = (clientX, clientY) => {
     isDraggingRef.current = true
     setIsDragging(true)
     startPositionRef.current = { x: clientX, y: clientY }
     startRotationRef.current = { ...rotation }
-    
-    // Change cursor style
-    if (containerRef.current) {
-      containerRef.current.style.cursor = 'grabbing'
-    }
+    if (containerRef.current) containerRef.current.style.cursor = 'grabbing'
   }
 
   const handleDragMove = (clientX, clientY) => {
     if (!isDraggingRef.current) return
-    
+
     const deltaX = clientX - startPositionRef.current.x
     const deltaY = clientY - startPositionRef.current.y
-    
-    // Calculate rotation with improved sensitivity
     const sensitivity = 0.5
-    const newRotation = {
+
+    setRotation({
       x: Math.max(-90, Math.min(90, startRotationRef.current.x - deltaY * sensitivity)),
       y: startRotationRef.current.y + deltaX * sensitivity
-    }
-    
-    setRotation(newRotation)
+    })
   }
 
   const handleDragEnd = () => {
     isDraggingRef.current = false
     setIsDragging(false)
-    
-    // Reset cursor style
-    if (containerRef.current) {
-      containerRef.current.style.cursor = 'grab'
-    }
+    if (containerRef.current) containerRef.current.style.cursor = 'grab'
   }
 
-  // Mouse event handlers
   const handleMouseDown = (e) => {
     e.preventDefault()
     handleDragStart(e.clientX, e.clientY)
@@ -261,7 +249,6 @@ export default function ClientForm() {
     handleDragEnd()
   }
 
-  // Touch event handlers
   const handleTouchStart = (e) => {
     if (e.touches.length === 1) {
       const touch = e.touches[0]
@@ -281,110 +268,62 @@ export default function ClientForm() {
     handleDragEnd()
   }
 
-  // Zoom with mouse wheel
   const handleWheel = (e) => {
     e.preventDefault();
-    
     setIsZooming(true);
-    
-    // Get the wheel direction
     const delta = e.deltaY;
-    
-    // Adjust sensitivity for better control
     const sensitivity = 0.01;
-    
-    // Calculate zoom change - invert delta for natural zoom direction
     const zoomChange = -delta * sensitivity;
-    
-    setScale(prev => {
-      // Calculate new scale with bounds
-      const newScale = prev + zoomChange;
-      
-      // Clamp between 0.5 and 3
-      return Math.max(0.5, Math.min(3, newScale));
-    });
-    
-    // Reset zooming state after a short delay
+
+    setScale(prev => Math.max(0.5, Math.min(3, prev + zoomChange)));
     setTimeout(() => setIsZooming(false), 100);
   }
 
-  // Reset view
   const resetView = () => {
     setRotation({ x: -20, y: 0 })
     setScale(1)
     setCurrentView('Front')
   }
 
-  // Set specific view
   const setView = (view) => {
-    switch(view) {
-      case 'Front':
-        setRotation({ x: -20, y: 0 })
-        setCurrentView('Front')
-        break
-      case 'Right':
-        setRotation({ x: -20, y: 50 })
-        setCurrentView('Right Side')
-        break
-      case 'Rear':
-        setRotation({ x: -20, y: 180 })
-        setCurrentView('Rear')
-        break
-      case 'Left':
-        setRotation({ x: -20, y: -60 })
-        setCurrentView('Left Side')
-        break
-      case 'Top':
-        setRotation({ x: 0, y: 180 })
-        setCurrentView('Top')
-        break
-      default:
-        break
+    const views = {
+      'Front': { x: -20, y: 0, name: 'Front' },
+      'Right': { x: -20, y: 50, name: 'Right Side' },
+      'Rear': { x: -20, y: 180, name: 'Rear' },
+      'Left': { x: -20, y: -60, name: 'Left Side' },
+      'Top': { x: 0, y: 180, name: 'Top' }
+    }
+    if (views[view]) {
+      setRotation({ x: views[view].x, y: views[view].y })
+      setCurrentView(views[view].name)
     }
   }
 
-  // Zoom in/out functions
-  const zoomIn = () => {
-    setScale(prev => Math.min(3, prev + 0.2))
-  }
+  const zoomIn = () => setScale(prev => Math.min(3, prev + 0.2))
+  const zoomOut = () => setScale(prev => Math.max(0.5, prev - 0.2))
 
-  const zoomOut = () => {
-    setScale(prev => Math.max(0.5, prev - 0.2))
-  }
-
-  // Set up event listeners
   useEffect(() => {
     const handleGlobalMouseMove = (e) => {
-      if (isDraggingRef.current) {
-        handleMouseMove(e);
-      }
+      if (isDraggingRef.current) handleMouseMove(e);
     };
 
     const handleGlobalMouseUp = () => {
-      if (isDraggingRef.current) {
-        handleMouseUp();
-      }
+      if (isDraggingRef.current) handleMouseUp();
     };
 
     const handleGlobalTouchMove = (e) => {
-      if (isDraggingRef.current) {
-        handleTouchMove(e);
-      }
+      if (isDraggingRef.current) handleTouchMove(e);
     };
 
     const handleGlobalTouchEnd = () => {
-      if (isDraggingRef.current) {
-        handleTouchEnd();
-      }
+      if (isDraggingRef.current) handleTouchEnd();
     };
 
-    // Add global event listeners
     document.addEventListener('mousemove', handleGlobalMouseMove);
     document.addEventListener('mouseup', handleGlobalMouseUp);
     document.addEventListener('touchmove', handleGlobalTouchMove, { passive: false });
     document.addEventListener('touchend', handleGlobalTouchEnd);
 
-    // Clean up event listeners
     return () => {
       document.removeEventListener('mousemove', handleGlobalMouseMove);
       document.removeEventListener('mouseup', handleGlobalMouseUp);
@@ -394,427 +333,556 @@ export default function ClientForm() {
   }, []);
 
   return (
-    <form onSubmit={submit} className="bg-white rounded-2xl shadow-soft p-6 space-y-6 max-w-5xl lg:ml-64 mx-auto">
-      <h1 className="text-2xl font-semibold">{id ? 'Edit Client' : 'Add Client'}</h1>
-
-      <div className="grid md:grid-cols-2 gap-6">
-        {/* Form fields remain the same */}
+    <div className="lg:ml-16 p-6 space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between">
         <div>
-          <label className="block text-sm font-medium text-gray-600 mb-1">Full Name</label>
-          <input
-            type="text"
-            className="w-full border rounded-xl px-4 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-300"
-            value={form.fullName}
-            onChange={e => setForm({ ...form, fullName: e.target.value })}
-            required
-          />
+          <Link
+            to="/clients"
+            className={`inline-flex items-center gap-2 ${isDark ? 'text-gray-300 hover:text-white' : 'text-gray-600 hover:text-gray-900'} transition-colors duration-200 mb-3`}
+          >
+            <FiArrowLeft />
+            <span className="font-medium">Back to Clients</span>
+          </Link>
+          <h1 className={`text-3xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>
+            {id ? 'Edit Client' : 'Add New Client'}
+          </h1>
+          <p className={`${isDark ? 'text-gray-400' : 'text-gray-600'} mt-1`}>
+            {id ? 'Update client and vehicle information' : 'Register a new client and their vehicle'}
+          </p>
         </div>
+      </div>
 
-        <div>
-          <label className="block text-sm font-medium text-gray-600 mb-1">Phone</label>
-          <input
-            type="text"
-            className="w-full border rounded-xl px-4 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-300"
-            value={form.phone}
-            onChange={e => setForm({ ...form, phone: e.target.value })}
-            required
-          />
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-gray-600 mb-1">Email</label>
-          <input
-            type="email"
-            className="w-full border rounded-xl px-4 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-300"
-            value={form.email}
-            onChange={e => setForm({ ...form, email: e.target.value })}
-          />
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-gray-600 mb-1">Address</label>
-          <input
-            type="text"
-            className="w-full border rounded-xl px-4 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-300"
-            value={form.address}
-            onChange={e => setForm({ ...form, address: e.target.value })}
-          />
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-gray-600 mb-1">Vehicle Make</label>
-          <input
-            type="text"
-            className="w-full border rounded-xl px-4 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-300"
-            value={form.vehicleMake}
-            onChange={e => setForm({ ...form, vehicleMake: e.target.value })}
-          />
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-gray-600 mb-1">Vehicle Model</label>
-          <input
-            type="text"
-            className="w-full border rounded-xl px-4 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-300"
-            value={form.vehicleModel}
-            onChange={e => setForm({ ...form, vehicleModel: e.target.value })}
-          />
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-gray-600 mb-1">Vehicle Year</label>
-          <input
-            type="number"
-            min="1900"
-            max={new Date().getFullYear()}
-            className="w-full border rounded-xl px-4 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-300"
-            value={form.vehicleYear}
-            onChange={e => setForm({ ...form, vehicleYear: e.target.value })}
-          />
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-gray-600 mb-1">Registration Number</label>
-          <input
-            type="text"
-            className="w-full border rounded-xl px-4 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-300"
-            value={form.regNumber}
-            onChange={e => setForm({ ...form, regNumber: e.target.value })}
-          />
-        </div>
-
-        <div className="md:col-span-2">
-          <label className="block text-sm font-medium text-gray-600 mb-1">VIN / Chassis No.</label>
-          <input
-            type="text"
-            className="w-full border rounded-xl px-4 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-300"
-            value={form.vin}
-            onChange={e => setForm({ ...form, vin: e.target.value })}
-          />
-        </div>
-
-        {/* New field: Staff Person Handling the Car */}
-        <div className="md:col-span-2">
-          <label className="block text-sm font-medium text-gray-600 mb-1">Staff Person Handling the Car</label>
-          <input
-            type="text"
-            className="w-full border rounded-xl px-4 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-300"
-            value={form.staffPerson}
-            onChange={e => setForm({ ...form, staffPerson: e.target.value })}
-            placeholder="Enter name of staff member responsible"
-          />
-        </div>
-
-        {/* New image upload options - Single upload for both images */}
-        <div className="md:col-span-2">
-          <label className="block text-sm font-medium text-gray-600 mb-1">Vehicle Images</label>
-          <div className="mb-2 text-sm text-gray-500">
-            Upload an image that will be used for both the vehicle preview and the 3D model viewer
-          </div>
-          <div className="flex flex-col sm:flex-row gap-3">
-            <button
-              type="button"
-              onClick={() => setShowCameraOptions(!showCameraOptions)}
-              className="px-4 py-2 bg-indigo-100 text-indigo-700 rounded-lg hover:bg-indigo-200 transition flex items-center justify-center gap-2"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                <path fillRule="evenodd" d="M4 5a2 2 0 00-2 2v8a2 2 0 002 2h12a2 2 0 002-2V7a2 2 0 00-2-2h-1.586a1 1 0 01-.707-.293l-1.121-1.121A2 2 0 0011.172 3H8.828a2 2 0 00-1.414.586L6.293 4.707A1 1 0 015.586 5H4zm6 9a3 3 0 100-6 3 3 0 000 6z" clipRule="evenodd" />
-              </svg>
-              {isImageUploaded ? 'Change Images' : 'Upload Images'}
-            </button>
-            
-            {isImageUploaded && (
-              <button
-                type="button"
-                onClick={removeImage}
-                className="px-4 py-2 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 transition flex items-center justify-center gap-2"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                  <path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd" />
-                </svg>
-                Remove Images
-              </button>
-            )}
-            
-            <input
-              type="file"
-              ref={fileInputRef}
-              accept="image/*"
-              capture="environment"
-              onChange={handleImageUpload}
-              className="hidden"
-            />
-          </div>
-          
-          {showCameraOptions && (
-            <div className="mt-3 flex flex-wrap gap-3">
-              <button
-                type="button"
-                onClick={triggerFileInput}
-                className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition flex items-center gap-2"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                  <path fillRule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clipRule="evenodd" />
-                </svg>
-                Choose from Gallery
-              </button>
-              
-              <button
-                type="button"
-                onClick={openCamera}
-                className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition flex items-center gap-2"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                  <path d="M2 6a2 2 0 012-2h6a2 2 0 012 2v8a2 2 0 01-2 2H4a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v8a2 2 0 01-2 2h-2a2 2 0 01-2-2V6z" />
-                </svg>
-                Take Photo
-              </button>
+      <form onSubmit={submit} className="space-y-6">
+        {/* Personal Information */}
+        <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} rounded-3xl shadow-xl border overflow-hidden`}>
+          <div className={`p-6 border-b ${isDark ? 'border-gray-700 bg-gradient-to-r from-gray-800 to-gray-700' : 'border-gray-200 bg-gradient-to-r from-blue-600 to-purple-600'}`}>
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 bg-white/20 backdrop-blur-sm rounded-xl flex items-center justify-center">
+                <FiUser className="text-white" size={24} />
+              </div>
+              <div>
+                <h2 className="text-2xl font-bold text-white">Personal Information</h2>
+                <p className="text-sm text-white/80">Client contact details</p>
+              </div>
             </div>
-          )}
+          </div>
+
+          <div className="p-6 grid md:grid-cols-2 gap-6">
+            {/* Full Name */}
+            <div>
+              <label className={`block text-sm font-semibold mb-2 ${isDark ? 'text-gray-300' : 'text-gray-700'} flex items-center gap-2`}>
+                <FiUser size={16} className={isDark ? 'text-blue-400' : 'text-blue-600'} />
+                Full Name <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="text"
+                className={`w-full px-4 py-3 rounded-xl font-medium transition-all duration-200 ${isDark
+                    ? 'bg-gray-700 border-gray-600 text-white placeholder-gray-400 focus:bg-gray-600 focus:border-blue-500'
+                    : 'bg-white border-gray-300 text-gray-900 placeholder-gray-500 focus:bg-gray-50 focus:border-blue-500'
+                  } border-2 focus:outline-none focus:ring-2 focus:ring-blue-500/20`}
+                value={form.fullName}
+                onChange={e => setForm({ ...form, fullName: e.target.value })}
+                placeholder="Enter full name"
+                required
+              />
+            </div>
+
+            {/* Phone */}
+            <div>
+              <label className={`block text-sm font-semibold mb-2 ${isDark ? 'text-gray-300' : 'text-gray-700'} flex items-center gap-2`}>
+                <FiPhone size={16} className={isDark ? 'text-green-400' : 'text-green-600'} />
+                Phone Number <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="tel"
+                className={`w-full px-4 py-3 rounded-xl font-medium transition-all duration-200 ${isDark
+                    ? 'bg-gray-700 border-gray-600 text-white placeholder-gray-400 focus:bg-gray-600 focus:border-green-500'
+                    : 'bg-white border-gray-300 text-gray-900 placeholder-gray-500 focus:bg-gray-50 focus:border-green-500'
+                  } border-2 focus:outline-none focus:ring-2 focus:ring-green-500/20`}
+                value={form.phone}
+                onChange={e => setForm({ ...form, phone: e.target.value })}
+                placeholder="Enter phone number"
+                required
+              />
+            </div>
+
+            {/* Email */}
+            <div>
+              <label className={`block text-sm font-semibold mb-2 ${isDark ? 'text-gray-300' : 'text-gray-700'} flex items-center gap-2`}>
+                <FiMail size={16} className={isDark ? 'text-purple-400' : 'text-purple-600'} />
+                Email Address
+              </label>
+              <input
+                type="email"
+                className={`w-full px-4 py-3 rounded-xl font-medium transition-all duration-200 ${isDark
+                    ? 'bg-gray-700 border-gray-600 text-white placeholder-gray-400 focus:bg-gray-600 focus:border-purple-500'
+                    : 'bg-white border-gray-300 text-gray-900 placeholder-gray-500 focus:bg-gray-50 focus:border-purple-500'
+                  } border-2 focus:outline-none focus:ring-2 focus:ring-purple-500/20`}
+                value={form.email}
+                onChange={e => setForm({ ...form, email: e.target.value })}
+                placeholder="Enter email address"
+              />
+            </div>
+
+            {/* Address */}
+            <div>
+              <label className={`block text-sm font-semibold mb-2 ${isDark ? 'text-gray-300' : 'text-gray-700'} flex items-center gap-2`}>
+                <FiMapPin size={16} className={isDark ? 'text-orange-400' : 'text-orange-600'} />
+                Address
+              </label>
+              <input
+                type="text"
+                className={`w-full px-4 py-3 rounded-xl font-medium transition-all duration-200 ${isDark
+                    ? 'bg-gray-700 border-gray-600 text-white placeholder-gray-400 focus:bg-gray-600 focus:border-orange-500'
+                    : 'bg-white border-gray-300 text-gray-900 placeholder-gray-500 focus:bg-gray-50 focus:border-orange-500'
+                  } border-2 focus:outline-none focus:ring-2 focus:ring-orange-500/20`}
+                value={form.address}
+                onChange={e => setForm({ ...form, address: e.target.value })}
+                placeholder="Enter full address"
+              />
+            </div>
+
+            {/* Staff Person */}
+            <div className="md:col-span-2">
+              <label className={`block text-sm font-semibold mb-2 ${isDark ? 'text-gray-300' : 'text-gray-700'} flex items-center gap-2`}>
+                <FiUsers size={16} className={isDark ? 'text-pink-400' : 'text-pink-600'} />
+                Staff Person Handling
+              </label>
+              <input
+                type="text"
+                className={`w-full px-4 py-3 rounded-xl font-medium transition-all duration-200 ${isDark
+                    ? 'bg-gray-700 border-gray-600 text-white placeholder-gray-400 focus:bg-gray-600 focus:border-pink-500'
+                    : 'bg-white border-gray-300 text-gray-900 placeholder-gray-500 focus:bg-gray-50 focus:border-pink-500'
+                  } border-2 focus:outline-none focus:ring-2 focus:ring-pink-500/20`}
+                value={form.staffPerson}
+                onChange={e => setForm({ ...form, staffPerson: e.target.value })}
+                placeholder="Enter staff member name"
+              />
+            </div>
+          </div>
         </div>
 
-        {/* Rest of the form remains unchanged */}
-        {(form.vehicleMake && form.vehicleModel) && (
-          <div className="md:col-span-2 flex flex-col items-center mt-6">
-            <p className="text-lg font-semibold text-gray-700 mb-4">Vehicle Preview</p>
-            
-            <div className="flex flex-col md:flex-row gap-6 w-full max-w-5xl">
-              {/* Left side - Main car image */}
-              <div className="flex-1 border-2 border-dashed border-gray-300 rounded-xl p-4 bg-gray-50 shadow-inner">
-                <h3 className="text-center font-medium text-gray-700 mb-3">Vehicle Image</h3>
-                {isLoadingImage ? (
-                  <div className="flex items-center justify-center h-64">
-                    <div className="animate-spin rounded-full h-16 w-16 border-t-4 border-b-4 border-indigo-500"></div>
-                  </div>
-                ) : (
-                  <div className="relative">
-                    <img 
-                      src={form.carImage} 
-                      alt={`${form.vehicleMake} ${form.vehicleModel}`}
-                      className="rounded-xl shadow-lg max-w-full h-auto mx-auto"
-                      style={{ maxHeight: '400px' }}
-                      onError={(e) => {
-                        e.target.onerror = null;
-                        const make = encodeURIComponent(form.vehicleMake.trim());
-                        const model = encodeURIComponent(form.vehicleModel.trim());
-                        e.target.src = `https://via.placeholder.com/800x400.png?text=${make}+${model}&bg=4f46e5&fc=ffffff`;
-                      }}
-                    />
+        {/* Vehicle Information */}
+        <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} rounded-3xl shadow-xl border overflow-hidden`}>
+          <div className={`p-6 border-b ${isDark ? 'border-gray-700 bg-gradient-to-r from-gray-800 to-gray-700' : 'border-gray-200 bg-gradient-to-r from-green-600 to-teal-600'}`}>
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 bg-white/20 backdrop-blur-sm rounded-xl flex items-center justify-center">
+                <FaCar className="text-white" size={24} />
+              </div>
+              <div>
+                <h2 className="text-2xl font-bold text-white">Vehicle Information</h2>
+                <p className="text-sm text-white/80">Complete vehicle details and registration</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="p-6 grid md:grid-cols-2 gap-6">
+            {/* Vehicle Make */}
+            <div>
+              <label className={`block text-sm font-semibold mb-2 ${isDark ? 'text-gray-300' : 'text-gray-700'} flex items-center gap-2`}>
+                <FaCar size={16} className={isDark ? 'text-blue-400' : 'text-blue-600'} />
+                Vehicle Make
+              </label>
+              <input
+                type="text"
+                className={`w-full px-4 py-3 rounded-xl font-medium transition-all duration-200 ${isDark
+                    ? 'bg-gray-700 border-gray-600 text-white placeholder-gray-400 focus:bg-gray-600 focus:border-blue-500'
+                    : 'bg-white border-gray-300 text-gray-900 placeholder-gray-500 focus:bg-gray-50 focus:border-blue-500'
+                  } border-2 focus:outline-none focus:ring-2 focus:ring-blue-500/20`}
+                value={form.vehicleMake}
+                onChange={e => setForm({ ...form, vehicleMake: e.target.value })}
+                placeholder="e.g., Toyota, Honda, BMW"
+              />
+            </div>
+
+            {/* Vehicle Model */}
+            <div>
+              <label className={`block text-sm font-semibold mb-2 ${isDark ? 'text-gray-300' : 'text-gray-700'} flex items-center gap-2`}>
+                <FaCar size={16} className={isDark ? 'text-purple-400' : 'text-purple-600'} />
+                Vehicle Model
+              </label>
+              <input
+                type="text"
+                className={`w-full px-4 py-3 rounded-xl font-medium transition-all duration-200 ${isDark
+                    ? 'bg-gray-700 border-gray-600 text-white placeholder-gray-400 focus:bg-gray-600 focus:border-purple-500'
+                    : 'bg-white border-gray-300 text-gray-900 placeholder-gray-500 focus:bg-gray-50 focus:border-purple-500'
+                  } border-2 focus:outline-none focus:ring-2 focus:ring-purple-500/20`}
+                value={form.vehicleModel}
+                onChange={e => setForm({ ...form, vehicleModel: e.target.value })}
+                placeholder="e.g., Camry, Accord, X5"
+              />
+            </div>
+
+            {/* Vehicle Year */}
+            <div>
+              <label className={`block text-sm font-semibold mb-2 ${isDark ? 'text-gray-300' : 'text-gray-700'} flex items-center gap-2`}>
+                <FiCalendar size={16} className={isDark ? 'text-green-400' : 'text-green-600'} />
+                Vehicle Year
+              </label>
+              <input
+                type="number"
+                min="1900"
+                max={new Date().getFullYear() + 1}
+                className={`w-full px-4 py-3 rounded-xl font-medium transition-all duration-200 ${isDark
+                    ? 'bg-gray-700 border-gray-600 text-white placeholder-gray-400 focus:bg-gray-600 focus:border-green-500'
+                    : 'bg-white border-gray-300 text-gray-900 placeholder-gray-500 focus:bg-gray-50 focus:border-green-500'
+                  } border-2 focus:outline-none focus:ring-2 focus:ring-green-500/20`}
+                value={form.vehicleYear}
+                onChange={e => setForm({ ...form, vehicleYear: e.target.value })}
+                placeholder={new Date().getFullYear().toString()}
+              />
+            </div>
+
+            {/* Registration Number */}
+            <div>
+              <label className={`block text-sm font-semibold mb-2 ${isDark ? 'text-gray-300' : 'text-gray-700'} flex items-center gap-2`}>
+                <FiHash size={16} className={isDark ? 'text-orange-400' : 'text-orange-600'} />
+                Registration Number
+              </label>
+              <input
+                type="text"
+                className={`w-full px-4 py-3 rounded-xl font-mono font-medium transition-all duration-200 ${isDark
+                    ? 'bg-gray-700 border-gray-600 text-white placeholder-gray-400 focus:bg-gray-600 focus:border-orange-500'
+                    : 'bg-white border-gray-300 text-gray-900 placeholder-gray-500 focus:bg-gray-50 focus:border-orange-500'
+                  } border-2 focus:outline-none focus:ring-2 focus:ring-orange-500/20 uppercase`}
+                value={form.regNumber}
+                onChange={e => setForm({ ...form, regNumber: e.target.value.toUpperCase() })}
+                placeholder="ABC-1234"
+              />
+            </div>
+
+            {/* VIN */}
+            <div className="md:col-span-2">
+              <label className={`block text-sm font-semibold mb-2 ${isDark ? 'text-gray-300' : 'text-gray-700'} flex items-center gap-2`}>
+                <FiHash size={16} className={isDark ? 'text-pink-400' : 'text-pink-600'} />
+                VIN / Chassis Number
+              </label>
+              <input
+                type="text"
+                className={`w-full px-4 py-3 rounded-xl font-mono font-medium transition-all duration-200 ${isDark
+                    ? 'bg-gray-700 border-gray-600 text-white placeholder-gray-400 focus:bg-gray-600 focus:border-pink-500'
+                    : 'bg-white border-gray-300 text-gray-900 placeholder-gray-500 focus:bg-gray-50 focus:border-pink-500'
+                  } border-2 focus:outline-none focus:ring-2 focus:ring-pink-500/20 uppercase`}
+                value={form.vin}
+                onChange={e => setForm({ ...form, vin: e.target.value.toUpperCase() })}
+                placeholder="1HGBH41JXMN109186"
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Image Upload Section */}
+        <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} rounded-3xl shadow-xl border overflow-hidden`}>
+          <div className={`p-6 border-b ${isDark ? 'border-gray-700 bg-gradient-to-r from-gray-800 to-gray-700' : 'border-gray-200 bg-gradient-to-r from-purple-600 to-pink-600'}`}>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 bg-white/20 backdrop-blur-sm rounded-xl flex items-center justify-center">
+                  <FiImage className="text-white" size={24} />
+                </div>
+                <div>
+                  <h2 className="text-2xl font-bold text-white">Vehicle Images</h2>
+                  <p className="text-sm text-white/80">Upload or auto-fetch vehicle images</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="p-6">
+            <div className="flex flex-wrap gap-3 mb-6">
+              <button
+                type="button"
+                onClick={() => setShowCameraOptions(!showCameraOptions)}
+                className={`flex items-center gap-2 px-5 py-3 rounded-xl font-semibold transition-all duration-200 shadow-lg hover:shadow-xl ${isDark
+                    ? 'bg-blue-600 hover:bg-blue-700 text-white'
+                    : 'bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white'
+                  }`}
+              >
+                <FiUpload size={18} />
+                {isImageUploaded ? 'Change Images' : 'Upload Images'}
+              </button>
+
+              {isImageUploaded && (
+                <button
+                  type="button"
+                  onClick={removeImage}
+                  className={`flex items-center gap-2 px-5 py-3 rounded-xl font-semibold transition-all duration-200 shadow-lg hover:shadow-xl ${isDark
+                      ? 'bg-red-600 hover:bg-red-700 text-white border-2 border-red-500'
+                      : 'bg-white hover:bg-red-50 text-red-600 border-2 border-red-600'
+                    }`}
+                >
+                  <FiTrash2 size={18} />
+                  Remove Images
+                </button>
+              )}
+
+              <input
+                type="file"
+                ref={fileInputRef}
+                accept="image/*"
+                capture="environment"
+                onChange={handleImageUpload}
+                className="hidden"
+              />
+            </div>
+
+            {showCameraOptions && (
+              <div className={`mb-6 p-4 rounded-2xl ${isDark ? 'bg-gray-700/50 border-gray-600' : 'bg-blue-50 border-blue-200'} border`}>
+                <p className={`text-sm font-medium mb-3 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+                  Choose upload method:
+                </p>
+                <div className="flex flex-wrap gap-3">
+                  <button
+                    type="button"
+                    onClick={triggerFileInput}
+                    className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-medium transition-all duration-200 ${isDark
+                        ? 'bg-gray-600 hover:bg-gray-500 text-white'
+                        : 'bg-white hover:bg-gray-50 text-gray-700 border-2 border-gray-300'
+                      }`}
+                  >
+                    <FiImage size={18} />
+                    Choose from Gallery
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={openCamera}
+                    className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-medium transition-all duration-200 ${isDark
+                        ? 'bg-gray-600 hover:bg-gray-500 text-white'
+                        : 'bg-white hover:bg-gray-50 text-gray-700 border-2 border-gray-300'
+                      }`}
+                  >
+                    <FiCamera size={18} />
+                    Take Photo
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Vehicle Preview */}
+            {(form.vehicleMake && form.vehicleModel) && (
+              <div className="grid lg:grid-cols-2 gap-6">
+                {/* Vehicle Image */}
+                <div className={`rounded-2xl p-5 ${isDark ? 'bg-gray-700/50 border-gray-600' : 'bg-gradient-to-br from-blue-50 to-purple-50 border-gray-200'} border-2`}>
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className={`font-bold flex items-center gap-2 ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                      <FiEye className={isDark ? 'text-blue-400' : 'text-blue-600'} />
+                      Vehicle Preview
+                    </h3>
                     {isImageUploaded && (
-                      <div className="absolute top-2 right-2 bg-indigo-500 text-white text-xs px-2 py-1 rounded-full">
-                        Uploaded Image
-                      </div>
+                      <span className="px-3 py-1 bg-gradient-to-r from-green-500 to-emerald-500 text-white text-xs font-semibold rounded-full">
+                        Uploaded
+                      </span>
                     )}
                   </div>
-                )}
-                
-                {imageError && (
-                  <p className="text-sm text-red-500 mt-3 text-center">
-                    Couldn't load vehicle image. Showing placeholder instead.
-                  </p>
-                )}
-              </div>
 
-              {/* Right side - 3D Model Viewer with Enhanced Design */}
-              <div className="flex-1 border-2 border-dashed border-gray-300 rounded-xl p-4 bg-gradient-to-br from-blue-50/30 to-purple-50/30 backdrop-blur-sm shadow-inner relative overflow-hidden">
-                <div className="flex justify-between items-center mb-3">
-                  <h3 className="text-center font-medium text-gray-700">3D Model Viewer</h3>
-                  <div className="flex gap-2">
-                    <span className={`text-sm px-3 py-1 rounded-lg transition-all duration-300 ${
-                      isZooming ? 'bg-yellow-500 text-white animate-pulse' : 'bg-indigo-100 text-indigo-700'
-                    }`}>
-                      {currentView} • {Math.round(scale * 100)}%
-                    </span>
-                    <button 
-                      type="button"
-                      onClick={resetView}
-                      className="text-sm bg-indigo-100 hover:bg-indigo-200 text-indigo-700 px-3 py-1 rounded-lg transition"
-                    >
-                      Reset
-                    </button>
-                  </div>
-                </div>
-                
-                {isLoadingAdImage ? (
-                  <div className="flex items-center justify-center h-64">
-                    <div className="animate-spin rounded-full h-16 w-16 border-t-4 border-b-4 border-purple-500"></div>
-                  </div>
-                ) : (
-                  <>
-                    {/* View buttons with enhanced design */}
-                    <div className="flex justify-center gap-2 mb-3">
-                      {['Front', 'Right', 'Rear', 'Left', 'Top'].map(view => (
-                        <button
-                          key={view}
-                          type="button"
-                          onClick={() => setView(view)}
-                          className={`text-xs px-3 py-1.5 rounded-lg transition-all duration-300 transform hover:scale-105 ${
-                            (currentView === view) || 
-                            (view === 'Right' && currentView === 'Right Side') ||
-                            (view === 'Left' && currentView === 'Left Side')
-                              ? 'bg-indigo-500 text-white shadow-md' 
-                              : 'bg-gray-200 hover:bg-gray-300'
-                          }`}
-                        >
-                          {view}
-                        </button>
-                      ))}
+                  {isLoadingImage ? (
+                    <div className="flex flex-col items-center justify-center h-80 rounded-xl bg-gradient-to-br from-gray-100 to-gray-200 dark:from-gray-800 dark:to-gray-900">
+                      <div className="animate-spin rounded-full h-16 w-16 border-t-4 border-b-4 border-blue-600 mb-4"></div>
+                      <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>Loading vehicle image...</p>
                     </div>
-                    
-                    {/* Enhanced zoom controls */}
-                    <div className="flex justify-center items-center gap-3 mb-4">
-                      <button 
-                        type="button"
-                        onClick={zoomOut}
-                        className="flex items-center justify-center w-8 h-8 rounded-full bg-gray-200 hover:bg-gray-300 transition-all duration-300 hover:scale-110 active:scale-95"
-                        aria-label="Zoom out"
-                      >
-                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-gray-700" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 12H4" />
-                        </svg>
-                      </button>
-                      
-                      <div className="w-24 h-2 bg-gray-200 rounded-full overflow-hidden">
-                        <div 
-                          className="h-full bg-indigo-500 rounded-full transition-all duration-300"
-                          style={{ width: `${((scale - 0.5) / 2.5) * 100}%` }}
-                        ></div>
-                      </div>
-                      
-                      <span className="text-xs font-medium text-gray-600 w-10 text-center">
-                        {Math.round(scale * 100)}%
-                      </span>
-                      
-                      <button 
-                        type="button"
-                        onClick={zoomIn}
-                        className="flex items-center justify-center w-8 h-8 rounded-full bg-gray-200 hover:bg-gray-300 transition-all duration-300 hover:scale-110 active:scale-95"
-                        aria-label="Zoom in"
-                      >
-                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-gray-700" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                        </svg>
-                      </button>
-                    </div>
-                    
-                    {/* 3D Model Container with Enhanced Design */}
-                    <div 
-                      ref={containerRef}
-                      className="relative h-80 flex items-center justify-center overflow-hidden cursor-grab rounded-lg bg-gradient-to-br from-gray-50 to-gray-100 border border-gray-200 shadow-inner"
-                      onMouseDown={handleMouseDown}
-                      onTouchStart={handleTouchStart}
-                      onWheel={handleWheel}
-                    >
-                      {/* Enhanced background effects */}
-                      <div className="absolute inset-0 overflow-hidden">
-                        {[...Array(20)].map((_, i) => (
-                          <div 
-                            key={i}
-                            className="absolute rounded-full bg-white/30"
-                            style={{
-                              width: `${Math.random() * 15 + 5}px`,
-                              height: `${Math.random() * 15 + 5}px`,
-                              top: `${Math.random() * 100}%`,
-                              left: `${Math.random() * 100}%`,
-                              animation: `float-up ${Math.random() * 15 + 10}s linear infinite`,
-                              animationDelay: `${Math.random() * 5}s`,
-                            }}
-                          />
-                        ))}
-                        
-                        {/* Grid pattern for depth perception */}
-                        <div className="absolute inset-0 opacity-20">
-                          <div className="absolute inset-0 bg-grid bg-repeat" style={{ 
-                            backgroundImage: `linear-gradient(to right, #9ca3af 1px, transparent 1px), linear-gradient(to bottom, #9ca3af 1px, transparent 1px)`,
-                            backgroundSize: '20px 20px'
-                          }}></div>
+                  ) : (
+                    <div className="relative group">
+                      <img
+                        src={form.carImage}
+                        alt={`${form.vehicleMake} ${form.vehicleModel}`}
+                        className="rounded-xl shadow-2xl w-full h-80 object-cover transition-transform duration-300 group-hover:scale-105"
+                        onError={(e) => {
+                          e.target.onerror = null;
+                          e.target.src = `https://via.placeholder.com/800x400?text=${encodeURIComponent(form.vehicleMake)}+${encodeURIComponent(form.vehicleModel)}&bg=4f46e5&fc=ffffff`;
+                        }}
+                      />
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent rounded-xl opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-end p-4">
+                        <div className="text-white">
+                          <p className="font-bold text-lg">{form.vehicleMake} {form.vehicleModel}</p>
+                          <p className="text-sm">{form.vehicleYear}</p>
                         </div>
                       </div>
-                      
-                      {/* 3D Car Model with Enhanced Styling */}
-                      <div 
-                        ref={modelRef}
-                        className="relative z-10 transition-all duration-300"
-                        style={{ 
-                          transform: `rotateX(${rotation.x}deg) rotateY(${rotation.y}deg) scale(${scale})`,
-                          transition: isDragging ? 'none' : 'transform 0.5s ease',
-                          filter: isZooming ? 'drop-shadow(0 0 8px rgba(99, 102, 241, 0.6))' : 'drop-shadow(0 4px 6px rgba(0, 0, 0, 0.1))'
-                        }}
+                    </div>
+                  )}
+
+                  {imageError && (
+                    <p className={`text-xs mt-3 ${isDark ? 'text-yellow-400' : 'text-yellow-600'} flex items-center gap-2`}>
+                      ⚠️ Using placeholder image
+                    </p>
+                  )}
+                </div>
+
+                {/* 3D Model Viewer */}
+                <div className={`rounded-2xl p-5 ${isDark ? 'bg-gray-700/50 border-gray-600' : 'bg-gradient-to-br from-purple-50 to-pink-50 border-gray-200'} border-2`}>
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className={`font-bold flex items-center gap-2 ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                      <FiMove className={isDark ? 'text-purple-400' : 'text-purple-600'} />
+                      3D Interactive View
+                    </h3>
+                    <div className="flex items-center gap-2">
+                      <span className={`px-3 py-1 rounded-lg text-xs font-semibold ${isZooming
+                          ? 'bg-yellow-500 text-white animate-pulse'
+                          : isDark ? 'bg-gray-800 text-purple-400' : 'bg-purple-100 text-purple-700'
+                        }`}>
+                        {currentView} • {Math.round(scale * 100)}%
+                      </span>
+                      <button
+                        type="button"
+                        onClick={resetView}
+                        className={`p-2 rounded-lg transition-all ${isDark ? 'bg-gray-600 hover:bg-gray-500 text-white' : 'bg-white hover:bg-gray-50 border-2 border-gray-300'}`}
+                        title="Reset view"
                       >
-                        <img 
-                          src={form.adImage} 
-                          alt={`3D ${form.vehicleMake} ${form.vehicleModel}`}
-                          className="max-w-full h-auto mx-auto"
-                          style={{ maxHeight: '250px' }}
-                          onError={(e) => {
-                            e.target.onerror = null;
-                            const make = encodeURIComponent(form.vehicleMake.trim());
-                            const model = encodeURIComponent(form.vehicleModel.trim());
-                            e.target.src = `https://via.placeholder.com/800x400.png?text=${make}+${model}&bg=transparent&fc=4f46e5&border=4f46e5`;
+                        <FiRotateCw size={16} />
+                      </button>
+                    </div>
+                  </div>
+
+                  {isLoadingAdImage ? (
+                    <div className="flex flex-col items-center justify-center h-80 rounded-xl bg-gradient-to-br from-gray-100 to-gray-200 dark:from-gray-800 dark:to-gray-900">
+                      <div className="animate-spin rounded-full h-16 w-16 border-t-4 border-b-4 border-purple-600 mb-4"></div>
+                      <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>Loading 3D model...</p>
+                    </div>
+                  ) : (
+                    <>
+                      {/* View Controls */}
+                      <div className="flex justify-center gap-2 mb-3">
+                        {['Front', 'Right', 'Rear', 'Left', 'Top'].map(view => (
+                          <button
+                            key={view}
+                            type="button"
+                            onClick={() => setView(view)}
+                            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all duration-300 ${(currentView === view) ||
+                                (view === 'Right' && currentView === 'Right Side') ||
+                                (view === 'Left' && currentView === 'Left Side')
+                                ? 'bg-gradient-to-r from-purple-600 to-pink-600 text-white shadow-lg scale-105'
+                                : isDark ? 'bg-gray-600 hover:bg-gray-500 text-gray-300' : 'bg-white hover:bg-gray-50 border-2 border-gray-300'
+                              }`}
+                          >
+                            {view}
+                          </button>
+                        ))}
+                      </div>
+
+                      {/* Zoom Controls */}
+                      <div className="flex justify-center items-center gap-3 mb-4">
+                        <button
+                          type="button"
+                          onClick={zoomOut}
+                          className={`p-2 rounded-xl transition-all ${isDark ? 'bg-gray-600 hover:bg-gray-500' : 'bg-white hover:bg-gray-50 border-2 border-gray-300'}`}
+                        >
+                          <FiZoomOut size={18} />
+                        </button>
+
+                        <div className={`flex-1 max-w-32 h-2 rounded-full overflow-hidden ${isDark ? 'bg-gray-600' : 'bg-gray-200'}`}>
+                          <div
+                            className="h-full bg-gradient-to-r from-purple-600 to-pink-600 rounded-full transition-all duration-300"
+                            style={{ width: `${((scale - 0.5) / 2.5) * 100}%` }}
+                          ></div>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={zoomIn}
+                          className={`p-2 rounded-xl transition-all ${isDark ? 'bg-gray-600 hover:bg-gray-500' : 'bg-white hover:bg-gray-50 border-2 border-gray-300'}`}
+                        >
+                          <FiZoomIn size={18} />
+                        </button>
+                      </div>
+
+                      {/* 3D Container */}
+                      <div
+                        ref={containerRef}
+                        className={`relative h-80 rounded-xl overflow-hidden cursor-grab ${isDark ? 'bg-gradient-to-br from-gray-900 to-gray-800' : 'bg-gradient-to-br from-gray-50 to-gray-100'
+                          } border-2 ${isDark ? 'border-gray-600' : 'border-gray-200'} shadow-inner`}
+                        onMouseDown={handleMouseDown}
+                        onTouchStart={handleTouchStart}
+                        onWheel={handleWheel}
+                      >
+                        {/* Background Effects */}
+                        <div className="absolute inset-0 overflow-hidden">
+                          {[...Array(15)].map((_, i) => (
+                            <div
+                              key={i}
+                              className={`absolute rounded-full ${isDark ? 'bg-white/10' : 'bg-white/40'}`}
+                              style={{
+                                width: `${Math.random() * 12 + 4}px`,
+                                height: `${Math.random() * 12 + 4}px`,
+                                top: `${Math.random() * 100}%`,
+                                left: `${Math.random() * 100}%`,
+                                animation: `float-up ${Math.random() * 12 + 8}s linear infinite`,
+                                animationDelay: `${Math.random() * 4}s`,
+                              }}
+                            />
+                          ))}
+                        </div>
+
+                        {/* 3D Model */}
+                        <div
+                          ref={modelRef}
+                          className="absolute inset-0 flex items-center justify-center z-10"
+                          style={{
+                            transform: `rotateX(${rotation.x}deg) rotateY(${rotation.y}deg) scale(${scale})`,
+                            transition: isDragging ? 'none' : 'transform 0.5s ease',
+                            filter: isZooming ? 'drop-shadow(0 0 12px rgba(168, 85, 247, 0.6))' : 'drop-shadow(0 8px 12px rgba(0, 0, 0, 0.2))'
                           }}
-                        />
-                        {isImageUploaded && (
-                          <div className="absolute top-2 right-2 bg-indigo-500 text-white text-xs px-2 py-1 rounded-full">
-                            Uploaded Image
+                        >
+                          <img
+                            src={form.adImage}
+                            alt={`3D ${form.vehicleMake} ${form.vehicleModel}`}
+                            className="max-w-full h-auto"
+                            style={{ maxHeight: '280px' }}
+                            onError={(e) => {
+                              e.target.onerror = null;
+                              e.target.src = `https://via.placeholder.com/800x400?text=${encodeURIComponent(form.vehicleMake)}+${encodeURIComponent(form.vehicleModel)}&bg=transparent&fc=4f46e5`;
+                            }}
+                          />
+                        </div>
+
+                        {/* Controls Hint */}
+                        {!isDragging && (
+                          <div className="absolute bottom-4 left-0 right-0 flex justify-center z-20">
+                            <div className="bg-black/40 backdrop-blur-md text-white text-xs py-2 px-4 rounded-full flex items-center gap-3">
+                              <span>🖱️ Drag to rotate</span>
+                              <span>•</span>
+                              <span>🔍 Scroll to zoom</span>
+                            </div>
                           </div>
                         )}
                       </div>
-                      
-                      {/* Enhanced controls hint */}
-                      {!isDragging && (
-                        <div className="absolute bottom-4 left-0 right-0 flex justify-center">
-                          <div className="bg-black/30 backdrop-blur-sm text-white text-xs py-1.5 px-4 rounded-full flex items-center gap-2">
-                            <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 11l5-5m0 0l5 5m-5-5v12" />
-                            </svg>
-                            <span>Scroll to zoom</span>
-                            <span className="mx-1">•</span>
-                            <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
-                            </svg>
-                            <span>Drag to rotate</span>
-                          </div>
-                        </div>
-                      )}
-                      
-                      {/* Zoom indicator */}
-                      {isZooming && (
-                        <div className="absolute top-4 right-4 bg-indigo-500 text-white text-xs py-1 px-2 rounded-full animate-pulse">
-                          Zooming...
-                        </div>
-                      )}
-                    </div>
-                  </>
-                )}
-                
-                {adImageError && (
-                  <p className="text-sm text-red-500 mt-3 text-center">
-                    Couldn't load 3D model. Showing placeholder instead.
-                  </p>
-                )}
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
+                    </>
+                  )}
 
-      <div className="flex gap-4">
-        <button
-          type="submit"
-          className="bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl px-6 py-2 font-semibold transition"
-        >
-          Save
-        </button>
-        <button
-          type="button"
-          onClick={() => navigate(-1)}
-          className="bg-gray-200 hover:bg-gray-300 rounded-xl px-6 py-2 font-semibold transition"
-        >
-          Cancel
-        </button>
-      </div>
-      
-      {/* Add custom animations to the document head */}
+                  {adImageError && (
+                    <p className={`text-xs mt-3 ${isDark ? 'text-yellow-400' : 'text-yellow-600'} flex items-center gap-2`}>
+                      ⚠️ Using placeholder for 3D view
+                    </p>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Action Buttons */}
+        <div className="flex gap-4">
+          <button
+            type="submit"
+            className="flex items-center gap-2 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white rounded-xl px-8 py-4 font-bold text-lg transition-all duration-200 shadow-xl hover:shadow-2xl"
+          >
+            <FiSave size={20} />
+            {id ? 'Update Client' : 'Save Client'}
+          </button>
+          <button
+            type="button"
+            onClick={() => navigate(-1)}
+            className={`flex items-center gap-2 px-8 py-4 rounded-xl font-bold text-lg transition-all duration-200 shadow-lg hover:shadow-xl ${isDark
+                ? 'bg-gray-700 hover:bg-gray-600 text-white border-2 border-gray-600'
+                : 'bg-white hover:bg-gray-50 text-gray-700 border-2 border-gray-300'
+              }`}
+          >
+            <FiX size={20} />
+            Cancel
+          </button>
+        </div>
+      </form>
+
+      {/* Animations */}
       <style jsx>{`
         @keyframes float-up {
           0% {
@@ -822,21 +890,17 @@ export default function ClientForm() {
             opacity: 0;
           }
           10% {
-            opacity: 0.4;
+            opacity: 0.5;
           }
           90% {
-            opacity: 0.4;
+            opacity: 0.5;
           }
           100% {
             transform: translateY(-100%);
             opacity: 0;
           }
         }
-        
-        .bg-grid {
-          background-size: 20px 20px;
-        }
       `}</style>
-    </form>
+    </div>
   )
 }
