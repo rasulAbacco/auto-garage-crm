@@ -26,7 +26,7 @@ const NODE_ENV = process.env.NODE_ENV || "development";
 
 // Security HTTP headers
 app.use(helmet());
-app.use(express.json());
+
 
 // Enable CORS (allow frontend connection)
 const allowedOrigins = [
