@@ -46,7 +46,7 @@ const getReminderStatus = (date) => {
 
 export default function ReminderCard({ reminder, client, onDelete, index, refreshReminders }) {
     const { isDark } = useTheme();
-    const API_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:5000/api";
+    const API_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:5000";
 
     const nextServiceStatus = getReminderStatus(reminder.nextService);
     const insuranceStatus = getReminderStatus(reminder.insuranceRenewal);
@@ -60,7 +60,7 @@ export default function ReminderCard({ reminder, client, onDelete, index, refres
             nextDate.setMonth(nextDate.getMonth() + 6); // 6 months later
 
             await axios.put(
-                `${API_URL}/reminders/${reminder.id}`,
+                `${API_URL}/api/reminders/${reminder.id}`,
                 { nextService: nextDate, status: "Completed" },
                 { withCredentials: true }
             );

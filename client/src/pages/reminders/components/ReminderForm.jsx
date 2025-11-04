@@ -17,7 +17,7 @@ export default function ReminderForm({ clients = [], onSubmit, refreshReminders 
     const [localClients, setLocalClients] = useState(clients);
     const [message, setMessage] = useState("");
 
-    const API_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:5000/api";
+    const API_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:5000";
 
     // ✅ Helper for Authorization header
     const getAuthConfig = () => {
@@ -35,7 +35,7 @@ export default function ReminderForm({ clients = [], onSubmit, refreshReminders 
         const fetchClients = async () => {
             if (clients.length === 0) {
                 try {
-                    const res = await axios.get(`${API_URL}/clients`, getAuthConfig());
+                    const res = await axios.get(`${API_URL}/api/clients`, getAuthConfig());
                     setLocalClients(res.data.data || res.data);
                 } catch (error) {
                     console.error("❌ Failed to load clients:", error);
@@ -71,7 +71,7 @@ export default function ReminderForm({ clients = [], onSubmit, refreshReminders 
                 notify: form.notify || "SMS",
             };
 
-            const res = await axios.post(`${API_URL}/reminders`, payload, getAuthConfig());
+            const res = await axios.post(`${API_URL}/api/reminders`, payload, getAuthConfig());
 
             // ✅ Show success message immediately
             setMessage("✅ Reminder created successfully!");
