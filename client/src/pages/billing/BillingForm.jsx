@@ -1,6 +1,5 @@
 // client/src/pages/billing/BillingForm.jsx
 import React, { useEffect, useState } from 'react'
-import { upsertInvoice, listClients } from '../../lib/storage.js'
 import { useLocation, useNavigate, Link } from 'react-router-dom'
 import {
   FiFileText,
@@ -8,7 +7,6 @@ import {
   FiUser,
   FiTool,
   FiDollarSign,
-  FiCreditCard,
   FiSave,
   FiX,
   FiArrowLeft,
@@ -16,12 +14,46 @@ import {
   FiPercent,
   FiTag,
   FiAlertCircle,
-  FiCheckCircle,
-  FiSmartphone,
-  FiGlobe
+  FiCheckCircle
 } from 'react-icons/fi'
 import { FaCar } from "react-icons/fa";
 import { useTheme } from '../../contexts/ThemeContext'
+const API_URL = import.meta.env.VITE_API_BASE_URL;
+
+// Helper function to get auth token
+const getAuthToken = () => {
+  return localStorage.getItem('token') || localStorage.getItem('authToken');
+};
+
+// Helper function to make authenticated API requests
+const fetchWithAuth = async (url, options = {}) => {
+  const token = getAuthToken();
+
+  if (!token) {
+    throw new Error('No authentication token found');
+  }
+
+  const headers = {
+    'Content-Type': 'application/json',
+    'Authorization': `Bearer ${token}`,
+    ...options.headers
+  };
+
+  const response = await fetch(url, {
+    ...options,
+    headers
+  });
+
+  if (response.status === 401) {
+    // Token might be expired or invalid
+    localStorage.removeItem('token');
+    localStorage.removeItem('authToken');
+    window.location.href = '/login';
+    throw new Error('Session expired. Please login again.');
+  }
+
+  return response;
+};
 
 const empty = {
   id: '',
@@ -36,33 +68,38 @@ const empty = {
   taxes: 0,
   discounts: 0,
   total: 0,
-  mode: 'Cash',
-  upiId: '',
-  upiApp: '',
-  cardNumber: '',
-  cardName: '',
-  expiryDate: '',
-  cvv: '',
-  transactionId: '',
-  paymentGateway: '',
-}
-
-// Payment mode configuration
-const paymentModes = [
-  { value: 'Cash', label: 'Cash Payment', icon: '💵', color: 'green' },
-  { value: 'Card', label: 'Credit/Debit Card', icon: '💳', color: 'blue' },
-  { value: 'UPI', label: 'UPI Payment', icon: '📱', color: 'purple' },
-  { value: 'Online', label: 'Online Payment', icon: '🌐', color: 'indigo' },
-  { value: 'Bank Transfer', label: 'Bank Transfer', icon: '🏦', color: 'teal' },
-  { value: 'Check', label: 'Check/Cheque', icon: '📝', color: 'orange' },
-];
+  status: 'Pending',
+  dueDate: '',
+  notes: ''
+};
 
 export default function BillingForm() {
   const [form, setForm] = useState(empty)
+  const [clients, setClients] = useState([])
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState(null)
   const { isDark } = useTheme()
   const navigate = useNavigate()
   const location = useLocation()
-  const clients = listClients()
+
+  // Fetch clients from API
+  useEffect(() => {
+    const fetchClients = async () => {
+      try {
+        const response = await fetchWithAuth(`${API_URL}/api/clients`);
+        if (!response.ok) {
+          throw new Error('Failed to fetch clients');
+        }
+        const data = await response.json();
+        setClients(data);
+      } catch (err) {
+        setError(err.message);
+        console.error('Error fetching clients:', err);
+      }
+    };
+
+    fetchClients();
+  }, []);
 
   const generateInvoiceId = () => {
     const timestamp = Date.now().toString(36);
@@ -75,6 +112,15 @@ export default function BillingForm() {
     const year = today.getFullYear();
     const month = String(today.getMonth() + 1).padStart(2, '0');
     const day = String(today.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }
+
+  const getDueDate = (days = 30) => {
+    const dueDate = new Date();
+    dueDate.setDate(dueDate.getDate() + days);
+    const year = dueDate.getFullYear();
+    const month = String(dueDate.getMonth() + 1).padStart(2, '0');
+    const day = String(dueDate.getDate()).padStart(2, '0');
     return `${year}-${month}-${day}`;
   }
 
@@ -93,6 +139,7 @@ export default function BillingForm() {
         partsCost: partsCost || 0,
         laborCost: laborCost || 0,
         mechanic: '',
+        dueDate: f.dueDate || getDueDate(),
       }))
     } else {
       setForm(f => ({
@@ -100,6 +147,7 @@ export default function BillingForm() {
         id: generateInvoiceId(),
         date: getTodayDate(),
         serviceDate: getTodayDate(),
+        dueDate: getDueDate(),
       }))
     }
   }, [location.state])
@@ -113,226 +161,45 @@ export default function BillingForm() {
     setForm(f => ({ ...f, total }))
   }, [form.partsCost, form.laborCost, form.taxes, form.discounts])
 
-  const handleModeChange = (mode) => {
-    setForm(prev => ({
-      ...prev,
-      mode,
-      upiId: '',
-      upiApp: '',
-      cardNumber: '',
-      cardName: '',
-      expiryDate: '',
-      cvv: '',
-      transactionId: '',
-      paymentGateway: '',
-    }));
+  const submit = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    setError(null);
+
+    try {
+      const payload = {
+        clientId: Number(form.customerId),
+        serviceIds: location.state?.serviceId ? [location.state.serviceId] : [], // ✅ FIXED HERE
+        totalAmount: Number(form.partsCost || 0) + Number(form.laborCost || 0),
+        tax: Number(form.taxes || 0),
+        discount: Number(form.discounts || 0),
+        grandTotal: Number(form.total || 0),
+        status: form.status || "Pending",
+        dueDate: form.dueDate ? new Date(form.dueDate) : null,
+        notes: `${form.description}\n\nVehicle: ${form.vehicle}\nMechanic: ${form.mechanic}`,
+      };
+
+      const response = await fetchWithAuth(`${API_URL}/api/invoices`, {
+        method: "POST",
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to create invoice");
+      }
+
+      const data = await response.json();
+      navigate(`/billing/${data.invoice.id}`);
+    } catch (err) {
+      setError(err.message);
+      console.error("Error creating invoice:", err);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const submit = (e) => {
-    e.preventDefault()
-    const payload = {
-      ...form,
-      customerId: Number(form.customerId),
-    }
-    upsertInvoice(payload)
-    navigate(`/billing/${payload.id}`)
-  }
 
   const selectedCustomer = clients.find(c => c.id === Number(form.customerId));
-
-  const renderPaymentDetails = () => {
-    switch (form.mode) {
-      case 'UPI':
-        return (
-          <div className="space-y-6">
-            <h3 className={`text-lg font-bold ${isDark ? 'text-white' : 'text-gray-900'} flex items-center gap-2`}>
-              <FiSmartphone className="text-purple-500" />
-              UPI Payment Details
-            </h3>
-            <div className="grid md:grid-cols-2 gap-6">
-              <div>
-                <label className={`block text-sm font-semibold mb-2 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-                  UPI ID <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  name="upiId"
-                  className={`w-full px-4 py-3 rounded-xl font-medium transition-all duration-200 ${
-                    isDark 
-                      ? 'bg-gray-700 border-gray-600 text-white placeholder-gray-400 focus:bg-gray-600 focus:border-purple-500' 
-                      : 'bg-white border-gray-300 text-gray-900 placeholder-gray-500 focus:bg-gray-50 focus:border-purple-500'
-                  } border-2 focus:outline-none focus:ring-2 focus:ring-purple-500/20`}
-                  value={form.upiId}
-                  onChange={(e) => setForm({ ...form, upiId: e.target.value })}
-                  placeholder="example@upi"
-                  required
-                />
-              </div>
-              <div>
-                <label className={`block text-sm font-semibold mb-2 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-                  UPI App <span className="text-red-500">*</span>
-                </label>
-                <select
-                  className={`w-full px-4 py-3 rounded-xl font-medium transition-all duration-200 ${
-                    isDark 
-                      ? 'bg-gray-700 border-gray-600 text-white focus:bg-gray-600 focus:border-purple-500' 
-                      : 'bg-white border-gray-300 text-gray-900 focus:bg-gray-50 focus:border-purple-500'
-                  } border-2 focus:outline-none focus:ring-2 focus:ring-purple-500/20`}
-                  value={form.upiApp}
-                  onChange={(e) => setForm({ ...form, upiApp: e.target.value })}
-                  required
-                >
-                  <option value="">Select UPI App</option>
-                  <option value="Google Pay">Google Pay</option>
-                  <option value="PhonePe">PhonePe</option>
-                  <option value="Paytm">Paytm</option>
-                  <option value="BHIM UPI">BHIM UPI</option>
-                  <option value="Other">Other</option>
-                </select>
-              </div>
-            </div>
-          </div>
-        )
-      case 'Card':
-        return (
-          <div className="space-y-6">
-            <h3 className={`text-lg font-bold ${isDark ? 'text-white' : 'text-gray-900'} flex items-center gap-2`}>
-              <FiCreditCard className="text-blue-500" />
-              Card Payment Details
-            </h3>
-            <div className="grid md:grid-cols-2 gap-6">
-              <div className="md:col-span-2">
-                <label className={`block text-sm font-semibold mb-2 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-                  Card Number <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  name="cardNumber"
-                  className={`w-full px-4 py-3 rounded-xl font-medium transition-all duration-200 ${
-                    isDark 
-                      ? 'bg-gray-700 border-gray-600 text-white placeholder-gray-400 focus:bg-gray-600 focus:border-blue-500' 
-                      : 'bg-white border-gray-300 text-gray-900 placeholder-gray-500 focus:bg-gray-50 focus:border-blue-500'
-                  } border-2 focus:outline-none focus:ring-2 focus:ring-blue-500/20`}
-                  value={form.cardNumber}
-                  onChange={(e) => setForm({ ...form, cardNumber: e.target.value })}
-                  placeholder="1234 5678 9012 3456"
-                  maxLength="19"
-                  required
-                />
-              </div>
-              <div className="md:col-span-2">
-                <label className={`block text-sm font-semibold mb-2 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-                  Cardholder Name <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  name="cardName"
-                  className={`w-full px-4 py-3 rounded-xl font-medium transition-all duration-200 ${
-                    isDark 
-                      ? 'bg-gray-700 border-gray-600 text-white placeholder-gray-400 focus:bg-gray-600 focus:border-blue-500' 
-                      : 'bg-white border-gray-300 text-gray-900 placeholder-gray-500 focus:bg-gray-50 focus:border-blue-500'
-                  } border-2 focus:outline-none focus:ring-2 focus:ring-blue-500/20`}
-                  value={form.cardName}
-                  onChange={(e) => setForm({ ...form, cardName: e.target.value })}
-                  placeholder="John Doe"
-                  required
-                />
-              </div>
-              <div>
-                <label className={`block text-sm font-semibold mb-2 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-                  Expiry Date <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  name="expiryDate"
-                  className={`w-full px-4 py-3 rounded-xl font-medium transition-all duration-200 ${
-                    isDark 
-                      ? 'bg-gray-700 border-gray-600 text-white placeholder-gray-400 focus:bg-gray-600 focus:border-blue-500' 
-                      : 'bg-white border-gray-300 text-gray-900 placeholder-gray-500 focus:bg-gray-50 focus:border-blue-500'
-                  } border-2 focus:outline-none focus:ring-2 focus:ring-blue-500/20`}
-                  value={form.expiryDate}
-                  onChange={(e) => setForm({ ...form, expiryDate: e.target.value })}
-                  placeholder="MM/YY"
-                  maxLength="5"
-                  required
-                />
-              </div>
-              <div>
-                <label className={`block text-sm font-semibold mb-2 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-                  CVV <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="password"
-                  name="cvv"
-                  className={`w-full px-4 py-3 rounded-xl font-medium transition-all duration-200 ${
-                    isDark 
-                      ? 'bg-gray-700 border-gray-600 text-white placeholder-gray-400 focus:bg-gray-600 focus:border-blue-500' 
-                      : 'bg-white border-gray-300 text-gray-900 placeholder-gray-500 focus:bg-gray-50 focus:border-blue-500'
-                  } border-2 focus:outline-none focus:ring-2 focus:ring-blue-500/20`}
-                  value={form.cvv}
-                  onChange={(e) => setForm({ ...form, cvv: e.target.value })}
-                  placeholder="123"
-                  maxLength="4"
-                  required
-                />
-              </div>
-            </div>
-          </div>
-        )
-      case 'Online':
-        return (
-          <div className="space-y-6">
-            <h3 className={`text-lg font-bold ${isDark ? 'text-white' : 'text-gray-900'} flex items-center gap-2`}>
-              <FiGlobe className="text-indigo-500" />
-              Online Payment Details
-            </h3>
-            <div className="grid md:grid-cols-2 gap-6">
-              <div>
-                <label className={`block text-sm font-semibold mb-2 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-                  Transaction ID <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  name="transactionId"
-                  className={`w-full px-4 py-3 rounded-xl font-medium transition-all duration-200 ${
-                    isDark 
-                      ? 'bg-gray-700 border-gray-600 text-white placeholder-gray-400 focus:bg-gray-600 focus:border-indigo-500' 
-                      : 'bg-white border-gray-300 text-gray-900 placeholder-gray-500 focus:bg-gray-50 focus:border-indigo-500'
-                  } border-2 focus:outline-none focus:ring-2 focus:ring-indigo-500/20`}
-                  value={form.transactionId}
-                  onChange={(e) => setForm({ ...form, transactionId: e.target.value })}
-                  placeholder="TXN123456789"
-                  required
-                />
-              </div>
-              <div>
-                <label className={`block text-sm font-semibold mb-2 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-                  Payment Gateway <span className="text-red-500">*</span>
-                </label>
-                <select
-                  className={`w-full px-4 py-3 rounded-xl font-medium transition-all duration-200 ${
-                    isDark 
-                      ? 'bg-gray-700 border-gray-600 text-white focus:bg-gray-600 focus:border-indigo-500' 
-                      : 'bg-white border-gray-300 text-gray-900 focus:bg-gray-50 focus:border-indigo-500'
-                  } border-2 focus:outline-none focus:ring-2 focus:ring-indigo-500/20`}
-                  value={form.paymentGateway}
-                  onChange={(e) => setForm({ ...form, paymentGateway: e.target.value })}
-                  required
-                >
-                  <option value="">Select Payment Gateway</option>
-                  <option value="PayPal">PayPal</option>
-                  <option value="Stripe">Stripe</option>
-                  <option value="Razorpay">Razorpay</option>
-                  <option value="Other">Other</option>
-                </select>
-              </div>
-            </div>
-          </div>
-        )
-      default:
-        return null
-    }
-  }
 
   const subtotal = Number(form.partsCost || 0) + Number(form.laborCost || 0);
 
@@ -341,7 +208,7 @@ export default function BillingForm() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <Link 
+          <Link
             to="/billing"
             className={`inline-flex items-center gap-2 ${isDark ? 'text-gray-300 hover:text-white' : 'text-gray-600 hover:text-gray-900'} transition-colors duration-200 mb-3`}
           >
@@ -356,6 +223,15 @@ export default function BillingForm() {
           </p>
         </div>
       </div>
+
+      {error && (
+        <div className={`p-4 rounded-xl ${isDark ? 'bg-red-900/30 border-red-700' : 'bg-red-50 border-red-200'} border-2`}>
+          <div className="flex items-center gap-3">
+            <FiAlertCircle className={isDark ? 'text-red-400' : 'text-red-600'} size={20} />
+            <p className={isDark ? 'text-red-300' : 'text-red-700'}>{error}</p>
+          </div>
+        </div>
+      )}
 
       <form onSubmit={submit} className="space-y-6">
         {/* Invoice Information */}
@@ -382,11 +258,10 @@ export default function BillingForm() {
               <input
                 type="text"
                 readOnly
-                className={`w-full px-4 py-3 rounded-xl font-mono font-bold transition-all duration-200 ${
-                  isDark 
-                    ? 'bg-gray-700/50 border-gray-600 text-blue-400' 
+                className={`w-full px-4 py-3 rounded-xl font-mono font-bold transition-all duration-200 ${isDark
+                    ? 'bg-gray-700/50 border-gray-600 text-blue-400'
                     : 'bg-blue-50 border-blue-200 text-blue-700'
-                } border-2 cursor-not-allowed`}
+                  } border-2 cursor-not-allowed`}
                 value={form.id}
               />
             </div>
@@ -399,32 +274,30 @@ export default function BillingForm() {
               </label>
               <input
                 type="date"
-                className={`w-full px-4 py-3 rounded-xl font-medium transition-all duration-200 ${
-                  isDark 
-                    ? 'bg-gray-700 border-gray-600 text-white focus:bg-gray-600 focus:border-green-500' 
+                className={`w-full px-4 py-3 rounded-xl font-medium transition-all duration-200 ${isDark
+                    ? 'bg-gray-700 border-gray-600 text-white focus:bg-gray-600 focus:border-green-500'
                     : 'bg-white border-gray-300 text-gray-900 focus:bg-gray-50 focus:border-green-500'
-                } border-2 focus:outline-none focus:ring-2 focus:ring-green-500/20`}
+                  } border-2 focus:outline-none focus:ring-2 focus:ring-green-500/20`}
                 value={form.date}
                 onChange={(e) => setForm({ ...form, date: e.target.value })}
                 required
               />
             </div>
 
-            {/* Service Date */}
+            {/* Due Date */}
             <div>
               <label className={`block text-sm font-semibold mb-2 ${isDark ? 'text-gray-300' : 'text-gray-700'} flex items-center gap-2`}>
                 <FiCalendar size={16} className={isDark ? 'text-purple-400' : 'text-purple-600'} />
-                Service Date <span className="text-red-500">*</span>
+                Due Date <span className="text-red-500">*</span>
               </label>
               <input
                 type="date"
-                className={`w-full px-4 py-3 rounded-xl font-medium transition-all duration-200 ${
-                  isDark 
-                    ? 'bg-gray-700 border-gray-600 text-white focus:bg-gray-600 focus:border-purple-500' 
+                className={`w-full px-4 py-3 rounded-xl font-medium transition-all duration-200 ${isDark
+                    ? 'bg-gray-700 border-gray-600 text-white focus:bg-gray-600 focus:border-purple-500'
                     : 'bg-white border-gray-300 text-gray-900 focus:bg-gray-50 focus:border-purple-500'
-                } border-2 focus:outline-none focus:ring-2 focus:ring-purple-500/20`}
-                value={form.serviceDate}
-                onChange={(e) => setForm({ ...form, serviceDate: e.target.value })}
+                  } border-2 focus:outline-none focus:ring-2 focus:ring-purple-500/20`}
+                value={form.dueDate}
+                onChange={(e) => setForm({ ...form, dueDate: e.target.value })}
                 required
               />
             </div>
@@ -436,11 +309,10 @@ export default function BillingForm() {
                 Customer <span className="text-red-500">*</span>
               </label>
               <select
-                className={`w-full px-4 py-3 rounded-xl font-medium transition-all duration-200 ${
-                  isDark 
-                    ? 'bg-gray-700 border-gray-600 text-white focus:bg-gray-600 focus:border-orange-500' 
+                className={`w-full px-4 py-3 rounded-xl font-medium transition-all duration-200 ${isDark
+                    ? 'bg-gray-700 border-gray-600 text-white focus:bg-gray-600 focus:border-orange-500'
                     : 'bg-white border-gray-300 text-gray-900 focus:bg-gray-50 focus:border-orange-500'
-                } border-2 focus:outline-none focus:ring-2 focus:ring-orange-500/20`}
+                  } border-2 focus:outline-none focus:ring-2 focus:ring-orange-500/20`}
                 value={form.customerId}
                 onChange={(e) => setForm({ ...form, customerId: e.target.value })}
                 required
@@ -462,11 +334,10 @@ export default function BillingForm() {
               </label>
               <input
                 type="text"
-                className={`w-full px-4 py-3 rounded-xl font-medium transition-all duration-200 ${
-                  isDark 
-                    ? 'bg-gray-700 border-gray-600 text-white placeholder-gray-400 focus:bg-gray-600 focus:border-teal-500' 
+                className={`w-full px-4 py-3 rounded-xl font-medium transition-all duration-200 ${isDark
+                    ? 'bg-gray-700 border-gray-600 text-white placeholder-gray-400 focus:bg-gray-600 focus:border-teal-500'
                     : 'bg-white border-gray-300 text-gray-900 placeholder-gray-500 focus:bg-gray-50 focus:border-teal-500'
-                } border-2 focus:outline-none focus:ring-2 focus:ring-teal-500/20`}
+                  } border-2 focus:outline-none focus:ring-2 focus:ring-teal-500/20`}
                 value={form.vehicle || (selectedCustomer ? `${selectedCustomer.vehicleMake} ${selectedCustomer.vehicleModel}` : '')}
                 onChange={(e) => setForm({ ...form, vehicle: e.target.value })}
                 placeholder="Enter vehicle details"
@@ -482,11 +353,10 @@ export default function BillingForm() {
               </label>
               <input
                 type="text"
-                className={`w-full px-4 py-3 rounded-xl font-medium transition-all duration-200 ${
-                  isDark 
-                    ? 'bg-gray-700 border-gray-600 text-white placeholder-gray-400 focus:bg-gray-600 focus:border-pink-500' 
+                className={`w-full px-4 py-3 rounded-xl font-medium transition-all duration-200 ${isDark
+                    ? 'bg-gray-700 border-gray-600 text-white placeholder-gray-400 focus:bg-gray-600 focus:border-pink-500'
                     : 'bg-white border-gray-300 text-gray-900 placeholder-gray-500 focus:bg-gray-50 focus:border-pink-500'
-                } border-2 focus:outline-none focus:ring-2 focus:ring-pink-500/20`}
+                  } border-2 focus:outline-none focus:ring-2 focus:ring-pink-500/20`}
                 value={form.mechanic || (selectedCustomer?.staffPerson || '')}
                 onChange={(e) => setForm({ ...form, mechanic: e.target.value })}
                 placeholder="Enter technician name"
@@ -501,11 +371,10 @@ export default function BillingForm() {
                 Service Description
               </label>
               <textarea
-                className={`w-full px-4 py-3 rounded-xl font-medium transition-all duration-200 ${
-                  isDark 
-                    ? 'bg-gray-700 border-gray-600 text-white placeholder-gray-400 focus:bg-gray-600 focus:border-blue-500' 
+                className={`w-full px-4 py-3 rounded-xl font-medium transition-all duration-200 ${isDark
+                    ? 'bg-gray-700 border-gray-600 text-white placeholder-gray-400 focus:bg-gray-600 focus:border-blue-500'
                     : 'bg-white border-gray-300 text-gray-900 placeholder-gray-500 focus:bg-gray-50 focus:border-blue-500'
-                } border-2 focus:outline-none focus:ring-2 focus:ring-blue-500/20`}
+                  } border-2 focus:outline-none focus:ring-2 focus:ring-blue-500/20`}
                 rows="3"
                 value={form.description}
                 onChange={(e) => setForm({ ...form, description: e.target.value })}
@@ -543,11 +412,10 @@ export default function BillingForm() {
                     type="number"
                     step="0.01"
                     min="0"
-                    className={`w-full pl-8 pr-4 py-3 rounded-xl font-medium transition-all duration-200 ${
-                      isDark 
-                        ? 'bg-gray-700 border-gray-600 text-white placeholder-gray-400 focus:bg-gray-600 focus:border-blue-500' 
+                    className={`w-full pl-8 pr-4 py-3 rounded-xl font-medium transition-all duration-200 ${isDark
+                        ? 'bg-gray-700 border-gray-600 text-white placeholder-gray-400 focus:bg-gray-600 focus:border-blue-500'
                         : 'bg-white border-gray-300 text-gray-900 placeholder-gray-500 focus:bg-gray-50 focus:border-blue-500'
-                    } border-2 focus:outline-none focus:ring-2 focus:ring-blue-500/20`}
+                      } border-2 focus:outline-none focus:ring-2 focus:ring-blue-500/20`}
                     value={form.partsCost}
                     onChange={(e) => setForm({ ...form, partsCost: e.target.value })}
                     placeholder="0.00"
@@ -567,11 +435,10 @@ export default function BillingForm() {
                     type="number"
                     step="0.01"
                     min="0"
-                    className={`w-full pl-8 pr-4 py-3 rounded-xl font-medium transition-all duration-200 ${
-                      isDark 
-                        ? 'bg-gray-700 border-gray-600 text-white placeholder-gray-400 focus:bg-gray-600 focus:border-purple-500' 
+                    className={`w-full pl-8 pr-4 py-3 rounded-xl font-medium transition-all duration-200 ${isDark
+                        ? 'bg-gray-700 border-gray-600 text-white placeholder-gray-400 focus:bg-gray-600 focus:border-purple-500'
                         : 'bg-white border-gray-300 text-gray-900 placeholder-gray-500 focus:bg-gray-50 focus:border-purple-500'
-                    } border-2 focus:outline-none focus:ring-2 focus:ring-purple-500/20`}
+                      } border-2 focus:outline-none focus:ring-2 focus:ring-purple-500/20`}
                     value={form.laborCost}
                     onChange={(e) => setForm({ ...form, laborCost: e.target.value })}
                     placeholder="0.00"
@@ -591,11 +458,10 @@ export default function BillingForm() {
                     type="number"
                     step="0.01"
                     min="0"
-                    className={`w-full pl-8 pr-4 py-3 rounded-xl font-medium transition-all duration-200 ${
-                      isDark 
-                        ? 'bg-gray-700 border-gray-600 text-white placeholder-gray-400 focus:bg-gray-600 focus:border-green-500' 
+                    className={`w-full pl-8 pr-4 py-3 rounded-xl font-medium transition-all duration-200 ${isDark
+                        ? 'bg-gray-700 border-gray-600 text-white placeholder-gray-400 focus:bg-gray-600 focus:border-green-500'
                         : 'bg-white border-gray-300 text-gray-900 placeholder-gray-500 focus:bg-gray-50 focus:border-green-500'
-                    } border-2 focus:outline-none focus:ring-2 focus:ring-green-500/20`}
+                      } border-2 focus:outline-none focus:ring-2 focus:ring-green-500/20`}
                     value={form.taxes}
                     onChange={(e) => setForm({ ...form, taxes: e.target.value })}
                     placeholder="0.00"
@@ -615,11 +481,10 @@ export default function BillingForm() {
                     type="number"
                     step="0.01"
                     min="0"
-                    className={`w-full pl-8 pr-4 py-3 rounded-xl font-medium transition-all duration-200 ${
-                      isDark 
-                        ? 'bg-gray-700 border-gray-600 text-white placeholder-gray-400 focus:bg-gray-600 focus:border-orange-500' 
+                    className={`w-full pl-8 pr-4 py-3 rounded-xl font-medium transition-all duration-200 ${isDark
+                        ? 'bg-gray-700 border-gray-600 text-white placeholder-gray-400 focus:bg-gray-600 focus:border-orange-500'
                         : 'bg-white border-gray-300 text-gray-900 placeholder-gray-500 focus:bg-gray-50 focus:border-orange-500'
-                    } border-2 focus:outline-none focus:ring-2 focus:ring-orange-500/20`}
+                      } border-2 focus:outline-none focus:ring-2 focus:ring-orange-500/20`}
                     value={form.discounts}
                     onChange={(e) => setForm({ ...form, discounts: e.target.value })}
                     placeholder="0.00"
@@ -646,9 +511,8 @@ export default function BillingForm() {
                 <div className={`pt-3 border-t-2 ${isDark ? 'border-gray-600' : 'border-gray-300'}`}>
                   <div className="flex justify-between items-center">
                     <span className={`font-bold text-xl ${isDark ? 'text-white' : 'text-gray-900'}`}>Grand Total:</span>
-                    <span className={`font-black text-3xl bg-gradient-to-r ${
-                      isDark ? 'from-blue-400 to-purple-400' : 'from-blue-600 to-purple-600'
-                    } bg-clip-text text-transparent`}>
+                    <span className={`font-black text-3xl bg-gradient-to-r ${isDark ? 'from-blue-400 to-purple-400' : 'from-blue-600 to-purple-600'
+                      } bg-clip-text text-transparent`}>
                       ${form.total.toFixed(2)}
                     </span>
                   </div>
@@ -658,57 +522,100 @@ export default function BillingForm() {
           </div>
         </div>
 
-        {/* Payment Method Selection */}
+        {/* Status Selection */}
         <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} rounded-3xl shadow-xl border overflow-hidden`}>
           <div className={`p-6 border-b ${isDark ? 'border-gray-700 bg-gradient-to-r from-gray-800 to-gray-700' : 'border-gray-200 bg-gradient-to-r from-purple-600 to-pink-600'}`}>
             <div className="flex items-center gap-3">
               <div className="w-12 h-12 bg-white/20 backdrop-blur-sm rounded-xl flex items-center justify-center">
-                <FiCreditCard className="text-white" size={24} />
+                <FiCheckCircle className="text-white" size={24} />
               </div>
               <div>
-                <h2 className="text-2xl font-bold text-white">Payment Method</h2>
-                <p className="text-sm text-white/80">Choose how the customer will pay</p>
+                <h2 className="text-2xl font-bold text-white">Invoice Status</h2>
+                <p className="text-sm text-white/80">Set the current status of this invoice</p>
               </div>
             </div>
           </div>
 
           <div className="p-6">
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-6">
-              {paymentModes.map(mode => (
-                <button
-                  key={mode.value}
-                  type="button"
-                  onClick={() => handleModeChange(mode.value)}
-                  className={`p-4 rounded-xl border-2 transition-all duration-200 ${
-                    form.mode === mode.value
-                      ? isDark
-                        ? `bg-${mode.color}-900/30 border-${mode.color}-500 shadow-lg`
-                        : `bg-${mode.color}-50 border-${mode.color}-500 shadow-lg`
-                      : isDark
-                        ? 'bg-gray-700/50 border-gray-600 hover:bg-gray-700'
-                        : 'bg-white border-gray-300 hover:bg-gray-50'
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <button
+                type="button"
+                onClick={() => setForm({ ...form, status: 'Pending' })}
+                className={`p-4 rounded-xl border-2 transition-all duration-200 ${form.status === 'Pending'
+                    ? isDark
+                      ? 'bg-yellow-900/30 border-yellow-500 shadow-lg'
+                      : 'bg-yellow-50 border-yellow-500 shadow-lg'
+                    : isDark
+                      ? 'bg-gray-700/50 border-gray-600 hover:bg-gray-700'
+                      : 'bg-white border-gray-300 hover:bg-gray-50'
                   }`}
-                >
-                  <div className="text-3xl mb-2">{mode.icon}</div>
-                  <div className={`text-sm font-bold ${
-                    form.mode === mode.value
-                      ? isDark ? 'text-white' : 'text-gray-900'
-                      : isDark ? 'text-gray-400' : 'text-gray-600'
+              >
+                <div className={`text-lg font-bold ${form.status === 'Pending'
+                    ? isDark ? 'text-yellow-400' : 'text-yellow-700'
+                    : isDark ? 'text-gray-400' : 'text-gray-600'
                   }`}>
-                    {mode.label}
-                  </div>
-                </button>
-              ))}
-            </div>
+                  Pending
+                </div>
+                <p className={`text-sm mt-1 ${form.status === 'Pending'
+                    ? isDark ? 'text-yellow-300' : 'text-yellow-600'
+                    : isDark ? 'text-gray-500' : 'text-gray-500'
+                  }`}>
+                  Awaiting payment
+                </p>
+              </button>
 
-            {/* Payment Details Section */}
-            {form.mode && form.mode !== 'Cash' && (
-              <div className={`p-6 rounded-2xl border-2 ${
-                isDark ? 'bg-gray-700/50 border-gray-600' : 'bg-gray-50 border-gray-200'
-              }`}>
-                {renderPaymentDetails()}
-              </div>
-            )}
+              <button
+                type="button"
+                onClick={() => setForm({ ...form, status: 'Paid' })}
+                className={`p-4 rounded-xl border-2 transition-all duration-200 ${form.status === 'Paid'
+                    ? isDark
+                      ? 'bg-green-900/30 border-green-500 shadow-lg'
+                      : 'bg-green-50 border-green-500 shadow-lg'
+                    : isDark
+                      ? 'bg-gray-700/50 border-gray-600 hover:bg-gray-700'
+                      : 'bg-white border-gray-300 hover:bg-gray-50'
+                  }`}
+              >
+                <div className={`text-lg font-bold ${form.status === 'Paid'
+                    ? isDark ? 'text-green-400' : 'text-green-700'
+                    : isDark ? 'text-gray-400' : 'text-gray-600'
+                  }`}>
+                  Paid
+                </div>
+                <p className={`text-sm mt-1 ${form.status === 'Paid'
+                    ? isDark ? 'text-green-300' : 'text-green-600'
+                    : isDark ? 'text-gray-500' : 'text-gray-500'
+                  }`}>
+                  Payment received
+                </p>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setForm({ ...form, status: 'Overdue' })}
+                className={`p-4 rounded-xl border-2 transition-all duration-200 ${form.status === 'Overdue'
+                    ? isDark
+                      ? 'bg-red-900/30 border-red-500 shadow-lg'
+                      : 'bg-red-50 border-red-500 shadow-lg'
+                    : isDark
+                      ? 'bg-gray-700/50 border-gray-600 hover:bg-gray-700'
+                      : 'bg-white border-gray-300 hover:bg-gray-50'
+                  }`}
+              >
+                <div className={`text-lg font-bold ${form.status === 'Overdue'
+                    ? isDark ? 'text-red-400' : 'text-red-700'
+                    : isDark ? 'text-gray-400' : 'text-gray-600'
+                  }`}>
+                  Overdue
+                </div>
+                <p className={`text-sm mt-1 ${form.status === 'Overdue'
+                    ? isDark ? 'text-red-300' : 'text-red-600'
+                    : isDark ? 'text-gray-500' : 'text-gray-500'
+                  }`}>
+                  Payment past due
+                </p>
+              </button>
+            </div>
           </div>
         </div>
 
@@ -716,19 +623,31 @@ export default function BillingForm() {
         <div className="flex gap-4">
           <button
             type="submit"
-            className="flex-1 md:flex-initial flex items-center justify-center gap-2 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white rounded-xl px-8 py-4 font-bold text-lg transition-all duration-200 shadow-xl hover:shadow-2xl"
+            disabled={loading}
+            className="flex-1 md:flex-initial flex items-center justify-center gap-2 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white rounded-xl px-8 py-4 font-bold text-lg transition-all duration-200 shadow-xl hover:shadow-2xl disabled:opacity-70 disabled:cursor-not-allowed"
           >
-            <FiSave size={20} />
-            Create Invoice
+            {loading ? (
+              <>
+                <svg className="animate-spin -ml-1 mr-2 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                Creating...
+              </>
+            ) : (
+              <>
+                <FiSave size={20} />
+                Create Invoice
+              </>
+            )}
           </button>
           <button
             type="button"
             onClick={() => navigate(-1)}
-            className={`flex-1 md:flex-initial flex items-center justify-center gap-2 px-8 py-4 rounded-xl font-bold text-lg transition-all duration-200 shadow-lg hover:shadow-xl ${
-              isDark
+            className={`flex-1 md:flex-initial flex items-center justify-center gap-2 px-8 py-4 rounded-xl font-bold text-lg transition-all duration-200 shadow-lg hover:shadow-xl ${isDark
                 ? 'bg-gray-700 hover:bg-gray-600 text-white border-2 border-gray-600'
                 : 'bg-white hover:bg-gray-50 text-gray-700 border-2 border-gray-300'
-            }`}
+              }`}
           >
             <FiX size={20} />
             Cancel

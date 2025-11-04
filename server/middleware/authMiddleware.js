@@ -1,21 +1,38 @@
+// server/middleware/authMiddleware.js
 import jwt from "jsonwebtoken";
 import dotenv from "dotenv";
+import prisma from "../models/prismaClient.js"; // ✅ use Prisma to verify the user still exists
+
 dotenv.config();
 
-export const protect = (req, res, next) => {
-    const authHeader = req.headers.authorization;
-
-    if (!authHeader || !authHeader.startsWith("Bearer ")) {
-        return res.status(401).json({ message: "No token provided" });
-    }
-
-    const token = authHeader.split(" ")[1];
-
+/**
+ * @desc Middleware to protect routes using JWT
+ */
+export const protect = async (req, res, next) => {
     try {
+        const authHeader = req.headers.authorization;
+
+        if (!authHeader || !authHeader.startsWith("Bearer ")) {
+            return res.status(401).json({ message: "No token provided" });
+        }
+
+        const token = authHeader.split(" ")[1];
         const decoded = jwt.verify(token, process.env.JWT_SECRET);
-        req.user = decoded; // Attach user info to request
+
+        // ✅ Verify user still exists in DB (extra security)
+        const user = await prisma.user.findUnique({
+            where: { id: decoded.id },
+            select: { id: true, username: true, email: true, role: true },
+        });
+
+        if (!user) {
+            return res.status(401).json({ message: "User not found or deleted" });
+        }
+
+        req.user = user; // attach user object to request
         next();
-    } catch (err) {
-        return res.status(401).json({ message: "Invalid or expired token" });
+    } catch (error) {
+        console.error("❌ Auth Middleware Error:", error);
+        res.status(401).json({ message: "Invalid or expired token" });
     }
 };

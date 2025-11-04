@@ -1,7 +1,6 @@
 // client/src/pages/billing/Invoice.jsx
-import React, { useRef } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
-import { getInvoice, listClients } from '../../lib/storage.js'
 import {
   FiArrowLeft,
   FiPrinter,
@@ -24,44 +23,127 @@ import {
 import { FaCar } from "react-icons/fa";
 import { useTheme } from '../../contexts/ThemeContext'
 
+const API_URL = import.meta.env.VITE_API_BASE_URL;
+
+// Helper function to get auth token
+const getAuthToken = () => {
+  return localStorage.getItem('token') || localStorage.getItem('authToken');
+};
+
+// Helper function to make authenticated API requests
+const fetchWithAuth = async (url, options = {}) => {
+  const token = getAuthToken();
+
+  if (!token) {
+    throw new Error('No authentication token found');
+  }
+
+  const headers = {
+    'Content-Type': 'application/json',
+    'Authorization': `Bearer ${token}`,
+    ...options.headers
+  };
+
+  const response = await fetch(url, {
+    ...options,
+    headers
+  });
+
+  if (response.status === 401) {
+    // Token might be expired or invalid
+    localStorage.removeItem('token');
+    localStorage.removeItem('authToken');
+    window.location.href = '/login';
+    throw new Error('Session expired. Please login again.');
+  }
+
+  return response;
+};
+
 export default function Invoice() {
   const { id } = useParams()
+  const [invoice, setInvoice] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
   const { isDark } = useTheme()
   const navigate = useNavigate()
   const printRef = useRef()
-  
-  const inv = getInvoice(id)
-  const clients = listClients()
-  const c = clients.find(c => Number(c.id) === Number(inv?.customerId))
 
-  if (!inv) {
+  // Fetch invoice data
+  useEffect(() => {
+    const fetchInvoice = async () => {
+      try {
+        setLoading(true)
+        const response = await fetchWithAuth(`${API_URL}/api/invoices/${id}`)
+        if (!response.ok) {
+          throw new Error('Failed to fetch invoice')
+        }
+        const data = await response.json()
+        setInvoice(data)
+      } catch (err) {
+        setError(err.message)
+        console.error('Error fetching invoice:', err)
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchInvoice()
+  }, [id])
+
+  if (loading) {
     return (
       <div className={`lg:ml-16 min-h-screen flex items-center justify-center ${isDark ? 'bg-gray-900' : 'bg-gray-50'}`}>
         <div className="text-center">
-          <div className={`w-24 h-24 mx-auto rounded-full ${isDark ? 'bg-gray-800' : 'bg-gray-100'} flex items-center justify-center mb-4`}>
-            <FiFileText className={`w-12 h-12 ${isDark ? 'text-gray-600' : 'text-gray-400'}`} />
-          </div>
-          <h2 className={`text-2xl font-bold mb-2 ${isDark ? 'text-white' : 'text-gray-900'}`}>Invoice Not Found</h2>
-          <p className={`${isDark ? 'text-gray-400' : 'text-gray-500'} mb-6`}>The invoice you're looking for doesn't exist.</p>
-          <Link 
-            to="/billing"
-            className="inline-flex items-center gap-2 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white px-6 py-3 rounded-xl font-semibold transition-all duration-200 shadow-lg"
-          >
-            <FiArrowLeft />
-            Back to Billing
-          </Link>
+          <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-blue-500 mx-auto"></div>
+          <p className={`mt-4 text-lg ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Loading invoice...</p>
         </div>
       </div>
     )
   }
 
+  if (error || !invoice) {
+    return (
+      <div className={`lg:ml-16 min-h-screen flex items-center justify-center ${isDark ? 'bg-gray-900' : 'bg-gray-50'}`}>
+        <div className="text-center max-w-md">
+          <div className={`w-24 h-24 mx-auto rounded-full ${isDark ? 'bg-gray-800' : 'bg-gray-100'} flex items-center justify-center mb-4`}>
+            <FiFileText className={`w-12 h-12 ${isDark ? 'text-gray-600' : 'text-gray-400'}`} />
+          </div>
+          <h2 className={`text-2xl font-bold mb-2 ${isDark ? 'text-white' : 'text-gray-900'}`}>
+            {error ? 'Error Loading Invoice' : 'Invoice Not Found'}
+          </h2>
+          <p className={`${isDark ? 'text-gray-400' : 'text-gray-500'} mb-6`}>
+            {error || 'The invoice you\'re looking for doesn\'t exist.'}
+          </p>
+          <div className="flex flex-col sm:flex-row gap-3 justify-center">
+            <button
+              onClick={() => window.location.reload()}
+              className={`inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl font-semibold transition-all duration-200 ${isDark ? 'bg-blue-600 hover:bg-blue-700' : 'bg-blue-500 hover:bg-blue-600'
+                } text-white shadow-lg`}
+            >
+              Try Again
+            </button>
+            <Link
+              to="/billing"
+              className="inline-flex items-center justify-center gap-2 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white px-6 py-3 rounded-xl font-semibold transition-all duration-200 shadow-lg"
+            >
+              <FiArrowLeft />
+              Back to Billing
+            </Link>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // Extract client from invoice data
+  const c = invoice.client
+
   // Calculate all invoice values
-  const partsCost = Number(inv.partsCost || 0)
-  const laborCost = Number(inv.laborCost || 0)
-  const taxes = Number(inv.taxes || 0)
-  const discounts = Number(inv.discounts || 0)
-  const subtotal = partsCost + laborCost
-  const total = subtotal + taxes - discounts
+  const totalAmount = Number(invoice.totalAmount || 0)
+  const taxes = Number(invoice.tax || 0)
+  const discounts = Number(invoice.discount || 0)
+  const grandTotal = Number(invoice.grandTotal || 0)
 
   // Format date for display
   const formatDate = (dateString) => {
@@ -72,8 +154,8 @@ export default function Invoice() {
 
   // Get payment status configuration
   const getPaymentStatus = () => {
-    const status = inv.paymentStatus?.toLowerCase() || 'pending'
-    
+    const status = invoice.status?.toLowerCase() || 'pending'
+
     const statusConfig = {
       'paid': {
         text: 'Paid',
@@ -119,12 +201,28 @@ export default function Invoice() {
     alert('PDF download feature coming soon!')
   }
 
+  // Extract vehicle and technician information from notes
+  const extractInfoFromNotes = () => {
+    const notes = invoice.notes || ''
+    const vehicleMatch = notes.match(/Vehicle:\s*(.+)/i)
+    const mechanicMatch = notes.match(/Mechanic:\s*(.+)/i)
+    const descriptionMatch = notes.match(/^(.+?)\n\nVehicle:/is)
+
+    return {
+      vehicle: vehicleMatch ? vehicleMatch[1].trim() : '',
+      mechanic: mechanicMatch ? mechanicMatch[1].trim() : '',
+      description: descriptionMatch ? descriptionMatch[1].trim() : notes
+    }
+  }
+
+  const { vehicle, mechanic, description } = extractInfoFromNotes()
+
   return (
     <div className={`lg:ml-16 p-6 ${isDark ? 'bg-gray-900' : 'bg-gray-50'} min-h-screen print:bg-white print:p-0`}>
       {/* Action Bar - Hidden on Print */}
       <div className="mb-6 print:hidden">
         <div className="flex items-center justify-between">
-          <Link 
+          <Link
             to="/billing"
             className={`inline-flex items-center gap-2 ${isDark ? 'text-gray-300 hover:text-white' : 'text-gray-600 hover:text-gray-900'} transition-colors duration-200`}
           >
@@ -135,11 +233,10 @@ export default function Invoice() {
           <div className="flex gap-3">
             <button
               onClick={handlePrint}
-              className={`flex items-center gap-2 px-6 py-3 rounded-xl font-semibold transition-all duration-200 shadow-lg ${
-                isDark
-                  ? 'bg-gray-700 hover:bg-gray-600 text-white border border-gray-600'
-                  : 'bg-white hover:bg-gray-50 text-gray-700 border-2 border-gray-300'
-              }`}
+              className={`flex items-center gap-2 px-6 py-3 rounded-xl font-semibold transition-all duration-200 shadow-lg ${isDark
+                ? 'bg-gray-700 hover:bg-gray-600 text-white border border-gray-600'
+                : 'bg-white hover:bg-gray-50 text-gray-700 border-2 border-gray-300'
+                }`}
             >
               <FiPrinter size={18} />
               Print Invoice
@@ -156,7 +253,7 @@ export default function Invoice() {
       </div>
 
       {/* Invoice Container */}
-      <div 
+      <div
         ref={printRef}
         className={`max-w-5xl mx-auto ${isDark ? 'bg-gray-800' : 'bg-white'} rounded-3xl shadow-2xl overflow-hidden print:shadow-none print:rounded-none`}
       >
@@ -195,10 +292,9 @@ export default function Invoice() {
               <div className="text-right text-white">
                 <div className="bg-white/20 backdrop-blur-md rounded-2xl p-6 border-2 border-white/30">
                   <p className="text-white/80 text-sm font-semibold mb-2">INVOICE</p>
-                  <p className="text-4xl font-black mb-4">#{String(inv.id).padStart(4, '0')}</p>
-                  <div className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl font-bold border-2 ${
-                    isDark ? paymentStatus.colorDark : paymentStatus.colorLight
-                  } bg-white`}>
+                  <p className="text-4xl font-black mb-4">#{invoice.invoiceNumber}</p>
+                  <div className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl font-bold border-2 ${isDark ? paymentStatus.colorDark : paymentStatus.colorLight
+                    } bg-white`}>
                     <StatusIcon size={16} />
                     {paymentStatus.text}
                   </div>
@@ -213,21 +309,21 @@ export default function Invoice() {
                   <FiCalendar size={16} />
                   <span className="text-sm font-semibold">Invoice Date</span>
                 </div>
-                <p className="text-white font-bold">{formatDate(inv.date)}</p>
+                <p className="text-white font-bold">{formatDate(invoice.createdAt)}</p>
               </div>
               <div className="bg-white/10 backdrop-blur-md rounded-xl p-4 border border-white/20">
                 <div className="flex items-center gap-2 text-white/80 mb-1">
                   <FiCalendar size={16} />
                   <span className="text-sm font-semibold">Due Date</span>
                 </div>
-                <p className="text-white font-bold">{formatDate(inv.dueDate)}</p>
+                <p className="text-white font-bold">{formatDate(invoice.dueDate)}</p>
               </div>
               <div className="bg-white/10 backdrop-blur-md rounded-xl p-4 border border-white/20">
                 <div className="flex items-center gap-2 text-white/80 mb-1">
                   <FiCreditCard size={16} />
-                  <span className="text-sm font-semibold">Payment Mode</span>
+                  <span className="text-sm font-semibold">Payment Status</span>
                 </div>
-                <p className="text-white font-bold">{inv.mode || 'N/A'}</p>
+                <p className="text-white font-bold">{paymentStatus.text}</p>
               </div>
             </div>
           </div>
@@ -239,7 +335,7 @@ export default function Invoice() {
 
         {/* Invoice Body */}
         <div className="p-8">
-          {/* Bill To & Payment Details */}
+          {/* Bill To & Service Details */}
           <div className="grid md:grid-cols-2 gap-6 mb-8">
             {/* Bill To */}
             <div className={`p-6 rounded-2xl border-2 ${isDark ? 'bg-gray-700/50 border-gray-600' : 'bg-blue-50 border-blue-200'}`}>
@@ -290,7 +386,7 @@ export default function Invoice() {
                     <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>Vehicle</p>
                   </div>
                   <p className={`font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                    {inv.vehicle || c?.vehicleMake + ' ' + c?.vehicleModel || 'N/A'}
+                    {vehicle || c?.vehicleMake + ' ' + c?.vehicleModel || 'N/A'}
                   </p>
                 </div>
                 <div className={`p-3 rounded-xl ${isDark ? 'bg-gray-800/50' : 'bg-white'}`}>
@@ -299,7 +395,7 @@ export default function Invoice() {
                     <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>Service Date</p>
                   </div>
                   <p className={`font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                    {formatDate(inv.serviceDate) || formatDate(inv.date)}
+                    {formatDate(invoice.createdAt)}
                   </p>
                 </div>
                 <div className={`p-3 rounded-xl ${isDark ? 'bg-gray-800/50' : 'bg-white'} col-span-2`}>
@@ -308,7 +404,7 @@ export default function Invoice() {
                     <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>Technician</p>
                   </div>
                   <p className={`font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                    {inv.mechanic || c?.staffPerson || 'N/A'}
+                    {mechanic || c?.staffPerson || 'N/A'}
                   </p>
                 </div>
               </div>
@@ -316,7 +412,7 @@ export default function Invoice() {
           </div>
 
           {/* Service Description */}
-          {inv.description && (
+          {description && (
             <div className={`mb-8 p-6 rounded-2xl border-2 ${isDark ? 'bg-gray-700/50 border-gray-600' : 'bg-gray-50 border-gray-200'}`}>
               <div className="flex items-center gap-3 mb-3">
                 <div className={`w-10 h-10 rounded-xl ${isDark ? 'bg-gray-800' : 'bg-gray-200'} flex items-center justify-center`}>
@@ -325,8 +421,34 @@ export default function Invoice() {
                 <h3 className={`text-lg font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>Service Description</h3>
               </div>
               <p className={`${isDark ? 'text-gray-300' : 'text-gray-700'} leading-relaxed`}>
-                {inv.description}
+                {description}
               </p>
+            </div>
+          )}
+
+          {/* Services List */}
+          {invoice.services && invoice.services.length > 0 && (
+            <div className={`mb-8 rounded-2xl border-2 overflow-hidden ${isDark ? 'border-gray-600' : 'border-gray-200'}`}>
+              <table className="w-full">
+                <thead className={`${isDark ? 'bg-gray-700' : 'bg-gray-100'}`}>
+                  <tr>
+                    <th className={`text-left p-4 font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>Service</th>
+                    <th className={`text-right p-4 font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>Amount</th>
+                  </tr>
+                </thead>
+                <tbody className={isDark ? 'bg-gray-800/50' : 'bg-white'}>
+                  {invoice.services.map((service, index) => (
+                    <tr key={service.id} className={`border-b ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
+                      <td className={`p-4 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+                        {service.name}
+                      </td>
+                      <td className={`p-4 text-right font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                        ${Number(service.price || 0).toFixed(2)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           )}
 
@@ -344,28 +466,17 @@ export default function Invoice() {
                   <td className={`p-4 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
                     <div className="flex items-center gap-2">
                       <FiTool className={isDark ? 'text-blue-400' : 'text-blue-600'} size={16} />
-                      Parts Cost
+                      Services Total
                     </div>
                   </td>
                   <td className={`p-4 text-right font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                    ${partsCost.toFixed(2)}
-                  </td>
-                </tr>
-                <tr className={`border-b ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
-                  <td className={`p-4 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-                    <div className="flex items-center gap-2">
-                      <FiUser className={isDark ? 'text-purple-400' : 'text-purple-600'} size={16} />
-                      Labor Cost
-                    </div>
-                  </td>
-                  <td className={`p-4 text-right font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                    ${laborCost.toFixed(2)}
+                    ${totalAmount.toFixed(2)}
                   </td>
                 </tr>
                 <tr className={`border-b ${isDark ? 'border-gray-700 bg-gray-700/30' : 'border-gray-200 bg-gray-50'}`}>
                   <td className={`p-4 font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>Subtotal</td>
                   <td className={`p-4 text-right font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                    ${subtotal.toFixed(2)}
+                    ${totalAmount.toFixed(2)}
                   </td>
                 </tr>
                 <tr className={`border-b ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
@@ -400,7 +511,7 @@ export default function Invoice() {
                     </div>
                   </td>
                   <td className="p-6 text-right font-black text-white text-2xl">
-                    ${total.toFixed(2)}
+                    ${grandTotal.toFixed(2)}
                   </td>
                 </tr>
               </tbody>
