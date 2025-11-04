@@ -27,21 +27,25 @@ const NODE_ENV = process.env.NODE_ENV || "development";
 // Security HTTP headers
 app.use(helmet());
 app.use(express.json());
+
 // Enable CORS (allow frontend connection)
-// app.use(
-//   cors({
-//     origin:
-//       NODE_ENV === "production"
-//         ? process.env.FRONTEND_URL // Example: https://your-frontend.com
-//         : "*", // allow all origins in dev mode
-//     credentials: true,
-//   })
-// );
+const allowedOrigins = [
+  "http://localhost:5173",
+  "https://auto-garage-crm-r7l4.onrender.com"
+];
 
 app.use(
   cors({
-    origin: "http://localhost:5173", // 👈 frontend origin, not '*'
-    credentials: true, // 👈 allow cookies & auth headers
+    origin: function (origin, callback) {
+      // Allow requests with no origin (like mobile apps or curl)
+      if (!origin) return callback(null, true);
+      if (allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      } else {
+        return callback(new Error("Not allowed by CORS"));
+      }
+    },
+    credentials: true,
   })
 );
 
