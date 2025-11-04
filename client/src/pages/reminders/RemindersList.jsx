@@ -19,7 +19,7 @@ export default function RemindersList() {
   const { isDark } = useTheme();
 
   // Backend API base URL
-  const API_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:5000/api";
+  const API_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:5000";
 
   // 🔐 Helper: Build config with Authorization token
   const getAuthConfig = () => {
@@ -37,8 +37,8 @@ export default function RemindersList() {
     try {
       setLoading(true);
       const [remRes, clientRes] = await Promise.all([
-        axios.get(`${API_URL}/reminders`, getAuthConfig()),
-        axios.get(`${API_URL}/clients`, getAuthConfig()),
+        axios.get(`${API_URL}/api/reminders`, getAuthConfig()),
+        axios.get(`${API_URL}/api/clients`, getAuthConfig()),
       ]);
       setReminders(remRes.data.data || remRes.data);
       setClients(clientRes.data.data || clientRes.data);
@@ -69,7 +69,7 @@ export default function RemindersList() {
         notify: data.notify || "SMS",
       };
 
-      await axios.post(`${API_URL}/reminders`, payload, getAuthConfig());
+      await axios.post(`${API_URL}/api/reminders`, payload, getAuthConfig());
 
       // ✅ Success message
       setSuccessMessage("✅ Reminder created successfully!");
@@ -96,7 +96,7 @@ export default function RemindersList() {
   const handleDelete = async (id) => {
     if (!window.confirm("Are you sure you want to delete this reminder?")) return;
     try {
-      await axios.delete(`${API_URL}/reminders/${id}`, getAuthConfig());
+      await axios.delete(`${API_URL}/api/reminders/${id}`, getAuthConfig());
       setReminders((prev) => prev.filter((r) => r.id !== id));
     } catch (error) {
       console.error("❌ Error deleting reminder:", error);
