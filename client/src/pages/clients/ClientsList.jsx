@@ -1,6 +1,5 @@
 // client/src/pages/clients/ClientList.jsx
-import React, { useMemo, useState } from 'react'
-import { listClients, deleteClient } from '../../lib/storage.js'
+import React, { useMemo, useState, useEffect } from 'react'
 import Table from '../../components/Table.jsx'
 import SearchBar from '../../components/SearchBar.jsx'
 import { Link, useNavigate } from 'react-router-dom'
@@ -11,16 +10,74 @@ import { useTheme } from '../../contexts/ThemeContext'
 export default function ClientsList() {
   const [q, setQ] = useState('')
   const [selectedClient, setSelectedClient] = useState(null)
+  const [data, setData] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
   const navigate = useNavigate()
   const { isDark } = useTheme()
-  const data = listClients()
+
+  // ✅ Fetch clients from backend
+  useEffect(() => {
+    const fetchClients = async () => {
+      try {
+        setLoading(true)
+        const token = localStorage.getItem('token')
+        const res = await fetch(`${import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000'}/api/clients`, {
+          headers: { Authorization: `Bearer ${token}` },
+        })
+
+        if (!res.ok) {
+          if (res.status === 401) {
+            throw new Error('Unauthorized access. Please login again.')
+          }
+          throw new Error('Failed to fetch clients')
+        }
+
+        const json = await res.json()
+        setData(json)
+      } catch (err) {
+        setError(err.message)
+        console.error('Fetch clients failed:', err)
+      } finally {
+        setLoading(false)
+      }
+    }
+    fetchClients()
+  }, [])
 
   const filtered = useMemo(() => {
     const term = q.toLowerCase()
     return data.filter(c =>
-      [c.fullName, c.phone, c.email, c.regNumber].some(v => String(v).toLowerCase().includes(term))
+      [c.fullName, c.phone, c.email, c.regNumber].some(v => String(v || '').toLowerCase().includes(term))
     )
   }, [q, data])
+
+  const deleteClient = async (id) => {
+    if (!id || id === 'undefined' || isNaN(Number(id))) {
+      console.error('Invalid client ID for deletion:', id)
+      return
+    }
+
+    if (!window.confirm('Are you sure you want to delete this client?')) return
+
+    try {
+      const token = localStorage.getItem('token')
+      const res = await fetch(`${import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000'}/api/clients/${id}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      })
+
+      if (!res.ok) {
+        throw new Error('Failed to delete client')
+      }
+
+      // Update the local state by removing the deleted client
+      setData(prev => prev.filter(c => c.id !== id))
+    } catch (err) {
+      console.error('Delete client failed:', err)
+      setError(err.message)
+    }
+  }
 
   const columns = [
     {
@@ -28,10 +85,14 @@ export default function ClientsList() {
       label: 'Vehicle',
       render: (value, row) => (
         <div className="flex items-center space-x-4">
-          <div
-            className="cursor-pointer group"
-            onClick={() => setSelectedClient(row)}
-          >
+          <div className="cursor-pointer group" onClick={() => {
+            // Validate ID before setting selected client
+            if (row.id && row.id !== 'undefined' && !isNaN(Number(row.id))) {
+              setSelectedClient(row)
+            } else {
+              console.error('Invalid client ID:', row.id)
+            }
+          }}>
             <div className="relative overflow-hidden rounded-2xl shadow-lg transition-all duration-300 group-hover:shadow-2xl group-hover:scale-105">
               <img
                 src={value || `https://via.placeholder.com/120x80?text=${encodeURIComponent(row.vehicleMake)}+${encodeURIComponent(row.vehicleModel)}`}
@@ -59,8 +120,8 @@ export default function ClientsList() {
         </div>
       )
     },
-    { 
-      key: 'fullName', 
+    {
+      key: 'fullName',
       label: 'Full Name',
       render: (value) => (
         <div className="flex items-center gap-2">
@@ -71,8 +132,8 @@ export default function ClientsList() {
         </div>
       )
     },
-    { 
-      key: 'phone', 
+    {
+      key: 'phone',
       label: 'Phone',
       render: (value) => (
         <div className={`flex items-center gap-2 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
@@ -81,8 +142,8 @@ export default function ClientsList() {
         </div>
       )
     },
-    { 
-      key: 'email', 
+    {
+      key: 'email',
       label: 'Email',
       render: (value) => (
         <div className={`flex items-center gap-2 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
@@ -91,8 +152,8 @@ export default function ClientsList() {
         </div>
       )
     },
-    { 
-      key: 'vehicleMake', 
+    {
+      key: 'vehicleMake',
       label: 'Make',
       render: (value) => (
         <span className={`px-3 py-1 rounded-full text-sm font-medium ${isDark ? 'bg-blue-900/30 text-blue-300 border border-blue-700' : 'bg-blue-50 text-blue-700 border border-blue-200'}`}>
@@ -100,8 +161,8 @@ export default function ClientsList() {
         </span>
       )
     },
-    { 
-      key: 'regNumber', 
+    {
+      key: 'regNumber',
       label: 'Reg No.',
       render: (value) => (
         <span className={`font-mono font-semibold px-3 py-1.5 rounded-lg ${isDark ? 'bg-gray-700 text-yellow-400 border border-gray-600' : 'bg-gray-100 text-gray-900 border border-gray-300'}`}>
@@ -113,8 +174,35 @@ export default function ClientsList() {
 
   const closeModal = () => setSelectedClient(null);
 
+  // Handle authentication errors
+  useEffect(() => {
+    if (error && error.includes('Unauthorized')) {
+      // Redirect to login page after a short delay
+      const timer = setTimeout(() => {
+        window.location.href = '/login';
+      }, 2000);
+
+      return () => clearTimeout(timer);
+    }
+  }, [error]);
+
   return (
     <div className="space-y-6 lg:ml-16">
+      {/* Error Display */}
+      {error && (
+        <div className={`${isDark ? 'bg-red-900/30 border-red-700' : 'bg-red-50 border-red-200'} rounded-2xl p-6 shadow-lg border`}>
+          <div className="flex items-center gap-3">
+            <FiX className="text-red-500" size={24} />
+            <p className={`font-semibold ${isDark ? 'text-red-400' : 'text-red-700'}`}>Error: {error}</p>
+          </div>
+          {error.includes('Unauthorized') && (
+            <div className="mt-4">
+              <p className={`${isDark ? 'text-red-300' : 'text-red-600'} mb-2`}>Redirecting to login page...</p>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Header Section */}
       <div className={`${isDark ? 'bg-gradient-to-r from-gray-800 to-gray-700' : 'bg-gradient-to-r from-blue-600 to-purple-600'} rounded-2xl p-8 shadow-xl`}>
         <h1 className="text-3xl font-bold text-white mb-2">Client Management</h1>
@@ -125,10 +213,10 @@ export default function ClientsList() {
       <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} rounded-2xl p-6 shadow-lg border`}>
         <div className="flex flex-col md:flex-row items-center justify-between gap-4">
           <div className="w-full md:w-96">
-            <SearchBar 
-              value={q} 
-              onChange={setQ} 
-              placeholder="Search by name, phone, email, reg no..." 
+            <SearchBar
+              value={q}
+              onChange={setQ}
+              placeholder="Search by name, phone, email, reg no..."
             />
           </div>
           <Link
@@ -154,7 +242,7 @@ export default function ClientsList() {
             </div>
           </div>
         </div>
-        
+
         <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} rounded-2xl p-6 shadow-lg border`}>
           <div className="flex items-center justify-between">
             <div>
@@ -180,58 +268,84 @@ export default function ClientsList() {
         </div>
       </div>
 
+      {/* Loading State */}
+      {loading && (
+        <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} rounded-2xl p-16 text-center shadow-lg border`}>
+          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500 mx-auto"></div>
+          <p className={`mt-4 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Loading clients...</p>
+        </div>
+      )}
+
       {/* Table Section */}
-      <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} rounded-2xl shadow-lg border overflow-hidden`}>
-        <Table
-          columns={columns}
-          data={filtered}
-          actions={(row) => (
-            <div className="flex gap-2">
-              <button
-                onClick={() => navigate(`/clients/${row.id}`)}
-                aria-label="View Client"
-                className={`p-2 rounded-lg transition-all duration-200 ${
-                  isDark 
-                    ? 'hover:bg-blue-900/30 text-blue-400 hover:text-blue-300' 
-                    : 'hover:bg-blue-50 text-blue-600 hover:text-blue-700'
-                }`}
-                title="View"
-              >
-                <FiEye size={18} />
-              </button>
-              <button
-                onClick={() => navigate(`/clients/${row.id}/edit`)}
-                aria-label="Edit Client"
-                className={`p-2 rounded-lg transition-all duration-200 ${
-                  isDark 
-                    ? 'hover:bg-purple-900/30 text-purple-400 hover:text-purple-300' 
-                    : 'hover:bg-purple-50 text-purple-600 hover:text-purple-700'
-                }`}
-                title="Edit"
-              >
-                <FiEdit size={18} />
-              </button>
-              <button
-                onClick={() => {
-                  if (window.confirm('Are you sure you want to delete this client?')) {
-                    deleteClient(row.id)
-                    navigate(0)
-                  }
-                }}
-                aria-label="Delete Client"
-                className={`p-2 rounded-lg transition-all duration-200 ${
-                  isDark 
-                    ? 'hover:bg-red-900/30 text-red-400 hover:text-red-300' 
-                    : 'hover:bg-red-50 text-red-600 hover:text-red-700'
-                }`}
-                title="Delete"
-              >
-                <FiTrash2 size={18} />
-              </button>
-            </div>
-          )}
-        />
-      </div>
+      {!loading && (
+        <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} rounded-2xl shadow-lg border overflow-hidden`}>
+          <Table
+            columns={columns}
+            data={filtered}
+            actions={(row) => (
+              <div className="flex gap-2">
+                <button
+                  onClick={() => {
+                    // Validate ID before navigation
+                    if (row.id && row.id !== 'undefined' && !isNaN(Number(row.id))) {
+                      navigate(`/clients/${row.id}`)
+                    } else {
+                      console.error('Invalid client ID for navigation:', row.id)
+                      setError('Invalid client ID')
+                    }
+                  }}
+                  aria-label="View Client"
+                  className={`p-2 rounded-lg transition-all duration-200 ${isDark
+                      ? 'hover:bg-blue-900/30 text-blue-400 hover:text-blue-300'
+                      : 'hover:bg-blue-50 text-blue-600 hover:text-blue-700'
+                    }`}
+                  title="View"
+                >
+                  <FiEye size={18} />
+                </button>
+                <button
+                  onClick={() => {
+                    // Validate ID before navigation
+                    if (row.id && row.id !== 'undefined' && !isNaN(Number(row.id))) {
+                      navigate(`/clients/${row.id}/edit`)
+                    } else {
+                      console.error('Invalid client ID for navigation:', row.id)
+                      setError('Invalid client ID')
+                    }
+                  }}
+                  aria-label="Edit Client"
+                  className={`p-2 rounded-lg transition-all duration-200 ${isDark
+                      ? 'hover:bg-purple-900/30 text-purple-400 hover:text-purple-300'
+                      : 'hover:bg-purple-50 text-purple-600 hover:text-purple-700'
+                    }`}
+                  title="Edit"
+                >
+                  <FiEdit size={18} />
+                </button>
+                <button
+                  onClick={() => {
+                    // Validate ID before deletion
+                    if (row.id && row.id !== 'undefined' && !isNaN(Number(row.id))) {
+                      deleteClient(row.id)
+                    } else {
+                      console.error('Invalid client ID for deletion:', row.id)
+                      setError('Invalid client ID')
+                    }
+                  }}
+                  aria-label="Delete Client"
+                  className={`p-2 rounded-lg transition-all duration-200 ${isDark
+                      ? 'hover:bg-red-900/30 text-red-400 hover:text-red-300'
+                      : 'hover:bg-red-50 text-red-600 hover:text-red-700'
+                    }`}
+                  title="Delete"
+                >
+                  <FiTrash2 size={18} />
+                </button>
+              </div>
+            )}
+          />
+        </div>
+      )}
 
       {/* Enhanced Modal */}
       {selectedClient && (
@@ -265,7 +379,7 @@ export default function ClientsList() {
                   <div className="relative h-80 overflow-hidden rounded-2xl shadow-inner">
                     {/* Sky Gradient */}
                     <div className={`absolute inset-0 ${isDark ? 'bg-gradient-to-b from-gray-900 via-gray-800 to-gray-700' : 'bg-gradient-to-b from-blue-400 via-blue-300 to-blue-200'}`}></div>
-                    
+
                     {/* Road */}
                     <div className="absolute bottom-0 left-0 right-0 h-32 bg-gradient-to-b from-gray-600 to-gray-800 shadow-2xl"></div>
 
@@ -390,8 +504,14 @@ export default function ClientsList() {
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                     <button
                       onClick={() => {
-                        navigate(`/clients/${selectedClient.id}`);
-                        closeModal();
+                        // Validate ID before navigation
+                        if (selectedClient.id && selectedClient.id !== 'undefined' && !isNaN(Number(selectedClient.id))) {
+                          navigate(`/clients/${selectedClient.id}`);
+                          closeModal();
+                        } else {
+                          console.error('Invalid client ID for navigation:', selectedClient.id)
+                          setError('Invalid client ID')
+                        }
                       }}
                       className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white py-3 px-4 rounded-xl flex items-center justify-center gap-2 transition-all duration-200 shadow-lg hover:shadow-xl font-semibold"
                     >
@@ -400,8 +520,14 @@ export default function ClientsList() {
                     </button>
                     <button
                       onClick={() => {
-                        navigate(`/clients/${selectedClient.id}/edit`);
-                        closeModal();
+                        // Validate ID before navigation
+                        if (selectedClient.id && selectedClient.id !== 'undefined' && !isNaN(Number(selectedClient.id))) {
+                          navigate(`/clients/${selectedClient.id}/edit`);
+                          closeModal();
+                        } else {
+                          console.error('Invalid client ID for navigation:', selectedClient.id)
+                          setError('Invalid client ID')
+                        }
                       }}
                       className={`${isDark ? 'bg-purple-600 hover:bg-purple-700 border-purple-500' : 'bg-white hover:bg-gray-50 border-purple-600 text-purple-600'} py-3 px-4 rounded-xl flex items-center justify-center gap-2 transition-all duration-200 shadow-lg hover:shadow-xl font-semibold border-2`}
                     >
@@ -410,10 +536,15 @@ export default function ClientsList() {
                     </button>
                     <button
                       onClick={() => {
-                        if (window.confirm('Are you sure you want to delete this client?')) {
-                          deleteClient(selectedClient.id);
-                          closeModal();
-                          navigate(0);
+                        // Validate ID before deletion
+                        if (selectedClient.id && selectedClient.id !== 'undefined' && !isNaN(Number(selectedClient.id))) {
+                          if (window.confirm('Are you sure you want to delete this client?')) {
+                            deleteClient(selectedClient.id);
+                            closeModal();
+                          }
+                        } else {
+                          console.error('Invalid client ID for deletion:', selectedClient.id)
+                          setError('Invalid client ID')
                         }
                       }}
                       className={`${isDark ? 'bg-red-600 hover:bg-red-700 border-red-500' : 'bg-white hover:bg-red-50 border-red-600 text-red-600'} py-3 px-4 rounded-xl flex items-center justify-center gap-2 transition-all duration-200 shadow-lg hover:shadow-xl font-semibold border-2`}

@@ -1,741 +1,665 @@
-// client/src/pages/reports/Reports.jsx
-import React, { useState, useEffect } from 'react';
-import { listServices, listBilling, listClients } from '../../lib/storage.js';
+import React, { useState, useEffect, useMemo } from "react";
 import {
   FiBarChart2,
-  FiTrendingUp,
-  FiTrendingDown,
   FiDollarSign,
   FiCheckCircle,
   FiClock,
   FiAlertCircle,
-  FiCalendar,
-  FiFileText,
   FiPieChart,
-  FiActivity,
-  FiAward,
-  FiFilter,
-  FiRefreshCw,
   FiDownload,
-  FiPrinter
-} from 'react-icons/fi';
-import { useTheme } from '../../contexts/ThemeContext';
+  FiPrinter,
+  FiRefreshCw,
+} from "react-icons/fi";
+import { useTheme } from "../../contexts/ThemeContext";
+import {
+  ResponsiveContainer,
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  Tooltip,
+  CartesianGrid,
+  PieChart,
+  Pie,
+  Cell,
+  BarChart,
+  Bar,
+  Legend,
+} from "recharts";
 
 export default function Reports() {
-  const [services, setServices] = useState([]);
-  const [billing, setBilling] = useState([]);
-  const [clients, setClients] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [reportView, setReportView] = useState('monthly');
-  const [revenueStartDate, setRevenueStartDate] = useState('');
-  const [revenueEndDate, setRevenueEndDate] = useState('');
   const { isDark } = useTheme();
 
+  const [mode, setMode] = useState("analytics");
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  const [revenueSummary, setRevenueSummary] = useState(null);
+  const [topClients, setTopClients] = useState([]);
+  const [serviceStats, setServiceStats] = useState([]);
+  const [invoiceStatusSummary, setInvoiceStatusSummary] = useState([]);
+  const [invoices, setInvoices] = useState([]);
+  const [clients, setClients] = useState([]);
+
+  const [selectedClientId, setSelectedClientId] = useState("");
+  const [selectedClientName, setSelectedClientName] = useState("");
+
+  const [detailModalOpen, setDetailModalOpen] = useState(false);
+  const [modalContent, setModalContent] = useState({ type: null, payload: null });
+
   useEffect(() => {
-    const loadData = () => {
-      setServices(listServices());
-      setBilling(listBilling());
-      setClients(listClients());
-      setLoading(false);
+    const fetchAll = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+        const token = localStorage.getItem("token");
+        const base = import.meta.env.VITE_API_BASE_URL || "http://localhost:5000";
+        const headers = token ? { Authorization: `Bearer ${token}` } : {};
+
+        const [
+          revenueRes,
+          topClientsRes,
+          servicesRes,
+          invoiceStatusRes,
+          invoicesRes,
+          clientsRes,
+        ] = await Promise.all([
+          fetch(`${base}/api/reports/revenue`, { headers }),
+          fetch(`${base}/api/reports/top-clients`, { headers }),
+          fetch(`${base}/api/reports/services`, { headers }),
+          fetch(`${base}/api/reports/invoices`, { headers }),
+          fetch(`${base}/api/invoices`, { headers }),
+          fetch(`${base}/api/clients`, { headers }),
+        ]);
+
+        if (
+          !revenueRes.ok ||
+          !topClientsRes.ok ||
+          !servicesRes.ok ||
+          !invoiceStatusRes.ok ||
+          !invoicesRes.ok ||
+          !clientsRes.ok
+        ) {
+          throw new Error("Failed to fetch one or more report endpoints");
+        }
+
+        const [
+          revenueData,
+          topClientsData,
+          servicesData,
+          invoiceStatusData,
+          invoicesData,
+          clientsData,
+        ] = await Promise.all([
+          revenueRes.json(),
+          topClientsRes.json(),
+          servicesRes.json(),
+          invoiceStatusRes.json(),
+          invoicesRes.json(),
+          clientsRes.json(),
+        ]);
+
+        setRevenueSummary(revenueData);
+        setTopClients(topClientsData);
+        setServiceStats(servicesData);
+        setInvoiceStatusSummary(invoiceStatusData);
+        setInvoices(invoicesData);
+        setClients(clientsData || []);
+      } catch (err) {
+        console.error("Error loading reports:", err);
+        setError("Unable to load reports — check backend or authentication.");
+      } finally {
+        setLoading(false);
+      }
     };
-    loadData();
+
+    fetchAll();
   }, []);
+
+  const refreshClients = async () => {
+    try {
+      const token = localStorage.getItem("token");
+      const base = import.meta.env.VITE_API_BASE_URL || "http://localhost:5000";
+      const res = await fetch(`${base}/api/clients`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setClients(data);
+      }
+    } catch (err) {
+      console.error("Error refreshing clients:", err);
+    }
+  };
+
+  useEffect(() => {
+    if (!selectedClientId) {
+      setSelectedClientName("");
+      return;
+    }
+    const c = clients.find((x) => Number(x.id) === Number(selectedClientId));
+    setSelectedClientName(c ? c.fullName : "");
+  }, [selectedClientId, clients]);
+
+  useEffect(() => {
+    if (!selectedClientName) {
+      setSelectedClientId("");
+      return;
+    }
+    const c = clients.find((x) => x.fullName === selectedClientName);
+    setSelectedClientId(c ? String(c.id) : "");
+  }, [selectedClientName, clients]);
+
+  // ✅ Revenue chart uses issuedAt date now
+  const revenueOverTime = useMemo(() => {
+    const map = {};
+    invoices.forEach((inv) => {
+      if (!inv.issuedAt || typeof inv.grandTotal !== "number") return;
+      const d = new Date(inv.issuedAt);
+      if (isNaN(d)) return;
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+      map[key] = (map[key] || 0) + Number(inv.grandTotal || 0);
+    });
+    return Object.keys(map)
+      .sort()
+      .map((k) => ({ month: k, revenue: Number(map[k].toFixed(2)) }));
+  }, [invoices]);
+
+  const topServiceData = useMemo(
+    () => serviceStats.map((s) => ({ name: s.type, count: s._count?.type || 0 })),
+    [serviceStats]
+  );
+
+  const invoiceStatusData = useMemo(
+    () => invoiceStatusSummary.map((s) => ({ name: s.status, value: s._count?.status || 0 })),
+    [invoiceStatusSummary]
+  );
+
+  const filteredInvoices = useMemo(() => {
+    if (!selectedClientId) return invoices;
+    return invoices.filter((inv) => String(inv.clientId) === String(selectedClientId));
+  }, [invoices, selectedClientId]);
+
+  const COLORS = ["#6366F1", "#06B6D4", "#10B981", "#F59E0B", "#EF4444", "#8B5CF6"];
+
+  const openDetailModal = (type, payload = null) => {
+    setModalContent({ type, payload });
+    setDetailModalOpen(true);
+  };
+
+  const closeModal = () => {
+    setDetailModalOpen(false);
+    setModalContent({ type: null, payload: null });
+  };
+
+  // ✅ Modal content
+  const ModalBody = ({ content, isDark }) => {
+    const [invoiceDetail, setInvoiceDetail] = useState(null);
+    const [loadingDetail, setLoadingDetail] = useState(false);
+
+    useEffect(() => {
+      const fetchDetails = async () => {
+        if (content.type !== "invoices" || !content.payload?.id) return;
+        try {
+          setLoadingDetail(true);
+          const token = localStorage.getItem("token");
+          const base = import.meta.env.VITE_API_BASE_URL || "http://localhost:5000";
+          const res = await fetch(`${base}/api/reports/invoice/${content.payload.id}`, {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          const data = await res.json();
+          setInvoiceDetail(data);
+        } catch (err) {
+          console.error("Error loading invoice detail:", err);
+          setInvoiceDetail(null);
+        } finally {
+          setLoadingDetail(false);
+        }
+      };
+      fetchDetails();
+    }, [content]);
+
+    if (content.type === "invoices") {
+      if (loadingDetail)
+        return <div className="text-center py-8 text-gray-400">Loading invoice details...</div>;
+      if (!invoiceDetail)
+        return <div className="text-center py-8 text-gray-400">No details found.</div>;
+
+      const { client, services } = invoiceDetail;
+
+      return (
+        <div className="space-y-6 overflow-y-auto max-h-[70vh]">
+          <div className="border-b pb-4">
+            <h2 className="text-2xl font-bold mb-1">Invoice #{invoiceDetail.invoiceNumber}</h2>
+            <p className="text-sm text-gray-400">
+              Issued: {new Date(invoiceDetail.issuedAt).toLocaleDateString()} | Due:{" "}
+              {invoiceDetail.dueDate
+                ? new Date(invoiceDetail.dueDate).toLocaleDateString()
+                : "N/A"}
+            </p>
+            <p
+              className={`font-semibold ${invoiceDetail.status === "Paid"
+                  ? "text-green-500"
+                  : invoiceDetail.status === "Pending"
+                    ? "text-yellow-500"
+                    : "text-red-500"
+                }`}
+            >
+              Status: {invoiceDetail.status}
+            </p>
+          </div>
+
+          <div>
+            <h3 className="font-semibold text-lg mb-2">Client Information</h3>
+            <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm">
+              <div><b>Name:</b> {client.fullName}</div>
+              <div><b>Phone:</b> {client.phone}</div>
+              <div><b>Email:</b> {client.email}</div>
+              <div><b>Address:</b> {client.address}</div>
+            </div>
+          </div>
+
+          <div>
+            <h3 className="font-semibold text-lg mb-2">Vehicle Information</h3>
+            <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm">
+              <div><b>Make:</b> {client.vehicleMake}</div>
+              <div><b>Model:</b> {client.vehicleModel}</div>
+              <div><b>Year:</b> {client.vehicleYear}</div>
+              <div><b>Reg No:</b> {client.regNumber}</div>
+              <div><b>VIN:</b> {client.vin}</div>
+            </div>
+          </div>
+
+          <div>
+            <h3 className="font-semibold text-lg mb-3">Service Details</h3>
+            {services.length === 0 ? (
+              <p className="text-sm text-gray-500">No services linked to this invoice.</p>
+            ) : (
+              services.map((srv) => (
+                <div
+                  key={srv.id}
+                  className={`p-4 rounded-lg border mb-2 ${isDark ? "border-gray-700 bg-gray-800" : "border-gray-200 bg-gray-50"
+                    }`}
+                >
+                  <div className="flex justify-between items-center">
+                    <div className="font-semibold">{srv.type}</div>
+                    <div className="font-bold text-green-500">
+                      ${Number(srv.cost || 0).toFixed(2)}
+                    </div>
+                  </div>
+                  <p className="text-sm text-gray-400 mt-1">
+                    {srv.description || "No description"}
+                  </p>
+                  <p className="text-xs text-gray-500 mt-2">
+                    Date: {srv.date ? new Date(srv.date).toLocaleDateString() : "N/A"} | Status:{" "}
+                    <span
+                      className={
+                        srv.status === "Completed"
+                          ? "text-green-400"
+                          : srv.status === "Pending"
+                            ? "text-yellow-400"
+                            : "text-gray-400"
+                      }
+                    >
+                      {srv.status}
+                    </span>
+                  </p>
+                </div>
+              ))
+            )}
+          </div>
+
+          <div className="border-t pt-4 text-right">
+            <div className="text-sm text-gray-400">
+              Subtotal: ${Number(invoiceDetail.totalAmount || 0).toFixed(2)} <br />
+              Tax: ${Number(invoiceDetail.tax || 0).toFixed(2)} | Discount: $
+              {Number(invoiceDetail.discount || 0).toFixed(2)}
+            </div>
+            <h3 className="text-xl font-bold mt-2">
+              Grand Total: ${Number(invoiceDetail.grandTotal || 0).toFixed(2)}
+            </h3>
+          </div>
+        </div>
+      );
+    }
+
+    return <div className="text-gray-500 text-center py-8">Select a report to view details</div>;
+  };
 
   if (loading) {
     return (
-      <div className={`lg:ml-16 min-h-screen flex items-center justify-center ${isDark ? 'bg-gray-900' : 'bg-gray-50'}`}>
+      <div
+        className={`lg:ml-16 min-h-screen flex items-center justify-center ${isDark ? "bg-gray-900" : "bg-gray-50"
+          }`}
+      >
         <div className="text-center">
           <div className="animate-spin rounded-full h-16 w-16 border-t-4 border-b-4 border-blue-600 mx-auto mb-4"></div>
-          <p className={`text-lg ${isDark ? 'text-white' : 'text-gray-900'}`}>Loading reports...</p>
+          <p className={`text-lg ${isDark ? "text-white" : "text-gray-900"}`}>
+            Loading reports...
+          </p>
         </div>
       </div>
     );
   }
 
-  // Core calculations
-  const paidServices = services.filter(s => s.status === 'Paid');
-  const unpaidServices = services.filter(s => s.status !== 'Paid');
-  const totalServices = services.length;
-  const paidPercentage = totalServices > 0 ? Math.round((paidServices.length / totalServices) * 100) : 0;
-  const unpaidPercentage = totalServices > 0 ? Math.round((unpaidServices.length / totalServices) * 100) : 0;
-  
-  // Calculate revenue
-  const calculateInvoiceTotal = (invoice) => {
-    const partsCost = Number(invoice.partsCost || 0);
-    const laborCost = Number(invoice.laborCost || 0);
-    const taxes = Number(invoice.taxes || 0);
-    const discounts = Number(invoice.discounts || 0);
-    return partsCost + laborCost + taxes - discounts;
-  };
-  
-  const revenue = billing.reduce((total, invoice) => total + calculateInvoiceTotal(invoice), 0);
-  const avgServiceValue = billing.length > 0 ? revenue / billing.length : 0;
-  
-  // Date utilities
-  const monthKey = (d) => {
-    const dt = new Date(d);
-    return isNaN(dt) ? 'Unknown' : dt.getFullYear() + '-' + String(dt.getMonth() + 1).padStart(2, '0');
-  };
-
-  const getMonthName = (monthKey) => {
-    if (monthKey === 'Unknown') return 'Unknown';
-    const [year, month] = monthKey.split('-');
-    return new Date(year, month - 1).toLocaleString('default', { month: 'long', year: 'numeric' });
-  };
-
-  const dateKey = (d) => {
-    const dt = new Date(d);
-    return isNaN(dt) ? 'Unknown' : dt.getFullYear() + '-' + String(dt.getMonth() + 1).padStart(2, '0') + '-' + String(dt.getDate()).padStart(2, '0');
-  };
-
-  const getFormattedDate = (dateKey) => {
-    if (dateKey === 'Unknown') return 'Unknown';
-    const [year, month, day] = dateKey.split('-');
-    return new Date(year, month - 1, day).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
-  };
-
-  // Revenue aggregations
-  const revenueByMonth = billing.reduce((acc, b) => {
-    const k = monthKey(b.date);
-    acc[k] = (acc[k] || 0) + calculateInvoiceTotal(b);
-    return acc;
-  }, {});
-
-  const revenueByDate = billing.reduce((acc, b) => {
-    const k = dateKey(b.date);
-    acc[k] = (acc[k] || 0) + calculateInvoiceTotal(b);
-    return acc;
-  }, {});
-
-  // Status distribution
-  const statusCounts = services.reduce((acc, service) => {
-    acc[service.status] = (acc[service.status] || 0) + 1;
-    return acc;
-  }, {});
-
-  // Top revenue periods
-  const topMonths = Object.entries(revenueByMonth)
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 5)
-    .map(([month, revenue]) => ({ month, monthName: getMonthName(month), revenue }));
-
-  const topDates = Object.entries(revenueByDate)
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 5)
-    .map(([date, revenue]) => ({ date, formattedDate: getFormattedDate(date), revenue }));
-
-  // Recent invoices
-  const recentInvoices = [...billing]
-    .sort((a, b) => new Date(b.date) - new Date(a.date))
-    .slice(0, 5)
-    .map(invoice => {
-      const customer = clients.find(c => c.id === Number(invoice.customerId));
-      return {
-        ...invoice,
-        total: calculateInvoiceTotal(invoice),
-        formattedDate: getFormattedDate(dateKey(invoice.date)),
-        customerName: customer?.fullName || `Customer #${invoice.customerId}`
-      };
-    });
-
-  // Year comparison data
-  const currentYear = new Date().getFullYear();
-  const previousYear = currentYear - 1;
-  const months = ['01', '02', '03', '04', '05', '06', '07', '08', '09', '10', '11', '12'];
-  const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-
-  // Filtered revenue data
-  const filteredRevenueBilling = billing.filter(invoice => {
-    if (!revenueStartDate && !revenueEndDate) return true;
-    const invoiceDate = new Date(invoice.date);
-    const start = revenueStartDate ? new Date(revenueStartDate) : new Date('1900-01-01');
-    const end = revenueEndDate ? new Date(revenueEndDate) : new Date('2100-12-31');
-    return invoiceDate >= start && invoiceDate <= end;
-  });
-
-  const filteredRevenueByMonth = filteredRevenueBilling.reduce((acc, b) => {
-    const k = monthKey(b.date);
-    acc[k] = (acc[k] || 0) + calculateInvoiceTotal(b);
-    return acc;
-  }, {});
-
-  const filteredRevenueByDate = filteredRevenueBilling.reduce((acc, b) => {
-    const k = dateKey(b.date);
-    acc[k] = (acc[k] || 0) + calculateInvoiceTotal(b);
-    return acc;
-  }, {});
-
-  // Report data
-  const getReportData = () => {
-    if (reportView === 'monthly') {
-      return monthNames.map((month, index) => {
-        const prevYearKey = `${previousYear}-${months[index]}`;
-        const currYearKey = `${currentYear}-${months[index]}`;
-        
-        const prevYearRevenue = filteredRevenueByMonth[prevYearKey] || 0;
-        const currYearRevenue = filteredRevenueByMonth[currYearKey] || 0;
-        const difference = currYearRevenue - prevYearRevenue;
-        const percentageChange = prevYearRevenue > 0 ? Math.round((difference / prevYearRevenue) * 100) : 0;
-        
-        return {
-          period: month,
-          currentYear: currYearRevenue,
-          previousYear: prevYearRevenue,
-          difference,
-          percentageChange,
-          total: currYearRevenue
-        };
-      });
-    } else {
-      return Object.entries(filteredRevenueByDate)
-        .sort((a, b) => a[0].localeCompare(b[0]))
-        .map(([date, revenue]) => ({ period: getFormattedDate(date), total: revenue }));
-    }
-  };
-
-  const reportData = getReportData();
-
-  // Find max revenue for chart scaling
-  const maxRevenue = Math.max(...reportData.map(d => d.total || 0), 1);
-
-  const resetRevenueDateFilters = () => {
-    setRevenueStartDate('');
-    setRevenueEndDate('');
-  };
-
-  // Status colors
-  const statusConfig = {
-    'Paid': { color: 'green', icon: FiCheckCircle, gradient: 'from-green-500 to-emerald-500' },
-    'Pending': { color: 'yellow', icon: FiClock, gradient: 'from-yellow-500 to-orange-500' },
-    'In Progress': { color: 'blue', icon: FiActivity, gradient: 'from-blue-500 to-indigo-500' },
-    'Unpaid': { color: 'red', icon: FiAlertCircle, gradient: 'from-red-500 to-pink-500' }
-  };
-
   return (
-    <div className="space-y-6 lg:ml-16 p-6">
-      {/* Header */}
-      <div className={`relative overflow-hidden ${isDark ? 'bg-gradient-to-br from-gray-800 via-gray-700 to-gray-800' : 'bg-gradient-to-br from-indigo-600 via-purple-600 to-pink-600'} rounded-3xl p-8 shadow-2xl`}>
-        <div className="relative z-10">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <div className="w-16 h-16 bg-white/20 backdrop-blur-md rounded-2xl flex items-center justify-center">
-                <FiBarChart2 className="text-white" size={32} />
-              </div>
-              <div>
-                <h1 className="text-4xl font-black text-white mb-1">Analytics & Reports</h1>
-                <p className="text-white/90 text-lg">Comprehensive business insights and performance metrics</p>
-              </div>
-            </div>
-            <div className="hidden md:flex gap-3">
-              <button
-                onClick={() => window.print()}
-                className="flex items-center gap-2 bg-white/20 hover:bg-white/30 text-white px-5 py-3 rounded-xl font-semibold transition-all border border-white/30"
-              >
-                <FiPrinter size={18} />
-                Print
-              </button>
-              <button
-                onClick={() => alert('Export feature coming soon!')}
-                className="flex items-center gap-2 bg-white/20 hover:bg-white/30 text-white px-5 py-3 rounded-xl font-semibold transition-all border border-white/30"
-              >
-                <FiDownload size={18} />
-                Export
-              </button>
-            </div>
-          </div>
-        </div>
-        <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full -mr-32 -mt-32" />
-        <div className="absolute bottom-0 left-0 w-48 h-48 bg-white/5 rounded-full -ml-24 -mb-24" />
-      </div>
+    <div className="lg:ml-16 p-6 space-y-6">
+      {/* Buttons */}
+      <div className="flex gap-4 items-center">
+        <button
+          onClick={() => setMode("analytics")}
+          className={`px-6 py-3 rounded-2xl font-semibold ${mode === "analytics"
+              ? "shadow-xl bg-gradient-to-r from-indigo-600 to-purple-600 text-white"
+              : isDark
+                ? "bg-gray-800 text-white border border-gray-700"
+                : "bg-white text-gray-800 border border-gray-200"
+            }`}
+        >
+          Analytics
+        </button>
+        <button
+          onClick={() => setMode("reports")}
+          className={`px-6 py-3 rounded-2xl font-semibold ${mode === "reports"
+              ? "shadow-xl bg-gradient-to-r from-indigo-600 to-purple-600 text-white"
+              : isDark
+                ? "bg-gray-800 text-white border border-gray-700"
+                : "bg-white text-gray-800 border border-gray-200"
+            }`}
+        >
+          Reports
+        </button>
 
-      {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        {/* Total Services */}
-        <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} rounded-2xl p-6 shadow-lg border transition-all hover:shadow-2xl`}>
-          <div className="flex items-center justify-between mb-4">
-            <div className="w-14 h-14 bg-gradient-to-br from-blue-500 to-blue-600 rounded-2xl flex items-center justify-center shadow-lg">
-              <FiActivity className="text-white" size={24} />
-            </div>
-            <span className={`text-xs font-semibold px-3 py-1 rounded-full ${
-              isDark ? 'bg-blue-900/30 text-blue-400' : 'bg-blue-50 text-blue-700'
-            }`}>
-              Total
-            </span>
-          </div>
-          <div className={`text-4xl font-black mb-2 ${isDark ? 'text-white' : 'text-gray-900'}`}>
-            {totalServices}
-          </div>
-          <div className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'} mb-3`}>
-            Total Services
-          </div>
-          <div className={`h-2 rounded-full overflow-hidden ${isDark ? 'bg-gray-700' : 'bg-gray-200'}`}>
-            <div 
-              className="h-full bg-gradient-to-r from-green-500 to-emerald-500 rounded-full transition-all duration-500"
-              style={{ width: `${paidPercentage}%` }}
-            />
-          </div>
-          <div className={`text-xs mt-2 ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>
-            {paidPercentage}% completed
-          </div>
-        </div>
-
-        {/* Paid Services */}
-        <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} rounded-2xl p-6 shadow-lg border transition-all hover:shadow-2xl`}>
-          <div className="flex items-center justify-between mb-4">
-            <div className="w-14 h-14 bg-gradient-to-br from-green-500 to-emerald-600 rounded-2xl flex items-center justify-center shadow-lg">
-              <FiCheckCircle className="text-white" size={24} />
-            </div>
-            <span className={`text-xs font-semibold px-3 py-1 rounded-full ${
-              isDark ? 'bg-green-900/30 text-green-400' : 'bg-green-50 text-green-700'
-            }`}>
-              Paid
-            </span>
-          </div>
-          <div className={`text-4xl font-black mb-2 ${isDark ? 'text-white' : 'text-gray-900'}`}>
-            {paidServices.length}
-          </div>
-          <div className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
-            Paid Services
-          </div>
-          <div className={`text-xs mt-3 font-semibold ${isDark ? 'text-green-400' : 'text-green-600'}`}>
-            {paidPercentage}% of total services
-          </div>
-        </div>
-
-        {/* Unpaid Services */}
-        <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} rounded-2xl p-6 shadow-lg border transition-all hover:shadow-2xl`}>
-          <div className="flex items-center justify-between mb-4">
-            <div className="w-14 h-14 bg-gradient-to-br from-orange-500 to-yellow-600 rounded-2xl flex items-center justify-center shadow-lg">
-              <FiClock className="text-white" size={24} />
-            </div>
-            <span className={`text-xs font-semibold px-3 py-1 rounded-full ${
-              isDark ? 'bg-orange-900/30 text-orange-400' : 'bg-orange-50 text-orange-700'
-            }`}>
-              Pending
-            </span>
-          </div>
-          <div className={`text-4xl font-black mb-2 ${isDark ? 'text-white' : 'text-gray-900'}`}>
-            {unpaidServices.length}
-          </div>
-          <div className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
-            Pending Services
-          </div>
-          <div className={`text-xs mt-3 font-semibold ${isDark ? 'text-orange-400' : 'text-orange-600'}`}>
-            {unpaidPercentage}% of total services
-          </div>
-        </div>
-
-        {/* Total Revenue */}
-        <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} rounded-2xl p-6 shadow-lg border transition-all hover:shadow-2xl`}>
-          <div className="flex items-center justify-between mb-4">
-            <div className="w-14 h-14 bg-gradient-to-br from-purple-500 to-pink-600 rounded-2xl flex items-center justify-center shadow-lg">
-              <FiDollarSign className="text-white" size={24} />
-            </div>
-            <span className={`text-xs font-semibold px-3 py-1 rounded-full ${
-              isDark ? 'bg-purple-900/30 text-purple-400' : 'bg-purple-50 text-purple-700'
-            }`}>
-              Revenue
-            </span>
-          </div>
-          <div className={`text-4xl font-black mb-2 bg-gradient-to-r ${
-            isDark ? 'from-purple-400 to-pink-400' : 'from-purple-600 to-pink-600'
-          } bg-clip-text text-transparent`}>
-            ${revenue.toFixed(2)}
-          </div>
-          <div className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
-            Total Revenue
-          </div>
-          <div className={`text-xs mt-3 ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>
-            Avg: ${avgServiceValue.toFixed(2)} per service
-          </div>
+        <div className="ml-auto flex items-center gap-3">
+          <button
+            onClick={() => window.print()}
+            className={`p-2 rounded-lg ${isDark
+                ? "bg-gray-800 text-white border border-gray-700"
+                : "bg-white text-gray-700 border border-gray-200"
+              }`}
+          >
+            <FiPrinter />
+          </button>
+          <button
+            onClick={() => alert("Export coming soon")}
+            className={`p-2 rounded-lg ${isDark
+                ? "bg-gray-800 text-white border border-gray-700"
+                : "bg-white text-gray-700 border border-gray-200"
+              }`}
+          >
+            <FiDownload />
+          </button>
         </div>
       </div>
 
-      {/* Revenue Report */}
-      <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} rounded-3xl shadow-xl border overflow-hidden`}>
-        <div className={`p-6 border-b ${isDark ? 'border-gray-700 bg-gradient-to-r from-gray-800 to-gray-700' : 'border-gray-200 bg-gradient-to-r from-blue-600 to-purple-600'}`}>
-          <div className="flex items-center justify-between flex-wrap gap-4">
-            <div className="flex items-center gap-3">
-              <div className="w-12 h-12 bg-white/20 backdrop-blur-sm rounded-xl flex items-center justify-center">
-                <FiTrendingUp className="text-white" size={24} />
-              </div>
-              <div>
-                <h2 className="text-2xl font-bold text-white">Revenue Report</h2>
-                <p className="text-sm text-white/80">Track your revenue over time</p>
-              </div>
-            </div>
-
-            <div className="flex flex-wrap gap-3">
-              <div className="flex gap-2">
-                <button
-                  onClick={() => setReportView('monthly')}
-                  className={`px-4 py-2 rounded-xl font-semibold transition-all ${
-                    reportView === 'monthly'
-                      ? 'bg-white text-purple-600 shadow-lg'
-                      : 'bg-white/20 text-white hover:bg-white/30'
-                  }`}
-                >
-                  Monthly
-                </button>
-                <button
-                  onClick={() => setReportView('daily')}
-                  className={`px-4 py-2 rounded-xl font-semibold transition-all ${
-                    reportView === 'daily'
-                      ? 'bg-white text-purple-600 shadow-lg'
-                      : 'bg-white/20 text-white hover:bg-white/30'
-                  }`}
-                >
-                  Daily
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div className="p-6">
-          {/* Date Filters */}
-          <div className={`p-4 rounded-2xl mb-6 ${isDark ? 'bg-gray-700/50' : 'bg-gray-50'}`}>
-            <div className="flex flex-wrap items-center gap-4">
-              <div className="flex items-center gap-2">
-                <FiFilter className={isDark ? 'text-gray-400' : 'text-gray-600'} size={20} />
-                <span className={`font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                  Date Range:
-                </span>
-              </div>
-              <input
-                type="date"
-                value={revenueStartDate}
-                onChange={(e) => setRevenueStartDate(e.target.value)}
-                className={`px-4 py-2 rounded-xl font-medium transition-all ${
-                  isDark
-                    ? 'bg-gray-600 border-gray-500 text-white'
-                    : 'bg-white border-gray-300 text-gray-900'
-                } border-2`}
-              />
-              <span className={isDark ? 'text-gray-400' : 'text-gray-600'}>to</span>
-              <input
-                type="date"
-                value={revenueEndDate}
-                onChange={(e) => setRevenueEndDate(e.target.value)}
-                className={`px-4 py-2 rounded-xl font-medium transition-all ${
-                  isDark
-                    ? 'bg-gray-600 border-gray-500 text-white'
-                    : 'bg-white border-gray-300 text-gray-900'
-                } border-2`}
-              />
-              <button
-                onClick={resetRevenueDateFilters}
-                className={`flex items-center gap-2 px-4 py-2 rounded-xl font-semibold transition-all ${
-                  isDark
-                    ? 'bg-gray-600 hover:bg-gray-500 text-white'
-                    : 'bg-white hover:bg-gray-50 text-gray-700 border-2 border-gray-300'
+      {/* Reports mode — invoices clickable */}
+      {mode === "reports" && (
+        <div className="space-y-6">
+          <div
+            className={`w-full rounded-3xl overflow-hidden ${isDark ? "bg-gray-800 border-gray-700" : "bg-white border-gray-200"
+              } shadow-lg border`}
+          >
+            <div
+              className={`p-5 border-b ${isDark
+                  ? "border-gray-700 bg-gradient-to-r from-gray-800 to-gray-700"
+                  : "border-gray-200 bg-gradient-to-r from-green-600 to-teal-600"
                 }`}
+            >
+              <h3 className="text-2xl font-bold text-white">Recent Invoices</h3>
+              <p className="text-sm text-white/80">
+                Click to view invoices (filtered by client if chosen)
+              </p>
+            </div>
+            <div className="p-6">
+              {filteredInvoices.length === 0 ? (
+                <div className="text-gray-500">No invoices</div>
+              ) : (
+                filteredInvoices.slice(0, 5).map((inv) => (
+                  <div
+                    key={inv.id}
+                    className="py-3 flex justify-between cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800 rounded-lg px-2 transition"
+                    onClick={() => openDetailModal("invoices", inv)} // ✅ FIXED
+                  >
+                    <div>
+                      <div className="font-semibold">Invoice #{inv.id}</div>
+                      <div className="text-xs text-gray-400">
+                        {inv.client?.fullName || `Client #${inv.clientId}`}
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <div className="font-bold">
+                        ${Number(inv.grandTotal || 0).toFixed(2)}
+                      </div>
+                      <div
+                        className={`text-xs mt-1 ${inv.status === "Paid"
+                            ? "text-green-500"
+                            : inv.status === "Pending"
+                              ? "text-yellow-500"
+                              : "text-red-500"
+                          }`}
+                      >
+                        {inv.status}
+                      </div>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {detailModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div
+            className={`max-w-3xl w-full rounded-2xl overflow-hidden ${isDark
+                ? "bg-gray-900 text-white border-gray-700"
+                : "bg-white text-gray-900 border-gray-200"
+              } border shadow-2xl`}
+          >
+            <div
+              className={`p-4 flex items-center justify-between border-b ${isDark ? "border-gray-800 bg-gray-800" : "border-gray-100 bg-gray-50"
+                }`}
+            >
+              <div>
+                <h3 className="text-xl font-bold">
+                  {modalContent.type === "invoices"
+                    ? "Invoice Details"
+                    : "Details"}
+                </h3>
+              </div>
+              <button
+                onClick={closeModal}
+                className={`px-4 py-2 rounded-lg ${isDark ? "bg-gray-800" : "bg-gray-100"
+                  }`}
               >
-                <FiRefreshCw size={16} />
-                Reset
+                Close
               </button>
             </div>
-          </div>
 
-          {/* Chart Visualization */}
-          {reportView === 'monthly' && reportData.some(d => d.total > 0) && (
-            <div className={`mb-6 p-4 rounded-2xl ${isDark ? 'bg-gray-700/30' : 'bg-gradient-to-br from-blue-50 to-purple-50'}`}>
-              <div className="flex items-end gap-2 h-64">
-                {reportData.map((data, index) => {
-                  const height = maxRevenue > 0 ? (data.total / maxRevenue) * 100 : 0;
-                  return (
-                    <div key={index} className="flex-1 flex flex-col items-center">
-                      <div className="w-full flex flex-col justify-end h-full">
-                        <div
-                          className={`w-full rounded-t-lg bg-gradient-to-t from-blue-600 to-purple-600 transition-all duration-500 hover:from-blue-700 hover:to-purple-700 cursor-pointer relative group`}
-                          style={{ height: `${height}%` }}
-                          title={`$${data.total.toFixed(2)}`}
-                        >
-                          <div className="absolute -top-8 left-1/2 transform -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity bg-gray-900 text-white text-xs px-2 py-1 rounded">
-                            ${data.total.toFixed(2)}
-                          </div>
-                        </div>
-                      </div>
-                      <div className={`text-xs mt-2 font-medium ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
-                        {data.period}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-
-          {/* Table */}
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className={isDark ? 'bg-gray-700' : 'bg-gray-100'}>
-                <tr>
-                  <th className={`text-left p-4 font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                    {reportView === 'monthly' ? 'Month' : 'Date'}
-                  </th>
-                  {reportView === 'monthly' && (
-                    <>
-                      <th className={`text-right p-4 font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                        {previousYear}
-                      </th>
-                      <th className={`text-right p-4 font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                        {currentYear}
-                      </th>
-                      <th className={`text-right p-4 font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                        Difference
-                      </th>
-                      <th className={`text-right p-4 font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                        Change
-                      </th>
-                    </>
-                  )}
-                  <th className={`text-right p-4 font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                    Revenue
-                  </th>
-                </tr>
-              </thead>
-              <tbody className={`divide-y ${isDark ? 'divide-gray-700' : 'divide-gray-200'}`}>
-                {reportData.map((data, index) => (
-                  <tr 
-                    key={index}
-                    className={`transition-colors ${isDark ? 'hover:bg-gray-700/30' : 'hover:bg-gray-50'}`}
-                  >
-                    <td className={`p-4 font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                      {data.period}
-                    </td>
-                    {reportView === 'monthly' && (
-                      <>
-                        <td className={`p-4 text-right ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-                          ${data.previousYear.toFixed(2)}
-                        </td>
-                        <td className={`p-4 text-right font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                          ${data.currentYear.toFixed(2)}
-                        </td>
-                        <td className={`p-4 text-right font-bold ${
-                          data.difference >= 0
-                            ? isDark ? 'text-green-400' : 'text-green-600'
-                            : isDark ? 'text-red-400' : 'text-red-600'
-                        }`}>
-                          <div className="flex items-center justify-end gap-1">
-                            {data.difference >= 0 ? <FiTrendingUp size={16} /> : <FiTrendingDown size={16} />}
-                            {data.difference >= 0 ? '+' : ''}${data.difference.toFixed(2)}
-                          </div>
-                        </td>
-                        <td className={`p-4 text-right font-bold ${
-                          data.percentageChange >= 0
-                            ? isDark ? 'text-green-400' : 'text-green-600'
-                            : isDark ? 'text-red-400' : 'text-red-600'
-                        }`}>
-                          {data.percentageChange >= 0 ? '+' : ''}{data.percentageChange}%
-                        </td>
-                      </>
-                    )}
-                    <td className={`p-4 text-right font-bold text-lg ${isDark ? 'text-blue-400' : 'text-blue-600'}`}>
-                      ${data.total.toFixed(2)}
-                    </td>
-                  </tr>
-                ))}
-                {reportData.length === 0 && (
-                  <tr>
-                    <td colSpan={reportView === 'monthly' ? 6 : 2} className={`p-8 text-center ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>
-                      No revenue data available for selected date range
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </div>
-
-      {/* Bottom Grid */}
-      <div className="grid lg:grid-cols-2 gap-6">
-        {/* Top Revenue Periods */}
-        <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} rounded-3xl shadow-xl border overflow-hidden`}>
-          <div className={`p-6 border-b ${isDark ? 'border-gray-700 bg-gradient-to-r from-gray-800 to-gray-700' : 'border-gray-200 bg-gradient-to-r from-green-600 to-teal-600'}`}>
-            <div className="flex items-center gap-3">
-              <div className="w-12 h-12 bg-white/20 backdrop-blur-sm rounded-xl flex items-center justify-center">
-                <FiAward className="text-white" size={24} />
-              </div>
-              <div>
-                <h2 className="text-2xl font-bold text-white">
-                  Top Revenue {reportView === 'monthly' ? 'Months' : 'Dates'}
-                </h2>
-                <p className="text-sm text-white/80">Best performing periods</p>
-              </div>
-            </div>
-          </div>
-
-          <div className="p-6">
-            {((reportView === 'monthly' && topMonths.length > 0) || (reportView === 'daily' && topDates.length > 0)) ? (
-              <div className="space-y-3">
-                {(reportView === 'monthly' ? topMonths : topDates).map((item, index) => {
-                  const medals = ['🥇', '🥈', '🥉'];
-                  return (
-                    <div
-                      key={item.month || item.date}
-                      className={`p-4 rounded-xl border-2 transition-all hover:shadow-lg ${
-                        index === 0
-                          ? isDark ? 'bg-yellow-900/20 border-yellow-700' : 'bg-yellow-50 border-yellow-300'
-                          : index === 1
-                          ? isDark ? 'bg-gray-700/50 border-gray-600' : 'bg-gray-100 border-gray-300'
-                          : isDark ? 'bg-orange-900/20 border-orange-800' : 'bg-orange-50 border-orange-200'
-                      }`}
-                    >
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                          <span className="text-3xl">{medals[index] || '🏆'}</span>
-                          <div>
-                            <div className={`font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                              {reportView === 'monthly' ? item.monthName : item.formattedDate}
-                            </div>
-                            <div className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
-                              Rank #{index + 1}
-                            </div>
-                          </div>
-                        </div>
-                        <div className={`text-2xl font-black ${
-                          index === 0
-                            ? isDark ? 'text-yellow-400' : 'text-yellow-600'
-                            : isDark ? 'text-white' : 'text-gray-900'
-                        }`}>
-                          ${item.revenue.toFixed(2)}
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            ) : (
-              <div className={`text-center py-12 ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>
-                <FiAward className="mx-auto mb-3" size={48} />
-                <p>No revenue data available</p>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Service Status Distribution */}
-        <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} rounded-3xl shadow-xl border overflow-hidden`}>
-          <div className={`p-6 border-b ${isDark ? 'border-gray-700 bg-gradient-to-r from-gray-800 to-gray-700' : 'border-gray-200 bg-gradient-to-r from-purple-600 to-pink-600'}`}>
-            <div className="flex items-center gap-3">
-              <div className="w-12 h-12 bg-white/20 backdrop-blur-sm rounded-xl flex items-center justify-center">
-                <FiPieChart className="text-white" size={24} />
-              </div>
-              <div>
-                <h2 className="text-2xl font-bold text-white">Service Status</h2>
-                <p className="text-sm text-white/80">Distribution by status</p>
-              </div>
-            </div>
-          </div>
-
-          <div className="p-6">
-            {Object.keys(statusCounts).length > 0 ? (
-              <div className="space-y-4">
-                {Object.entries(statusCounts).map(([status, count]) => {
-                  const config = statusConfig[status] || statusConfig['Unpaid'];
-                  const StatusIcon = config.icon;
-                  const percentage = Math.round((count / totalServices) * 100);
-
-                  return (
-                    <div key={status} className={`p-4 rounded-xl border ${isDark ? 'bg-gray-700/30 border-gray-600' : 'bg-gray-50 border-gray-200'}`}>
-                      <div className="flex items-center justify-between mb-3">
-                        <div className="flex items-center gap-3">
-                          <div className={`w-10 h-10 bg-gradient-to-br ${config.gradient} rounded-xl flex items-center justify-center shadow-md`}>
-                            <StatusIcon className="text-white" size={20} />
-                          </div>
-                          <div>
-                            <div className={`font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                              {status}
-                            </div>
-                            <div className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
-                              {count} services
-                            </div>
-                          </div>
-                        </div>
-                        <div className={`text-2xl font-black ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                          {percentage}%
-                        </div>
-                      </div>
-                      <div className={`h-3 rounded-full overflow-hidden ${isDark ? 'bg-gray-700' : 'bg-gray-200'}`}>
-                        <div
-                          className={`h-full bg-gradient-to-r ${config.gradient} transition-all duration-500`}
-                          style={{ width: `${percentage}%` }}
-                        />
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            ) : (
-              <div className={`text-center py-12 ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>
-                <FiPieChart className="mx-auto mb-3" size={48} />
-                <p>No status data available</p>
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* Recent Invoices */}
-      <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} rounded-3xl shadow-xl border overflow-hidden`}>
-        <div className={`p-6 border-b ${isDark ? 'border-gray-700 bg-gradient-to-r from-gray-800 to-gray-700' : 'border-gray-200 bg-gradient-to-r from-orange-600 to-red-600'}`}>
-          <div className="flex items-center gap-3">
-            <div className="w-12 h-12 bg-white/20 backdrop-blur-sm rounded-xl flex items-center justify-center">
-              <FiFileText className="text-white" size={24} />
-            </div>
-            <div>
-              <h2 className="text-2xl font-bold text-white">Recent Invoices</h2>
-              <p className="text-sm text-white/80">Latest billing transactions</p>
+            {/* Modal Body */}
+            <div className="p-5">
+              <ModalBody content={modalContent} isDark={isDark} />
             </div>
           </div>
         </div>
+      )}
 
-        <div className="p-6">
-          {recentInvoices.length > 0 ? (
-            <div className="grid md:grid-cols-2 gap-4">
-              {recentInvoices.map((invoice, index) => (
-                <div
-                  key={index}
-                  className={`p-4 rounded-xl border-2 transition-all hover:shadow-lg ${
-                    isDark ? 'bg-gray-700/30 border-gray-600 hover:border-gray-500' : 'bg-gray-50 border-gray-200 hover:border-gray-300'
-                  }`}
-                >
-                  <div className="flex items-start justify-between mb-3">
-                    <div className="flex items-center gap-3">
-                      <div className="w-12 h-12 bg-gradient-to-br from-orange-500 to-red-600 rounded-xl flex items-center justify-center shadow-md">
-                        <FiFileText className="text-white" size={20} />
-                      </div>
-                      <div>
-                        <div className={`font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                          Invoice #{invoice.id}
-                        </div>
-                        <div className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
-                          {invoice.customerName}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <div className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
-                      {invoice.formattedDate}
-                    </div>
-                    <div className={`text-xl font-black ${isDark ? 'text-orange-400' : 'text-orange-600'}`}>
-                      ${invoice.total.toFixed(2)}
-                    </div>
-                  </div>
+      {/* Analytics Mode */}
+      {mode === "analytics" && (
+        <div className="space-y-6">
+          {/* Revenue Over Time Chart (Full Width) */}
+          <div
+            className={`w-full rounded-3xl overflow-hidden ${isDark ? "bg-gray-800 border-gray-700" : "bg-white border-gray-200"
+              } shadow-lg border`}
+          >
+            <div
+              className={`p-5 border-b ${isDark
+                  ? "border-gray-700 bg-gradient-to-r from-gray-800 to-gray-700"
+                  : "border-gray-200 bg-gradient-to-r from-indigo-600 to-purple-600"
+                }`}
+            >
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-2xl font-bold text-white">
+                    Revenue Over Time
+                  </h3>
+                  <p className="text-sm text-white/80">
+                    Monthly revenue based on issued invoice dates
+                  </p>
                 </div>
-              ))}
+              </div>
             </div>
-          ) : (
-            <div className={`text-center py-12 ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>
-              <FiFileText className="mx-auto mb-3" size={48} />
-              <p>No invoice data available</p>
+            <div className="p-6">
+              {revenueOverTime.length === 0 ? (
+                <div className="py-12 text-center text-gray-500">
+                  No revenue data available
+                </div>
+              ) : (
+                <ResponsiveContainer width="100%" height={320}>
+                  <LineChart
+                    data={revenueOverTime}
+                    margin={{ top: 10, right: 30, left: 0, bottom: 0 }}
+                  >
+                    <CartesianGrid
+                      strokeDasharray="3 3"
+                      stroke={isDark ? "#374151" : "#e6e6e6"}
+                    />
+                    <XAxis
+                      dataKey="month"
+                      stroke={isDark ? "#9CA3AF" : "#6B7280"}
+                    />
+                    <YAxis stroke={isDark ? "#9CA3AF" : "#6B7280"} />
+                    <Tooltip
+                      contentStyle={{
+                        backgroundColor: isDark ? "#1F2937" : "#fff",
+                        borderRadius: "0.5rem",
+                        border: "1px solid #ccc",
+                      }}
+                    />
+                    <Line
+                      type="monotone"
+                      dataKey="revenue"
+                      stroke="#6366F1"
+                      strokeWidth={3}
+                      dot={{ r: 4 }}
+                    />
+                  </LineChart>
+                </ResponsiveContainer>
+              )}
             </div>
-          )}
+          </div>
+
+          {/* Invoice Status Distribution */}
+          <div
+            className={`w-full rounded-3xl overflow-hidden ${isDark ? "bg-gray-800 border-gray-700" : "bg-white border-gray-200"
+              } shadow-lg border`}
+          >
+            <div
+              className={`p-5 border-b ${isDark
+                  ? "border-gray-700 bg-gradient-to-r from-gray-800 to-gray-700"
+                  : "border-gray-200 bg-gradient-to-r from-green-600 to-teal-600"
+                }`}
+            >
+              <h3 className="text-2xl font-bold text-white">
+                Invoice Status Distribution
+              </h3>
+              <p className="text-sm text-white/80">
+                How invoices are distributed by payment status
+              </p>
+            </div>
+            <div className="p-6">
+              {invoiceStatusData.length === 0 ? (
+                <div className="py-12 text-center text-gray-500">
+                  No invoice data available
+                </div>
+              ) : (
+                <ResponsiveContainer width="100%" height={320}>
+                  <PieChart>
+                    <Pie
+                      data={invoiceStatusData}
+                      dataKey="value"
+                      nameKey="name"
+                      outerRadius={100}
+                      label
+                    >
+                      {invoiceStatusData.map((entry, index) => (
+                        <Cell
+                          key={`cell-${index}`}
+                          fill={COLORS[index % COLORS.length]}
+                        />
+                      ))}
+                    </Pie>
+                    <Tooltip
+                      contentStyle={{
+                        backgroundColor: isDark ? "#1F2937" : "#fff",
+                        borderRadius: "0.5rem",
+                        border: "1px solid #ccc",
+                      }}
+                    />
+                    <Legend verticalAlign="bottom" />
+                  </PieChart>
+                </ResponsiveContainer>
+              )}
+            </div>
+          </div>
+
+          {/* Top Services */}
+          <div
+            className={`w-full rounded-3xl overflow-hidden ${isDark ? "bg-gray-800 border-gray-700" : "bg-white border-gray-200"
+              } shadow-lg border`}
+          >
+            <div
+              className={`p-5 border-b ${isDark
+                  ? "border-gray-700 bg-gradient-to-r from-gray-800 to-gray-700"
+                  : "border-gray-200 bg-gradient-to-r from-pink-600 to-orange-500"
+                }`}
+            >
+              <h3 className="text-2xl font-bold text-white">Top Services</h3>
+              <p className="text-sm text-white/80">
+                Most frequently performed service types
+              </p>
+            </div>
+            <div className="p-6">
+              {topServiceData.length === 0 ? (
+                <div className="py-12 text-center text-gray-500">
+                  No service data available
+                </div>
+              ) : (
+                <ResponsiveContainer width="100%" height={320}>
+                  <BarChart
+                    layout="vertical"
+                    data={topServiceData}
+                    margin={{ top: 20, right: 30, left: 40, bottom: 5 }}
+                  >
+                    <CartesianGrid
+                      strokeDasharray="3 3"
+                      stroke={isDark ? "#374151" : "#e6e6e6"}
+                    />
+                    <XAxis
+                      type="number"
+                      stroke={isDark ? "#9CA3AF" : "#6B7280"}
+                    />
+                    <YAxis
+                      dataKey="name"
+                      type="category"
+                      width={160}
+                      stroke={isDark ? "#9CA3AF" : "#6B7280"}
+                    />
+                    <Tooltip
+                      contentStyle={{
+                        backgroundColor: isDark ? "#1F2937" : "#fff",
+                        borderRadius: "0.5rem",
+                        border: "1px solid #ccc",
+                      }}
+                    />
+                    <Bar dataKey="count" fill="#06B6D4" />
+                  </BarChart>
+                </ResponsiveContainer>
+              )}
+            </div>
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }

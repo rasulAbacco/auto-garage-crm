@@ -1,26 +1,125 @@
+// server/server.js
 import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
+import helmet from "helmet";
+import morgan from "morgan";
+import prisma from "./models/prismaClient.js";
+import path from "path";
 import authRoutes from "./routes/authRoutes.js";
+import clientRoutes from "./routes/clientRoutes.js";
+import serviceRoutes from "./routes/serviceRoutes.js";
+import invoiceRoutes from "./routes/invoiceRoutes.js";
+import reportRoutes from "./routes/reportRoutes.js";
+import reminderRoutes from "./routes/reminderRoutes.js";
 
+// Load environment variables
 dotenv.config();
 
 const app = express();
-app.use(cors());
+const PORT = process.env.PORT || 5000;
+const NODE_ENV = process.env.NODE_ENV || "development";
+
+/* -----------------------------------------------------
+   🧩 Middleware Configuration
+----------------------------------------------------- */
+
+// Security HTTP headers
+app.use(helmet());
 app.use(express.json());
+// Enable CORS (allow frontend connection)
+// app.use(
+//   cors({
+//     origin:
+//       NODE_ENV === "production"
+//         ? process.env.FRONTEND_URL // Example: https://your-frontend.com
+//         : "*", // allow all origins in dev mode
+//     credentials: true,
+//   })
+// );
 
-// Base Route
-app.get("/", (req, res) => res.send("🚀 MotorDesk API is running..."));
+app.use(
+  cors({
+    origin: "http://localhost:5173", // 👈 frontend origin, not '*'
+    credentials: true, // 👈 allow cookies & auth headers
+  })
+);
 
-// API Routes
-app.use("/api/auth", authRoutes);
+// Logging (Morgan)
+app.use(morgan(NODE_ENV === "production" ? "combined" : "dev"));
 
-// Global Error Handling (optional)
-app.use((err, req, res, next) => {
-  console.error(err);
-  res.status(500).json({ message: "Internal Server Error" });
+// Parse JSON and URL-encoded payloads (with base64 image support)
+const BODY_LIMIT = process.env.BODY_LIMIT || "10mb";
+app.use(express.json({ limit: BODY_LIMIT }));
+app.use(express.urlencoded({ extended: true, limit: BODY_LIMIT }));
+
+/* -----------------------------------------------------
+   🧠 Health Check Route
+----------------------------------------------------- */
+app.get("/api/health", (req, res) =>
+  res.json({
+    status: "ok",
+    environment: NODE_ENV,
+    timestamp: new Date().toISOString(),
+  })
+);
+
+/* -----------------------------------------------------
+   🚀 Mount API Routes
+----------------------------------------------------- */
+app.use("/api/auth", authRoutes); // 🔑 Auth routes (login/register/profile)
+app.use("/api/clients", clientRoutes); // 👥 Client routes
+app.use("/api/services", serviceRoutes); // 🧰 Service routes
+
+app.use("/api/invoices", invoiceRoutes);
+app.use("/api/reports", reportRoutes);
+app.use("/api/reminders", reminderRoutes);
+
+/* -----------------------------------------------------
+   ⚠️ 404 Handler (For undefined routes)
+----------------------------------------------------- */
+app.use((req, res, next) => {
+  res.status(404).json({
+    message: `Route not found: ${req.originalUrl}`,
+  });
 });
 
-// Start Server
-const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => console.log(`✅ Server running on port ${PORT}`));
+/* -----------------------------------------------------
+   ❗ Global Error Handler
+----------------------------------------------------- */
+app.use((err, req, res, next) => {
+  console.error("❌ Unhandled Error:", err);
+
+  if (res.headersSent) return next(err);
+
+  res.status(err.status || 500).json({
+    message: err.message || "Internal Server Error",
+    stack: NODE_ENV === "development" ? err.stack : undefined,
+  });
+});
+
+/* -----------------------------------------------------
+   🧩 Start Server
+----------------------------------------------------- */
+const server = app.listen(PORT, () => {
+  console.log(`✅ Server running in ${NODE_ENV} mode on port ${PORT}`);
+});
+
+/* -----------------------------------------------------
+   🧹 Graceful Shutdown (Prisma disconnect + server close)
+----------------------------------------------------- */
+const gracefulShutdown = async (signal) => {
+  console.log(`\n🛑 ${signal} received: closing server...`);
+
+  server.close(async () => {
+    console.log("🧩 Disconnecting Prisma...");
+    await prisma.$disconnect();
+    console.log("✅ Server gracefully shut down.");
+    process.exit(0);
+  });
+};
+
+process.on("SIGINT", () => gracefulShutdown("SIGINT"));
+process.on("SIGTERM", () => gracefulShutdown("SIGTERM"));
+
+export default app;

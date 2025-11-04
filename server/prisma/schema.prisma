@@ -7,12 +7,113 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+/**
+ * ✅ Auto Garage CRM Schema — Extended with Reminders
+ * ---------------------------------------------------
+ * Features:
+ * - Fully relational (User → Client → Service → Invoice → Reminder)
+ * - Reminder linked directly to Client (and optionally Service or Invoice)
+ * - Supports multiple notification types
+ * - Includes scheduling fields (next service, insurance, warranty)
+ * - Proper timestamps and cascading relationships
+ */
+
 model User {
   id        Int      @id @default(autoincrement())
   username  String   @unique
   email     String   @unique
   password  String
   role      String   @default("user")
+  clients   Client[] @relation("UserClients")
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+model Client {
+  id           Int        @id @default(autoincrement())
+  fullName     String
+  phone        String
+  email        String?
+  address      String?
+  vehicleMake  String
+  vehicleModel String
+  vehicleYear  Int
+  regNumber    String
+  vin          String?
+  carImage     String?
+  adImage      String?
+  staffPerson  String?
+  services     Service[]
+  invoices     Invoice[]
+  reminders    Reminder[] // ✅ client can have multiple reminders
+  userId       Int?
+  user         User?      @relation("UserClients", fields: [userId], references: [id])
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+}
+
+model Service {
+  id          Int        @id @default(autoincrement())
+  type        String
+  date        DateTime
+  partsCost   Float?
+  laborCost   Float?
+  cost        Float?
+  status      String?    @default("Pending")
+  description String?
+  clientId    Int
+  client      Client     @relation(fields: [clientId], references: [id])
+  invoiceId   Int?
+  invoice     Invoice?   @relation(fields: [invoiceId], references: [id])
+  reminders   Reminder[] // ✅ optional reminders for follow-ups
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+}
+
+model Invoice {
+  id            Int        @id @default(autoincrement())
+  invoiceNumber String     @unique
+  clientId      Int
+  client        Client     @relation(fields: [clientId], references: [id])
+  services      Service[]
+  reminders     Reminder[] // ✅ optional reminders for billing or follow-up
+  totalAmount   Float
+  tax           Float?     @default(0)
+  discount      Float?     @default(0)
+  grandTotal    Float
+  status        String     @default("Pending")
+  issuedAt      DateTime   @default(now())
+  dueDate       DateTime?
+  paidAt        DateTime?
+  notes         String?
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+}
+
+/**
+ * ✅ Reminder Model — New
+ * ---------------------------------------------------
+ * - Linked to Client (mandatory)
+ * - Can optionally link to a Service or Invoice
+ * - Tracks next service, insurance, and warranty
+ * - Notify field supports SMS, Email, WhatsApp, etc.
+ * - Includes status to mark if sent/done
+ */
+
+model Reminder {
+  id               Int       @id @default(autoincrement())
+  clientId         Int
+  client           Client    @relation(fields: [clientId], references: [id])
+  serviceId        Int?
+  service          Service?  @relation(fields: [serviceId], references: [id])
+  invoiceId        Int?
+  invoice          Invoice?  @relation(fields: [invoiceId], references: [id])
+  nextService      DateTime // next service date
+  insuranceRenewal DateTime? // optional
+  warrantyExpiry   DateTime? // optional
+  notify           String // "SMS" | "Email" | "WhatsApp" | "All"
+  status           String    @default("Pending") // "Pending" | "Sent" | "Done"
+  notes            String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
 }

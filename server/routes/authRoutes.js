@@ -1,13 +1,26 @@
+// server/routes/authRoutes.js
 import express from "express";
-import { registerUser, loginUser, getProfile, verifyToken } from "../controllers/authController.js";
+import {
+    registerUser,
+    loginUser,
+    getProfile,
+    verifyToken,
+} from "../controllers/authController.js";
 import { protect } from "../middleware/authMiddleware.js";
 
 const router = express.Router();
 
-// Auth routes
-router.post("/register", registerUser);
-router.post("/login", loginUser);
-router.get("/profile", protect, getProfile);
-router.get("/verify", protect, getProfile);
+/**
+ * @desc Auth Routes
+ * @route /api/auth
+ */
+
+// 🟢 Public Routes
+router.post("/register", registerUser); // Register new user
+router.post("/login", loginUser);       // Login and get token
+
+// 🔒 Protected Routes
+router.get("/profile", protect, getProfile); // Get logged-in user's info
+router.get("/verify", verifyToken);          // Self-verification (no protect needed)
 
 export default router;
