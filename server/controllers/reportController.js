@@ -154,3 +154,74 @@ export const getFullInvoiceDetails = async (req, res) => {
         res.status(500).json({ message: "Error fetching invoice details" });
     }
 };
+
+
+/**
+ * Combined summary for all reports
+ * @route GET /api/reports/summary
+ */
+export const getReportsSummary = async (req, res) => {
+    try {
+        const [invoices, services, topClientsGroup, invoiceStatus] = await Promise.all([
+            prisma.invoice.findMany({
+                select: { grandTotal: true, status: true, createdAt: true }, // ✅ changed from issuedAt to createdAt
+            }),
+            prisma.service.groupBy({
+                by: ["type"],
+                _count: { type: true },
+                orderBy: { _count: { type: "desc" } },
+                take: 10,
+            }),
+            prisma.invoice.groupBy({
+                by: ["clientId"],
+                _sum: { grandTotal: true },
+                orderBy: { _sum: { grandTotal: "desc" } },
+                take: 5,
+            }),
+            prisma.invoice.groupBy({
+                by: ["status"],
+                _count: { status: true },
+            }),
+        ]);
+
+        // ✅ compute revenue safely
+        const totalRevenue = invoices.reduce((sum, i) => sum + (i.grandTotal || 0), 0);
+        const paidRevenue = invoices
+            .filter((i) => i.status === "Paid")
+            .reduce((sum, i) => sum + (i.grandTotal || 0), 0);
+        const pendingRevenue = totalRevenue - paidRevenue;
+
+        // ✅ top clients
+        const topClients = await Promise.all(
+            topClientsGroup.map(async (tc) => {
+                const client = await prisma.client.findUnique({
+                    where: { id: tc.clientId },
+                    select: { id: true, fullName: true, phone: true },
+                });
+                return {
+                    id: client?.id || tc.clientId,
+                    fullName: client?.fullName || "Unknown",
+                    phone: client?.phone || "N/A",
+                    totalSpent: tc._sum.grandTotal || 0,
+                };
+            })
+        );
+
+        // ✅ normalize invoice status data
+        const invoiceStatusSummary = invoiceStatus.map((s) => ({
+            status: s.status,
+            count: s._count.status || 0,
+        }));
+
+        res.json({
+            revenueSummary: { totalRevenue, paidRevenue, pendingRevenue },
+            serviceStats: services,
+            topClients,
+            invoiceStatusSummary,
+        });
+    } catch (error) {
+        console.error("❌ Error fetching reports summary:", error);
+        res.status(500).json({ message: error.message || "Error fetching reports summary" });
+    }
+};
+

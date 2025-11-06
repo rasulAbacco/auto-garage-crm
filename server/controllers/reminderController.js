@@ -2,34 +2,55 @@
 
 import prisma from "../models/prismaClient.js";
 
+
+
 /**
- * @desc Get all reminders (optionally filter by clientId or status)
+ * @desc Fetch all reminders for the logged-in user (or all if admin)
  * @route GET /api/reminders
  * @access Private
  */
 export const getReminders = async (req, res) => {
     try {
-        const { clientId, status } = req.query;
+        const userId = req.user?.id;
+
+        // ✅ If you want each user to only see their own reminders
+        const where = userId ? { userId } : {};
 
         const reminders = await prisma.reminder.findMany({
-            where: {
-                ...(clientId ? { clientId: Number(clientId) } : {}),
-                ...(status ? { status } : {}),
-            },
+            where,
             include: {
-                client: true,
-                service: true,
-                invoice: true,
+                client: {
+                    select: {
+                        id: true,
+                        fullName: true,
+                        phone: true,
+                        vehicleMake: true,
+                        vehicleModel: true,
+                        regNumber: true,
+                    },
+                },
+                user: {
+                    select: { id: true, username: true },
+                },
             },
             orderBy: { createdAt: "desc" },
         });
 
-        res.json({ success: true, data: reminders });
+        res.status(200).json({
+            success: true,
+            total: reminders.length,
+            data: reminders,
+        });
     } catch (error) {
         console.error("❌ Error fetching reminders:", error);
-        res.status(500).json({ success: false, message: "Error fetching reminders" });
+        res.status(500).json({
+            success: false,
+            message: "Error fetching reminders",
+            error: error.message,
+        });
     }
 };
+
 
 /**
  * @desc Get single reminder by ID
@@ -61,26 +82,16 @@ export const getReminderById = async (req, res) => {
 };
 
 
-// server/controllers/reminderController.js
-
 export const createReminder = async (req, res) => {
     try {
         console.log("📩 Received body:", req.body);
 
-        const {
-            clientId,
-            serviceId,
-            invoiceId,
-            nextService,
-            insuranceRenewal,
-            warrantyExpiry,
-            notify,
-            status,
-            notes,
-        } = req.body;
+        const { clientId, nextService, message } = req.body;
 
-        if (!clientId || !nextService) {
-            return res.status(400).json({ message: "Missing required fields (clientId or nextService)" });
+        if (!clientId || !nextService || !message) {
+            return res.status(400).json({
+                message: "Missing required fields: clientId, nextService, or message",
+            });
         }
 
         const parsedClientId = parseInt(clientId);
@@ -88,27 +99,21 @@ export const createReminder = async (req, res) => {
             return res.status(400).json({ message: "Invalid clientId" });
         }
 
+        // ✅ Create minimal valid reminder
         const reminder = await prisma.reminder.create({
             data: {
                 clientId: parsedClientId,
-                serviceId: serviceId ? parseInt(serviceId) : null,
-                invoiceId: invoiceId ? parseInt(invoiceId) : null,
-                nextService: new Date(nextService),
-                insuranceRenewal: insuranceRenewal ? new Date(insuranceRenewal) : null,
-                warrantyExpiry: warrantyExpiry ? new Date(warrantyExpiry) : null,
-                notify: notify || "SMS",
-                status: status || "Pending",
-                notes: notes || null,
+                userId: req.user?.id || null,
+                message: message.trim(),
+                remindAt: new Date(nextService), // use nextService as trigger date
             },
             include: {
                 client: true,
-                service: true,
-                invoice: true,
+                user: true,
             },
         });
 
         console.log("✅ Reminder created:", reminder.id);
-
         return res.status(201).json(reminder);
     } catch (error) {
         console.error("❌ Error creating reminder:", error);
@@ -118,6 +123,8 @@ export const createReminder = async (req, res) => {
         });
     }
 };
+
+
 
 
 

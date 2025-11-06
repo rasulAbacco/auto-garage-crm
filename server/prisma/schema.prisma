@@ -7,30 +7,22 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-/**
- * ✅ Auto Garage CRM Schema — Extended with Reminders
- * ---------------------------------------------------
- * Features:
- * - Fully relational (User → Client → Service → Invoice → Reminder)
- * - Reminder linked directly to Client (and optionally Service or Invoice)
- * - Supports multiple notification types
- * - Includes scheduling fields (next service, insurance, warranty)
- * - Proper timestamps and cascading relationships
- */
-
 model User {
   id        Int      @id @default(autoincrement())
-  username  String   @unique
   email     String   @unique
+  username  String?  @unique
   password  String
   role      String   @default("user")
-  clients   Client[] @relation("UserClients")
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  clients   Client[]
+  invoices  Invoice[]
+  reminders Reminder[]
 }
 
 model Client {
-  id           Int        @id @default(autoincrement())
+  id           Int      @id @default(autoincrement())
   fullName     String
   phone        String
   email        String?
@@ -40,80 +32,107 @@ model Client {
   vehicleYear  Int
   regNumber    String
   vin          String?
-  carImage     String?
-  adImage      String?
-  staffPerson  String?
-  services     Service[]
-  invoices     Invoice[]
-  reminders    Reminder[] // ✅ client can have multiple reminders
+  carImage     String? // main image URL/base64 (legacy)
+  adImage      String? // image used by 3D viewer / front-banner
+  staffPerson  String? // legacy
+  receiverName String? // NEW: person receiving vehicle
+  damageImages Json? // NEW: stores array of image URLs or base64
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
   userId       Int?
-  user         User?      @relation("UserClients", fields: [userId], references: [id])
-  createdAt    DateTime   @default(now())
-  updatedAt    DateTime   @updatedAt
+
+  user      User?      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  services  Service[]
+  invoices  Invoice[]
+  reminders Reminder[] // FIXED: field name should be plural and distinct
+
+  @@unique([userId, regNumber])
+  @@index([userId])
+  @@index([regNumber])
 }
 
 model Service {
-  id          Int        @id @default(autoincrement())
-  type        String
-  date        DateTime
-  partsCost   Float?
-  laborCost   Float?
-  cost        Float?
-  status      String?    @default("Pending")
-  description String?
-  clientId    Int
-  client      Client     @relation(fields: [clientId], references: [id])
-  invoiceId   Int?
-  invoice     Invoice?   @relation(fields: [invoiceId], references: [id])
-  reminders   Reminder[] // ✅ optional reminders for follow-ups
-  createdAt   DateTime   @default(now())
-  updatedAt   DateTime   @updatedAt
+  id           Int              @id @default(autoincrement())
+  date         DateTime
+  notes        String?
+  partsCost    Float?
+  partsGst     Float?
+  laborCost    Float?
+  laborGst     Float?
+  cost         Float?
+  status       String?
+  clientId     Int
+  categoryId   Int?
+  subServiceId Int?
+  invoiceId    Int? // ✅ NEW
+  client       Client           @relation(fields: [clientId], references: [id])
+  invoice      Invoice?         @relation(fields: [invoiceId], references: [id])
+  category     ServiceCategory? @relation(fields: [categoryId], references: [id])
+  subService   SubService?      @relation(fields: [subServiceId], references: [id])
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
 }
 
 model Invoice {
-  id            Int        @id @default(autoincrement())
-  invoiceNumber String     @unique
+  id            Int       @id @default(autoincrement())
+  invoiceNumber String    @unique
   clientId      Int
-  client        Client     @relation(fields: [clientId], references: [id])
-  services      Service[]
-  reminders     Reminder[] // ✅ optional reminders for billing or follow-up
+  userId        Int?
   totalAmount   Float
-  tax           Float?     @default(0)
-  discount      Float?     @default(0)
+  partsCost     Float? // ✅ New
+  partsGst      Float? // ✅ New
+  laborCost     Float? // ✅ New
+  laborGst      Float? // ✅ New
+  tax           Float     @default(0)
+  discount      Float     @default(0)
   grandTotal    Float
-  status        String     @default("Pending")
-  issuedAt      DateTime   @default(now())
+  paymentMode   String? // ✅ ("Cash", "UPI", "Card")
+  status        String    @default("Pending")
+  paidAt        DateTime? // ✅ When payment marked "Paid"
   dueDate       DateTime?
-  paidAt        DateTime?
   notes         String?
-  createdAt     DateTime   @default(now())
-  updatedAt     DateTime   @updatedAt
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  client   Client    @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  user     User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+  services Service[]
+
+  @@index([status])
+  @@index([paymentMode])
+}
+
+model Reminder {
+  id        Int      @id @default(autoincrement())
+  clientId  Int
+  userId    Int?
+  message   String
+  remindAt  DateTime
+  sent      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  user   User?  @relation(fields: [userId], references: [id], onDelete: SetNull)
 }
 
 /**
- * ✅ Reminder Model — New
- * ---------------------------------------------------
- * - Linked to Client (mandatory)
- * - Can optionally link to a Service or Invoice
- * - Tracks next service, insurance, and warranty
- * - Notify field supports SMS, Email, WhatsApp, etc.
- * - Includes status to mark if sent/done
+ * ServiceCategory and SubService unchanged
  */
+model ServiceCategory {
+  id          Int          @id @default(autoincrement())
+  name        String       @unique
+  subServices SubService[]
+  services    Service[]
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+}
 
-model Reminder {
-  id               Int       @id @default(autoincrement())
-  clientId         Int
-  client           Client    @relation(fields: [clientId], references: [id])
-  serviceId        Int?
-  service          Service?  @relation(fields: [serviceId], references: [id])
-  invoiceId        Int?
-  invoice          Invoice?  @relation(fields: [invoiceId], references: [id])
-  nextService      DateTime // next service date
-  insuranceRenewal DateTime? // optional
-  warrantyExpiry   DateTime? // optional
-  notify           String // "SMS" | "Email" | "WhatsApp" | "All"
-  status           String    @default("Pending") // "Pending" | "Sent" | "Done"
-  notes            String?
-  createdAt        DateTime  @default(now())
-  updatedAt        DateTime  @updatedAt
+model SubService {
+  id         Int              @id @default(autoincrement())
+  name       String
+  categoryId Int?
+  category   ServiceCategory? @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  services   Service[]
+  createdAt  DateTime         @default(now())
+  updatedAt  DateTime         @updatedAt
 }
