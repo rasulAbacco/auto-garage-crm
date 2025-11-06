@@ -8,6 +8,7 @@ import {
     getFullInvoiceDetails,
 } from "../controllers/reportController.js";
 import { protect } from "../middleware/authMiddleware.js";
+import { getReportsSummary } from "../controllers/reportController.js";
 
 const router = express.Router();
 
@@ -16,5 +17,9 @@ router.get("/top-clients", protect, getTopClients);
 router.get("/services", protect, getServiceStats);
 router.get("/invoices", protect, getInvoiceStatusSummary);
 router.get("/invoice/:id", protect, getFullInvoiceDetails); // <-- new route
+
+
+router.get("/summary", protect, getReportsSummary);
+
 
 export default router;

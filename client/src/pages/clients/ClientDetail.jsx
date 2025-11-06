@@ -1,4 +1,3 @@
-// client/src/pages/clients/ClientDetail.jsx
 import React, { useState, useEffect } from "react";
 import { useParams, Link } from "react-router-dom";
 import {
@@ -11,575 +10,430 @@ import {
   FiCalendar,
   FiTool,
   FiDollarSign,
-  FiClock,
   FiPlus,
   FiArrowLeft,
-  FiCheckCircle,
+  FiX,
+  FiSave,
 } from "react-icons/fi";
 import { useTheme } from "../../contexts/ThemeContext";
 
-const API_URL = import.meta.env.VITE_API_BASE_URL;
+const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:5000";
 
-
-// ✅ Car brand logo component
-const CarLogo = ({ make, className = "w-8 h-8 inline-block mr-2 align-middle" }) => {
-  const makeLower = make?.toLowerCase().trim() || "";
-
-  const carLogos = {
-    toyota: (
-      <svg viewBox="0 0 100 100" className={className}>
-        <ellipse cx="50" cy="50" rx="45" ry="45" fill="#EB0A1E" />
-        <ellipse cx="50" cy="50" rx="35" ry="35" fill="white" />
-        <ellipse cx="50" cy="50" rx="25" ry="25" fill="#EB0A1E" />
-      </svg>
-    ),
-    honda: (
-      <svg viewBox="0 0 100 100" className={className}>
-        <rect x="10" y="10" width="80" height="80" rx="10" fill="#C41E3A" />
-        <path d="M50 25 L75 50 L50 75 L25 50 Z" fill="white" />
-      </svg>
-    ),
-    ford: (
-      <svg viewBox="0 0 100 100" className={className}>
-        <ellipse cx="50" cy="50" rx="45" ry="45" fill="#003478" />
-        <path d="M20 50 Q50 20 80 50 Q50 80 20 50" fill="white" />
-      </svg>
-    ),
-  };
-
-  return (
-    carLogos[makeLower] || (
-      <div
-        className={`${className} rounded-full bg-gradient-to-br from-gray-400 to-gray-600 flex items-center justify-center text-white font-bold text-xl`}
-      >
-        {make?.charAt(0)?.toUpperCase() || "C"}
-      </div>
-    )
-  );
-};
-
-// ✅ Main Component
 export default function ClientDetail() {
   const { id } = useParams();
   const { isDark } = useTheme();
   const [client, setClient] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [activeTab, setActiveTab] = useState("overview");
+  const [selectedService, setSelectedService] = useState(null);
+  const [selectedInvoice, setSelectedInvoice] = useState(null);
+  const [serviceForm, setServiceForm] = useState({});
+  const [isSavingService, setIsSavingService] = useState(false);
 
-  // ✅ Validate ID before fetching
   useEffect(() => {
-    // Check if ID is valid
-    if (!id || id === 'undefined' || isNaN(Number(id))) {
-      setError('Invalid client ID');
-      setLoading(false);
-      return;
-    }
-
     const fetchData = async () => {
       try {
         setLoading(true);
         const token = localStorage.getItem("token");
-        const base = import.meta.env.VITE_API_BASE_URL || "http://localhost:5000";
-
-        const clientRes = await fetch(`${base}/api/clients/${id}`, {
+        const res = await fetch(`${API_BASE}/api/clients/${id}`, {
           headers: { Authorization: `Bearer ${token}` },
         });
-
-        if (!clientRes.ok) {
-          if (clientRes.status === 404) {
-            throw new Error('Client not found');
-          }
-          throw new Error('Failed to fetch client');
-        }
-
-        const clientData = await clientRes.json();
-        setClient(clientData);
+        if (!res.ok) throw new Error("Failed to fetch client data");
+        const data = await res.json();
+        setClient(data);
       } catch (err) {
-        console.error("Error fetching client details:", err);
         setError(err.message);
       } finally {
         setLoading(false);
       }
     };
-
     fetchData();
   }, [id]);
 
+  const saveServiceChanges = async () => {
+    try {
+      setIsSavingService(true);
+      const token = localStorage.getItem("token");
+      const res = await fetch(`${API_BASE}/api/services/${serviceForm.id}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(serviceForm),
+      });
+      if (!res.ok) throw new Error("Failed to update service");
+      const data = await res.json();
+      setClient((prev) => ({
+        ...prev,
+        services: prev.services.map((s) =>
+          s.id === data.service.id ? data.service : s
+        ),
+      }));
+      setSelectedService(null);
+    } catch (err) {
+      alert(err.message);
+    } finally {
+      setIsSavingService(false);
+    }
+  };
+
   if (loading)
     return (
-      <div
-        className={`lg:ml-16 min-h-screen flex items-center justify-center ${isDark ? "bg-gray-900" : "bg-gray-50"
-          }`}
-      >
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500 mx-auto"></div>
-          <p className={`mt-4 ${isDark ? "text-gray-400" : "text-gray-500"}`}>Loading client details...</p>
+      <div className={`min-h-screen flex items-center justify-center ${isDark ? 'bg-gray-900' : 'bg-gray-50'}`}>
+        <div className="relative">
+          <div className="w-16 h-16 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin" />
+          <div className={`mt-4 text-center font-medium ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>
+            Loading client...
+          </div>
         </div>
       </div>
     );
 
   if (error)
     return (
-      <div
-        className={`lg:ml-16 min-h-screen flex items-center justify-center ${isDark ? "bg-gray-900" : "bg-gray-50"
-          }`}
-      >
-        <div className="text-center max-w-md">
-          <div
-            className={`w-24 h-24 mx-auto rounded-full ${isDark ? "bg-red-900/30" : "bg-red-100"
-              } flex items-center justify-center mb-4`}
-          >
-            <FiMapPin
-              className={`w-12 h-12 ${isDark ? "text-red-400" : "text-red-500"
-                }`}
-            />
+      <div className={`min-h-screen flex items-center justify-center p-4 ${isDark ? 'bg-gray-900' : 'bg-gray-50'}`}>
+        <div className={`max-w-md w-full p-6 rounded-2xl ${isDark ? 'bg-red-900/20 border-red-800' : 'bg-red-50 border-red-200'} border`}>
+          <div className="text-center">
+            <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center">
+              <FiX className="w-8 h-8 text-red-600" />
+            </div>
+            <h3 className={`text-lg font-semibold mb-2 ${isDark ? 'text-red-400' : 'text-red-700'}`}>
+              Error Loading Client
+            </h3>
+            <p className={isDark ? 'text-gray-300' : 'text-gray-600'}>{error}</p>
           </div>
-          <h2
-            className={`text-2xl font-bold mb-2 ${isDark ? "text-white" : "text-gray-900"
-              }`}
-          >
-            Error
-          </h2>
-          <p className={`${isDark ? "text-gray-400" : "text-gray-500"} mb-6`}>{error}</p>
-          {error.includes('Unauthorized') ? (
-            <Link
-              to="/login"
-              className="inline-flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white px-6 py-3 rounded-xl font-semibold transition-all duration-200 shadow-lg"
-            >
-              Please Login
-              <FiArrowLeft />
-            </Link>
-          ) : (
-            <Link
-              to="/clients"
-              className="inline-flex items-center gap-2 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white px-6 py-3 rounded-xl font-semibold transition-all duration-200 shadow-lg"
-            >
-              <FiArrowLeft /> Back to Clients
-            </Link>
-          )}
         </div>
       </div>
     );
 
-  if (!client)
-    return (
-      <div
-        className={`lg:ml-16 min-h-screen flex items-center justify-center ${isDark ? "bg-gray-900" : "bg-gray-50"
-          }`}
-      >
-        <div className="text-center">
-          <div
-            className={`w-24 h-24 mx-auto rounded-full ${isDark ? "bg-gray-800" : "bg-gray-100"
-              } flex items-center justify-center mb-4`}
-          >
-            <FiMapPin
-              className={`w-12 h-12 ${isDark ? "text-gray-600" : "text-gray-400"
-                }`}
-            />
-          </div>
-          <h2
-            className={`text-2xl font-bold mb-2 ${isDark ? "text-white" : "text-gray-900"
-              }`}
-          >
-            Client Not Found
-          </h2>
-          <Link
-            to="/clients"
-            className="inline-flex items-center gap-2 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white px-6 py-3 rounded-xl font-semibold transition-all duration-200 shadow-lg"
-          >
-            <FiArrowLeft /> Back to Clients
-          </Link>
-        </div>
-      </div>
-    );
+  if (!client) return null;
 
-  // Extract services from client object
   const services = client.services || [];
+  const invoices = client.invoices || [];
 
-  // ✅ Full UI section (unchanged)
+  const lastService = services[0]?.date
+    ? new Date(services[0].date).toLocaleDateString()
+    : "N/A";
+  const totalServices = services.length;
+  const totalBilled = invoices.reduce(
+    (s, i) => s + (i.grandTotal || i.totalAmount || 0),
+    0
+  );
+
   return (
-    <div className="space-y-6 lg:ml-16 p-6">
-      <Link
-        to="/clients"
-        className={`inline-flex items-center gap-2 ${isDark
-          ? "text-gray-300 hover:text-white"
-          : "text-gray-600 hover:text-gray-900"
-          } transition-colors duration-200`}
-      >
-        <FiArrowLeft />
-        <span className="font-medium">Back to Clients</span>
-      </Link>
-
-      {/* VEHICLE SHOWCASE */}
-      <div
-        className={`${isDark ? "bg-gray-800 border-gray-700" : "bg-white border-gray-200"
-          } rounded-3xl shadow-2xl overflow-hidden border`}
-      >
-        <div className="relative h-96">
-          <div
-            className={`absolute inset-0 ${isDark
-              ? "bg-gradient-to-b from-gray-900 via-gray-800 to-gray-700"
-              : "bg-gradient-to-b from-blue-500 via-blue-400 to-blue-300"
-              }`}
-          ></div>
-
-          {/* Car Display */}
-          <div className="absolute bottom-8 left-1/2 transform -translate-x-1/2 flex flex-col items-center z-20">
-            <div
-              className={`${isDark
-                ? "bg-gray-700 border-blue-500"
-                : "bg-white border-blue-600"
-                } px-6 py-3 rounded-2xl shadow-2xl mb-4 border-2`}
-            >
-              <div className="flex items-center gap-3">
-                <CarLogo make={client.vehicleMake} className="w-12 h-12" />
-                <div>
-                  <div
-                    className={`text-lg font-bold ${isDark ? "text-blue-400" : "text-blue-700"
-                      }`}
-                  >
-                    {client.vehicleMake} {client.vehicleModel}
-                  </div>
-                  <div
-                    className={`text-sm ${isDark ? "text-gray-400" : "text-gray-600"
-                      } flex items-center gap-2`}
-                  >
-                    <FiCalendar size={14} />
-                    {client.vehicleYear} • {client.regNumber}
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <img
-              src={
-                client.carImage ||
-                `https://via.placeholder.com/500x300?text=${encodeURIComponent(
-                  client.vehicleMake
-                )}+${encodeURIComponent(client.vehicleModel)}`
-              }
-              alt={`${client.vehicleMake} ${client.vehicleModel}`}
-              className="h-64 w-auto object-contain drop-shadow-2xl"
-              onError={(e) => {
-                e.target.onerror = null;
-                e.target.src = `https://via.placeholder.com/500x300?text=${encodeURIComponent(
-                  client.vehicleMake
-                )}+${encodeURIComponent(client.vehicleModel)}`;
-              }}
-            />
-          </div>
-
-          <div className="absolute top-6 left-6 right-6 flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-blue-600 to-purple-600 flex items-center justify-center text-white font-bold text-2xl shadow-2xl">
-                {client.fullName?.charAt(0)?.toUpperCase() || "C"}
-              </div>
-              <div>
-                <h1 className="text-3xl font-bold text-white drop-shadow-lg">
-                  {client.fullName}
-                </h1>
-                <p className="text-white/90 flex items-center gap-2 mt-1">
-                  <span className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></span>
-                  Active Client
-                </p>
-              </div>
-            </div>
-            <Link
-              to={`/clients/${id}/edit`}
-              className="bg-white/20 backdrop-blur-md hover:bg-white/30 text-white px-5 py-3 rounded-xl font-semibold transition-all duration-200 shadow-lg flex items-center gap-2 border border-white/30"
-            >
-              <FiEdit size={18} />
-              Edit Client
-            </Link>
-          </div>
-        </div>
-
-        {/* CLIENT INFO SECTION */}
-        <div className="p-8">
-          <h2
-            className={`text-2xl font-bold mb-6 ${isDark ? "text-white" : "text-gray-900"
-              } flex items-center gap-3`}
-          >
-            <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl flex items-center justify-center">
-              <FiHash className="text-white" size={20} />
-            </div>
-            Contact Information
-          </h2>
-
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {/* PHONE */}
-            <InfoCard
-              icon={<FiPhone />}
-              title="Phone"
-              value={client.phone}
-              color="blue"
-              isDark={isDark}
-            />
-            {/* EMAIL */}
-            <InfoCard
-              icon={<FiMail />}
-              title="Email"
-              value={client.email}
-              color="purple"
-              isDark={isDark}
-            />
-            {/* ADDRESS */}
-            <InfoCard
-              icon={<FiMapPin />}
-              title="Address"
-              value={client.address}
-              color="green"
-              isDark={isDark}
-            />
-            {/* REGISTRATION */}
-            <InfoCard
-              icon={<FiCreditCard />}
-              title="Registration No."
-              value={client.regNumber}
-              color="orange"
-              isDark={isDark}
-            />
-            {/* VIN */}
-            <InfoCard
-              icon={<FiHash />}
-              title="VIN / Chassis No."
-              value={client.vin || "Not Available"}
-              color="pink"
-              isDark={isDark}
-            />
-          </div>
-        </div>
-      </div>
-
-      {/* SERVICE HISTORY */}
-      <div
-        className={`${isDark ? "bg-gray-800 border-gray-700" : "bg-white border-gray-200"
-          } rounded-3xl shadow-xl border overflow-hidden`}
-      >
-        <div
-          className={`p-6 border-b ${isDark
-            ? "border-gray-700 bg-gradient-to-r from-gray-800 to-gray-700"
-            : "border-gray-200 bg-gradient-to-r from-blue-600 to-purple-600"
+    <div className={`min-h-screen ${isDark ? 'bg-gray-900' : 'bg-gray-50'} lg:ml-16`}>
+      <div className="max-w-7xl mx-auto p-4 sm:p-6 lg:p-8 space-y-6">
+        {/* Back Button */}
+        <Link
+          to="/clients"
+          className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg transition-colors ${isDark
+              ? "text-gray-300 hover:text-white hover:bg-gray-800"
+              : "text-gray-700 hover:text-gray-900 hover:bg-gray-100"
             }`}
         >
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-12 h-12 bg-white/20 backdrop-blur-sm rounded-xl flex items-center justify-center">
-                <FiTool className="text-white" size={24} />
-              </div>
-              <div>
-                <h2 className="text-2xl font-bold text-white">
-                  Service History
-                </h2>
-                <p className="text-sm text-white/80">
-                  Complete maintenance records
-                </p>
-              </div>
-            </div>
-            <Link
-              to="/services/new"
-              state={{ customerId: client.id }}
-              className="bg-white/20 backdrop-blur-md hover:bg-white/30 text-white px-5 py-3 rounded-xl font-semibold transition-all duration-200 shadow-lg flex items-center gap-2 border border-white/30"
-            >
-              <FiPlus size={18} />
-              Add Service
-            </Link>
-          </div>
-        </div>
+          <FiArrowLeft className="w-4 h-4" />
+          <span className="font-medium">Back to Clients</span>
+        </Link>
 
-        <div className="p-6">
-          {services.length > 0 ? (
-            <div className="space-y-4">
-              {services.map((s, idx) => (
-                <ServiceCard key={s.id} s={s} idx={idx} isDark={isDark} />
-              ))}
-            </div>
-          ) : (
-            <div className="text-center py-16">
-              <div
-                className={`w-24 h-24 mx-auto rounded-full ${isDark ? "bg-gray-700" : "bg-gray-100"
-                  } flex items-center justify-center mb-4`}
-              >
-                <FiTool
-                  className={`w-12 h-12 ${isDark ? "text-gray-600" : "text-gray-400"
-                    }`}
-                />
+        {/* Header Card */}
+        <div className={`rounded-2xl overflow-hidden shadow-lg ${isDark ? 'bg-gray-800' : 'bg-white'}`}>
+          <div className={`p-6 sm:p-8 ${isDark ? 'bg-gradient-to-r from-blue-900/50 to-purple-900/50' : 'bg-gradient-to-r from-blue-500 to-purple-600'}`}>
+            <div className="flex flex-col lg:flex-row gap-6 items-start">
+              {/* Client Info */}
+              <div className="flex items-center gap-4 flex-1 min-w-0">
+                <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl bg-white/10 backdrop-blur-sm flex items-center justify-center text-white font-bold text-2xl sm:text-3xl shadow-lg flex-shrink-0">
+                  {client.fullName?.charAt(0)?.toUpperCase() || "C"}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-white truncate">
+                    {client.fullName}
+                  </h1>
+                  <p className="text-green-300 flex items-center gap-2 text-sm font-medium mt-1">
+                    <span className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></span>
+                    Active Client
+                  </p>
+                </div>
               </div>
-              <h3
-                className={`text-xl font-bold mb-2 ${isDark ? "text-white" : "text-gray-900"
-                  }`}
-              >
-                No Service Records
-              </h3>
-              <p
-                className={`${isDark ? "text-gray-400" : "text-gray-500"
-                  } mb-6`}
-              >
-                This client doesn't have any service history yet.
-              </p>
+
+              {/* Edit Button */}
               <Link
-                to="/services/new"
-                state={{ customerId: client.id }}
-                className="inline-flex items-center gap-2 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white px-6 py-3 rounded-xl font-semibold transition-all duration-200 shadow-lg"
+                to={`/clients/${id}/edit`}
+                className="w-full sm:w-auto flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-white/10 hover:bg-white/20 backdrop-blur-sm text-white border border-white/20 transition-all shadow-lg"
               >
-                <FiPlus size={18} />
-                Add First Service
+                <FiEdit className="w-5 h-5" />
+                <span className="font-medium">Edit Client</span>
               </Link>
             </div>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ✅ Helper: Contact Info Card
-function InfoCard({ icon, title, value, color, isDark }) {
-  const colorMap = {
-    blue: "from-blue-500",
-    purple: "from-purple-500",
-    green: "from-green-500",
-    orange: "from-orange-500",
-    pink: "from-pink-500",
-  };
-  return (
-    <div
-      className={`${isDark ? "bg-gray-700/50 border-gray-600" : "bg-gray-50 border-gray-200"
-        } p-5 rounded-2xl border`}
-    >
-      <div className="flex items-start gap-4">
-        <div
-          className={`w-12 h-12 rounded-xl bg-gradient-to-br ${colorMap[color]
-            } to-${color}-600 flex items-center justify-center flex-shrink-0 shadow-md`}
-        >
-          {React.cloneElement(icon, { className: "text-white", size: 20 })}
-        </div>
-        <div className="flex-1 min-w-0">
-          <p
-            className={`text-xs font-semibold uppercase tracking-wide mb-1 ${isDark ? "text-gray-400" : "text-gray-600"
-              }`}
-          >
-            {title}
-          </p>
-          <p
-            className={`font-semibold text-lg ${isDark ? "text-white" : "text-gray-900"
-              } truncate`}
-          >
-            {value}
-          </p>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ✅ Helper: Service Card
-function ServiceCard({ s, idx, isDark }) {
-  // Format date for display
-  const formatDate = (dateString) => {
-    if (!dateString) return 'N/A';
-    const date = new Date(dateString);
-    return date.toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric'
-    });
-  };
-
-  return (
-    <div
-      className={`${isDark
-        ? "bg-gray-700/50 border-gray-600 hover:bg-gray-700"
-        : "bg-gray-50 border-gray-200 hover:bg-gray-100"
-        } p-5 rounded-2xl border transition-all duration-200 shadow-sm hover:shadow-md`}
-    >
-      <div className="flex items-center justify-between">
-        <div className="flex items-start gap-4 flex-1">
-          <div className="w-12 h-12 bg-gradient-to-br from-blue-600 to-purple-600 rounded-xl flex items-center justify-center text-white font-bold text-lg shadow-lg flex-shrink-0">
-            {idx + 1}
           </div>
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-3 mb-2">
-              <h3
-                className={`text-lg font-bold ${isDark ? "text-white" : "text-gray-900"
-                  }`}
-              >
-                {s.type}
-              </h3>
-              <span
-                className={`px-3 py-1 rounded-full text-xs font-semibold ${s.status === 'Paid'
-                  ? isDark
-                    ? "bg-green-900/30 text-green-400 border border-green-700"
-                    : "bg-green-50 text-green-700 border border-green-200"
-                  : s.status === 'In Progress'
-                    ? isDark
-                      ? "bg-yellow-900/30 text-yellow-400 border border-yellow-700"
-                      : "bg-yellow-50 text-yellow-700 border border-yellow-200"
-                    : isDark
-                      ? "bg-red-900/30 text-red-400 border border-red-700"
-                      : "bg-red-50 text-red-700 border border-red-200"
-                  }`}
-              >
-                {s.status === 'Paid' ? <FiCheckCircle className="inline mr-1" size={12} /> : <FiClock className="inline mr-1" size={12} />}
-                {s.status}
-              </span>
+
+          {/* Vehicle Info */}
+          <div className={`p-6 sm:p-8 ${isDark ? 'bg-gray-800' : 'bg-gray-50'}`}>
+            <div className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium mb-6 ${isDark ? 'bg-gray-700 text-gray-200' : 'bg-white text-gray-700'
+              } shadow-sm`}>
+              <span>{client.vehicleMake} {client.vehicleModel}</span>
+              <span className="text-gray-400">•</span>
+              <span>{client.vehicleYear}</span>
+              <span className="text-gray-400">•</span>
+              <span className="font-mono">{client.regNumber}</span>
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-3">
-              <div
-                className={`flex items-center gap-2 ${isDark ? "text-gray-300" : "text-gray-600"
-                  }`}
-              >
-                <FiCalendar
-                  className={isDark ? "text-blue-400" : "text-blue-600"}
-                  size={16}
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* Car Image */}
+              <div className="w-full">
+                <img
+                  src={
+                    client.carImage ||
+                    `https://via.placeholder.com/600x400?text=${encodeURIComponent(
+                      client.vehicleMake
+                    )}+${encodeURIComponent(client.vehicleModel)}`
+                  }
+                  alt="vehicle"
+                  className="w-full h-64 object-contain rounded-xl"
                 />
-                <span className="text-sm font-medium">{formatDate(s.date)}</span>
               </div>
-              {s.cost && (
-                <div
-                  className={`flex items-center gap-2 ${isDark ? "text-gray-300" : "text-gray-600"
-                    }`}
-                >
-                  <FiDollarSign
-                    className={isDark ? "text-green-400" : "text-green-600"}
-                    size={16}
-                  />
-                  <span className="text-sm font-medium">${s.cost}</span>
-                </div>
-              )}
-              {s.status && (
-                <div
-                  className={`flex items-center gap-2 ${isDark ? "text-gray-300" : "text-gray-600"
-                    }`}
-                >
-                  <FiClock
-                    className={isDark ? "text-purple-400" : "text-purple-600"}
-                    size={16}
-                  />
-                  <span className="text-sm font-medium">{s.status}</span>
+
+              {/* Damage Images */}
+              {Array.isArray(client.damageImages) && client.damageImages.length > 0 && (
+                <div>
+                  <h3 className={`text-lg font-semibold mb-3 ${isDark ? 'text-gray-200' : 'text-gray-800'}`}>
+                    Additional Images
+                  </h3>
+                  <div className="grid grid-cols-2 gap-3">
+                    {client.damageImages.slice(0, 4).map((img, idx) => (
+                      <div key={idx} className="aspect-video rounded-lg overflow-hidden shadow">
+                        <img
+                          src={img}
+                          alt={`damage-${idx}`}
+                          className="w-full h-full object-cover"
+                        />
+                      </div>
+                    ))}
+                  </div>
                 </div>
               )}
             </div>
-            {s.description && (
-              <p
-                className={`mt-3 text-sm ${isDark ? "text-gray-400" : "text-gray-600"
-                  }`}
-              >
-                {s.description}
-              </p>
+          </div>
+        </div>
+
+        {/* Contact Information */}
+        <div className={`rounded-2xl p-6 sm:p-8 shadow-lg ${isDark ? 'bg-gray-800' : 'bg-white'}`}>
+          <h2 className={`text-xl font-bold mb-6 ${isDark ? 'text-white' : 'text-gray-900'}`}>
+            Contact Information
+          </h2>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            <ContactCard icon={<FiPhone />} label="Phone" value={client.phone} isDark={isDark} />
+            <ContactCard icon={<FiMail />} label="Email" value={client.email} isDark={isDark} />
+            <ContactCard icon={<FiMapPin />} label="Address" value={client.address} isDark={isDark} />
+            <ContactCard icon={<FiCreditCard />} label="Registration No." value={client.regNumber} isDark={isDark} />
+            <ContactCard icon={<FiHash />} label="VIN / Chassis" value={client.vin} isDark={isDark} />
+            <ContactCard icon={<FiCalendar />} label="Last Service" value={lastService} isDark={isDark} />
+          </div>
+        </div>
+
+        {/* Tabs Section */}
+        <div className={`rounded-2xl shadow-lg overflow-hidden ${isDark ? 'bg-gray-800' : 'bg-white'}`}>
+          {/* Tab Header */}
+          <div className={`p-4 sm:p-6 border-b ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+              {/* Tab Buttons */}
+              <div className="flex gap-2 overflow-x-auto pb-2 sm:pb-0 scrollbar-hide">
+                {["overview", "services", "invoices"].map((tab) => (
+                  <button
+                    key={tab}
+                    onClick={() => setActiveTab(tab)}
+                    className={`px-4 py-2 rounded-lg font-medium transition-all whitespace-nowrap ${activeTab === tab
+                        ? "bg-gradient-to-r from-blue-600 to-purple-600 text-white shadow-md"
+                        : isDark
+                          ? "text-gray-300 hover:bg-gray-700"
+                          : "text-gray-700 hover:bg-gray-100"
+                      }`}
+                  >
+                    {tab.charAt(0).toUpperCase() + tab.slice(1)}
+                  </button>
+                ))}
+              </div>
+
+              {/* Action Buttons */}
+              {activeTab === "services" && (
+                <Link
+                  to="/services/new"
+                  state={{ customerId: client.id }}
+                  className="flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-gradient-to-r from-blue-600 to-purple-600 text-white hover:shadow-lg transition-shadow whitespace-nowrap"
+                >
+                  <FiPlus className="w-4 h-4" />
+                  <span className="font-medium">Add Service</span>
+                </Link>
+              )}
+              {activeTab === "invoices" && (
+                <Link
+                  to="/invoices/new"
+                  state={{ customerId: client.id }}
+                  className="flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-gradient-to-r from-green-600 to-teal-500 text-white hover:shadow-lg transition-shadow whitespace-nowrap"
+                >
+                  <FiPlus className="w-4 h-4" />
+                  <span className="font-medium">Create Invoice</span>
+                </Link>
+              )}
+            </div>
+          </div>
+
+          {/* Tab Content */}
+          <div className="p-6">
+            {/* Overview Tab */}
+            {activeTab === "overview" && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                <StatCard title="Last Service" value={lastService} icon={<FiCalendar />} isDark={isDark} />
+                <StatCard title="Total Services" value={totalServices} icon={<FiTool />} isDark={isDark} />
+                <StatCard title="Total Billed" value={`$${totalBilled.toFixed(2)}`} icon={<FiDollarSign />} isDark={isDark} />
+              </div>
+            )}
+
+            {/* Services Tab */}
+            {activeTab === "services" && (
+              <div className="space-y-4">
+                {services.length ? (
+                  services.map((s) => (
+                    <div
+                      key={s.id}
+                      onClick={() => {
+                        setSelectedService(s);
+                        setServiceForm(s);
+                      }}
+                      className={`p-4 sm:p-5 rounded-xl cursor-pointer transition-all hover:shadow-md ${isDark ? "bg-gray-700 hover:bg-gray-650" : "bg-gray-50 hover:bg-gray-100"
+                        }`}
+                    >
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                        <div className="flex-1 min-w-0">
+                          <h3 className={`font-bold text-lg truncate ${isDark ? "text-white" : "text-gray-800"}`}>
+                            {s.type || "Service"}
+                          </h3>
+                          <p className={`text-sm mt-1 ${isDark ? "text-gray-300" : "text-gray-600"}`}>
+                            {new Date(s.date).toLocaleDateString()} • ${s.cost || "0.00"}
+                          </p>
+                          {s.notes && (
+                            <p className={`text-xs mt-2 ${isDark ? "text-gray-400" : "text-gray-500"}`}>
+                              {s.notes}
+                            </p>
+                          )}
+                        </div>
+                        <span
+                          className={`px-3 py-1 text-xs font-medium rounded-full whitespace-nowrap ${s.status === "Paid"
+                              ? "bg-green-500/20 text-green-400"
+                              : s.status === "In Progress"
+                                ? "bg-yellow-500/20 text-yellow-400"
+                                : "bg-red-500/20 text-red-400"
+                            }`}
+                        >
+                          {s.status}
+                        </span>
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <div className="text-center py-12">
+                    <FiTool className={`w-12 h-12 mx-auto mb-3 ${isDark ? 'text-gray-600' : 'text-gray-400'}`} />
+                    <p className={isDark ? 'text-gray-400' : 'text-gray-500'}>No service records yet.</p>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Invoices Tab */}
+            {activeTab === "invoices" && (
+              <div className="space-y-4">
+                {invoices.length ? (
+                  invoices.map((inv) => (
+                    <div
+                      key={inv.id}
+                      onClick={() => setSelectedInvoice(inv)}
+                      className={`p-4 sm:p-5 rounded-xl cursor-pointer transition-all hover:shadow-md ${isDark ? "bg-gray-700 hover:bg-gray-650" : "bg-gray-50 hover:bg-gray-100"
+                        }`}
+                    >
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                        <div className="flex-1 min-w-0">
+                          <h3 className={`font-bold text-lg ${isDark ? "text-white" : "text-gray-800"}`}>
+                            Invoice #{inv.id}
+                          </h3>
+                          <p className={`text-sm mt-1 ${isDark ? "text-gray-300" : "text-gray-600"}`}>
+                            {new Date(inv.issuedAt || inv.createdAt).toLocaleDateString()} • $
+                            {(inv.grandTotal || inv.totalAmount || 0).toFixed(2)}
+                          </p>
+                        </div>
+                        <span
+                          className={`px-3 py-1 text-xs font-medium rounded-full whitespace-nowrap ${inv.status === "Paid"
+                              ? "bg-green-500/20 text-green-400"
+                              : "bg-yellow-500/20 text-yellow-400"
+                            }`}
+                        >
+                          {inv.status}
+                        </span>
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <div className="text-center py-12">
+                    <FiDollarSign className={`w-12 h-12 mx-auto mb-3 ${isDark ? 'text-gray-600' : 'text-gray-400'}`} />
+                    <p className={isDark ? 'text-gray-400' : 'text-gray-500'}>No invoices found.</p>
+                  </div>
+                )}
+              </div>
             )}
           </div>
         </div>
-        <Link
-          to={`/services/${s.id}`}
-          className={`ml-4 px-5 py-2.5 rounded-xl font-semibold transition-all duration-200 shadow-md hover:shadow-lg flex items-center gap-2 ${isDark
-            ? "bg-blue-600 hover:bg-blue-700 text-white"
-            : "bg-blue-600 hover:bg-blue-700 text-white"
-            }`}
-        >
-          View Details
-          <FiArrowLeft className="rotate-180" size={16} />
-        </Link>
+      </div>
+
+      <style jsx>{`
+        .scrollbar-hide::-webkit-scrollbar {
+          display: none;
+        }
+        .scrollbar-hide {
+          -ms-overflow-style: none;
+          scrollbar-width: none;
+        }
+      `}</style>
+    </div>
+  );
+}
+
+function ContactCard({ icon, label, value, isDark }) {
+  return (
+    <div
+      className={`p-4 rounded-xl flex items-center gap-3 ${isDark ? "bg-gray-700" : "bg-gray-50"
+        }`}
+    >
+      <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white flex-shrink-0">
+        {icon}
+      </div>
+      <div className="min-w-0 flex-1">
+        <p className={`text-xs font-medium uppercase mb-1 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+          {label}
+        </p>
+        <p className={`font-semibold truncate ${isDark ? 'text-white' : 'text-gray-900'}`}>
+          {value || "—"}
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function StatCard({ title, value, icon, isDark }) {
+  return (
+    <div
+      className={`p-5 rounded-xl flex items-center justify-between ${isDark ? "bg-gray-700" : "bg-gray-50"
+        }`}
+    >
+      <div>
+        <p className={`text-sm font-medium mb-1 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+          {title}
+        </p>
+        <p className={`text-2xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>
+          {value}
+        </p>
+      </div>
+      <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white">
+        {icon}
       </div>
     </div>
   );

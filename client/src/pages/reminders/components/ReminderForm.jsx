@@ -62,14 +62,16 @@ export default function ReminderForm({ clients = [], onSubmit, refreshReminders 
         try {
             setLoading(true);
             setMessage("");
-
+            
             const payload = {
                 clientId: Number(form.clientId),
                 nextService: form.nextService,
                 insuranceRenewal: form.insuranceRenewal || null,
                 warrantyExpiry: form.warrantyExpiry || null,
                 notify: form.notify || "SMS",
+                message: form.message, // ✅ added
             };
+
 
             const res = await axios.post(`${API_URL}/api/reminders`, payload, getAuthConfig());
 
@@ -82,6 +84,7 @@ export default function ReminderForm({ clients = [], onSubmit, refreshReminders 
                 nextService: "",
                 insuranceRenewal: "",
                 warrantyExpiry: "",
+                message: "", // 👈 added
                 notify: "SMS",
             });
 
@@ -213,6 +216,26 @@ export default function ReminderForm({ clients = [], onSubmit, refreshReminders 
                         />
                     </div>
                 </div>
+
+                {/* Message */}
+                <div>
+                    <label
+                        className={`block text-sm font-semibold mb-2 ${isDark ? "text-gray-300" : "text-gray-700"}`}
+                    >
+                        Message <span className="text-red-500">*</span>
+                    </label>
+                    <textarea
+                        value={form.message || ""}
+                        onChange={(e) => setForm({ ...form, message: e.target.value })}
+                        placeholder="Enter reminder message..."
+                        className={`w-full px-4 py-3 rounded-xl border-2 transition-all ${isDark
+                            ? "bg-gray-700 border-gray-600 text-white focus:border-orange-500"
+                            : "bg-white border-gray-300 text-gray-900 focus:border-orange-500"
+                            }`}
+                        required
+                    />
+                </div>
+
 
                 {/* Notification Type */}
                 <div>

@@ -1,7 +1,16 @@
+// client/src/pages/services/ServiceDetail.jsx
 import React, { useState, useEffect } from "react";
-import { useParams, Link, useNavigate } from "react-router-dom";
+import { useParams, Link } from "react-router-dom";
 import {
-  FiArrowLeft, FiDollarSign, FiCheckCircle, FiClock, FiTool, FiUser, FiPrinter, FiFileText,
+  FiArrowLeft,
+  FiDollarSign,
+  FiClock,
+  FiTool,
+  FiUser,
+  FiPrinter,
+  FiFileText,
+  FiClipboard,
+  FiTag,
 } from "react-icons/fi";
 import { FaCar } from "react-icons/fa";
 import { useTheme } from "../../contexts/ThemeContext";
@@ -20,17 +29,20 @@ const apiRequest = async (url, options = {}) => {
 
 export default function ServiceDetail() {
   const { id } = useParams();
-  const navigate = useNavigate();
   const { isDark } = useTheme();
   const [service, setService] = useState(null);
   const [error, setError] = useState("");
 
   useEffect(() => {
     const loadService = async () => {
-      const res = await apiRequest(`/api/services/${id}`);
-      const data = await res.json();
-      if (!res.ok) return setError(data.message || "Failed to load service");
-      setService(data);
+      try {
+        const res = await apiRequest(`/api/services/${id}`);
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.message || "Failed to load service");
+        setService(data);
+      } catch (err) {
+        setError(err.message);
+      }
     };
     loadService();
   }, [id]);
@@ -47,27 +59,56 @@ export default function ServiceDetail() {
 
   if (!service)
     return (
-      <div className="p-6 text-center text-gray-500">Loading service details...</div>
+      <div className="p-6 text-center text-gray-500">
+        Loading service details...
+      </div>
     );
 
-  const totalCost = (
-    Number(service.partsCost || 0) + Number(service.laborCost || 0)
-  ).toFixed(2);
+  // Calculation with GST (default 0 if missing)
+  const partsCost = Number(service.partsCost || 0);
+  const laborCost = Number(service.laborCost || 0);
+  const partsGst = Number(service.partsGst || 0);
+  const laborGst = Number(service.laborGst || 0);
+
+  const totalParts = partsCost + (partsCost * partsGst) / 100;
+  const totalLabor = laborCost + (laborCost * laborGst) / 100;
+  const estimatedTotal = (totalParts + totalLabor).toFixed(2);
+
+  const statusColor =
+    service.status === "Processing"
+      ? "bg-yellow-500"
+      : service.status === "Pending"
+        ? "bg-red-500"
+        : "bg-gray-400";
 
   return (
-    <div className={`min-h-screen p-6 lg:ml-16 ${isDark ? "bg-gray-900 text-gray-100" : "bg-gray-50 text-gray-900"}`}>
-      {/* Header / Hero */}
-      <div className={`rounded-3xl shadow-xl overflow-hidden ${isDark ? "bg-gray-800" : "bg-white"}`}>
-        <div className="p-6 flex items-center justify-between">
+    <div
+      className={`min-h-screen p-6 lg:ml-16 ${isDark ? "bg-gray-900 text-gray-100" : "bg-gray-50 text-gray-900"
+        }`}
+    >
+      {/* Header */}
+      <div
+        className={`rounded-3xl shadow-xl overflow-hidden ${isDark ? "bg-gray-800" : "bg-white"
+          }`}
+      >
+        <div className="p-6 flex flex-wrap items-center justify-between gap-4">
           <div>
-            <Link to="/services" className="flex items-center gap-2 text-green-600 font-medium mb-2">
+            <Link
+              to="/services"
+              className="flex items-center gap-2 text-green-600 font-medium mb-2"
+            >
               <FiArrowLeft /> Back
             </Link>
             <h1 className="text-3xl font-bold capitalize flex items-center gap-2">
-              <FiTool /> {service.type.replace("-", " ")}
+              <FiTool />{" "}
+              {service.subService?.name || service.type || "Unnamed Service"}
             </h1>
-            <p className="text-gray-500 mt-1">
-              Service ID #{service.id} • {new Date(service.date).toLocaleDateString()}
+            <p
+              className={`mt-1 ${isDark ? "text-gray-400" : "text-gray-500"
+                } text-sm`}
+            >
+              Service ID #{service.id} •{" "}
+              {new Date(service.date).toLocaleDateString()}
             </p>
           </div>
           <div className="flex gap-3">
@@ -88,53 +129,108 @@ export default function ServiceDetail() {
 
         {/* Status banner */}
         <div
-          className={`p-4 text-center text-white font-semibold ${service.status === "Paid"
-              ? "bg-green-600"
-              : service.status === "In Progress"
-                ? "bg-yellow-500"
-                : "bg-red-500"
-            }`}
+          className={`p-4 text-center text-white font-semibold ${statusColor}`}
         >
-          {service.status === "Paid" ? <FiCheckCircle className="inline mr-1" /> : <FiClock className="inline mr-1" />}
+          <FiClock className="inline mr-1" />
           {service.status}
         </div>
 
-        {/* Main Details */}
+        {/* Details Grid */}
         <div className="grid md:grid-cols-2 gap-6 p-8">
+          {/* Service Info */}
+          <div
+            className={`p-6 rounded-2xl shadow ${isDark ? "bg-gray-700" : "bg-gray-100"
+              }`}
+          >
+            <h2 className="font-bold text-xl flex items-center gap-2 mb-4">
+              <FiTool /> Service Details
+            </h2>
+            <div className="space-y-3">
+              <div>
+                <p className="text-sm text-gray-400">Category</p>
+                <p className="font-semibold">
+                  {service.category?.name || "N/A"}
+                </p>
+              </div>
+              <div>
+                <p className="text-sm text-gray-400">Sub-Service</p>
+                <p className="font-semibold">
+                  {service.subService?.name || "N/A"}
+                </p>
+              </div>
+              {service.notes && (
+                <div>
+                  <p className="text-sm text-gray-400">Notes</p>
+                  <p
+                    className={`whitespace-pre-wrap ${isDark ? "text-gray-300" : "text-gray-700"
+                      }`}
+                  >
+                    {service.notes}
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
+
           {/* Cost Breakdown */}
-          <div className={`${isDark ? "bg-gray-700" : "bg-gray-100"} p-6 rounded-2xl shadow`}>
+          <div
+            className={`p-6 rounded-2xl shadow ${isDark ? "bg-gray-700" : "bg-gray-100"
+              }`}
+          >
             <h2 className="font-bold text-xl flex items-center gap-2 mb-4">
               <FiDollarSign /> Cost Breakdown
             </h2>
-            <div className="space-y-2">
+            <div className="space-y-3 text-sm">
               <div className="flex justify-between">
                 <span>Parts Cost</span>
-                <span className="font-semibold">${Number(service.partsCost || 0).toFixed(2)}</span>
+                <span>${partsCost.toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span>Parts GST</span>
+                <span>{partsGst}%</span>
               </div>
               <div className="flex justify-between">
                 <span>Labor Cost</span>
-                <span className="font-semibold">${Number(service.laborCost || 0).toFixed(2)}</span>
+                <span>${laborCost.toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span>Labor GST</span>
+                <span>{laborGst}%</span>
               </div>
               <hr className="my-3 border-gray-500/30" />
               <div className="flex justify-between text-lg font-bold text-green-500">
-                <span>Total</span>
-                <span>${totalCost}</span>
+                <span>Estimated Total</span>
+                <span>${estimatedTotal}</span>
               </div>
             </div>
           </div>
 
           {/* Client Info */}
-          <div className={`${isDark ? "bg-gray-700" : "bg-gray-100"} p-6 rounded-2xl shadow`}>
+          <div
+            className={`p-6 rounded-2xl shadow ${isDark ? "bg-gray-700" : "bg-gray-100"
+              } md:col-span-2`}
+          >
             <h2 className="font-bold text-xl flex items-center gap-2 mb-4">
               <FiUser /> Client Information
             </h2>
             {service.client ? (
-              <div className="space-y-2">
+              <div className="grid sm:grid-cols-2 gap-3">
                 <div className="flex items-center gap-2">
-                  <FiUser className="text-green-500" /> <span>{service.client.fullName}</span>
+                  <FiUser className="text-green-500" />{" "}
+                  <span>{service.client.fullName}</span>
                 </div>
                 <div className="flex items-center gap-2">
-                  <FaCar className="text-blue-500" /> <span>{service.client.regNumber}</span>
+                  <FaCar className="text-blue-500" />{" "}
+                  <span>{service.client.regNumber}</span>
+                </div>
+                <div className="flex items-center gap-2 col-span-2 text-sm text-gray-400">
+                  <FiTag />{" "}
+                  <span>
+                    Vehicle:{" "}
+                    {service.client.vehicleMake
+                      ? `${service.client.vehicleMake} ${service.client.vehicleModel}`
+                      : "N/A"}
+                  </span>
                 </div>
               </div>
             ) : (
@@ -144,7 +240,7 @@ export default function ServiceDetail() {
         </div>
 
         {/* Billing CTA */}
-        <div className="border-t p-6 flex justify-between items-center">
+        <div className="border-t p-6 flex justify-between items-center flex-wrap gap-3">
           <div>
             <h3 className="font-bold text-lg">Ready to bill this service?</h3>
             <p className="text-gray-500 text-sm">
@@ -156,13 +252,17 @@ export default function ServiceDetail() {
             state={{
               serviceId: service.id,
               clientId: service.clientId,
-              description: service.type,
+              description:
+                service.subService?.name || service.category?.name || "Service",
               partsCost: service.partsCost,
               laborCost: service.laborCost,
+              partsGst: service.partsGst,
+              laborGst: service.laborGst,
+              estimatedTotal,
             }}
             className="px-6 py-3 bg-gradient-to-r from-green-600 to-teal-600 hover:from-green-700 hover:to-teal-700 text-white font-semibold rounded-xl shadow-lg flex items-center gap-2"
           >
-            <FiFileText /> Create Invoice
+            <FiClipboard /> Create Invoice
           </Link>
         </div>
       </div>
