@@ -1,7 +1,7 @@
 // client/src/pages/reports/ReportsList.jsx
 import React, { useState } from "react";
 
-export default function ReportsList({ invoices, clients, isDark }) {
+export default function ReportsList({ invoices, clients, services = [], isDark }) {
     const [selectedInvoice, setSelectedInvoice] = useState(null);
     const [invoiceDetails, setInvoiceDetails] = useState(null);
 
@@ -19,7 +19,9 @@ export default function ReportsList({ invoices, clients, isDark }) {
 
     return (
         <div className="space-y-6">
-            {/* Recent Invoices Card */}
+            {/* ============================
+          🧾 Recent Invoices Section
+      ============================ */}
             <div
                 className={`rounded-3xl border shadow-lg ${isDark ? "bg-gray-800 border-gray-700" : "bg-white border-gray-200"
                     }`}
@@ -71,7 +73,69 @@ export default function ReportsList({ invoices, clients, isDark }) {
                 </div>
             </div>
 
-            {/* Invoice Detail Modal */}
+            {/* ============================
+          🧰 Recent Services Section
+      ============================ */}
+            <div
+                className={`rounded-3xl border shadow-lg ${isDark ? "bg-gray-800 border-gray-700" : "bg-white border-gray-200"
+                    }`}
+            >
+                <div
+                    className={`p-5 border-b ${isDark
+                            ? "border-gray-700 bg-gradient-to-r from-gray-800 to-gray-700"
+                            : "border-gray-200 bg-gradient-to-r from-indigo-600 to-purple-600"
+                        } text-white`}
+                >
+                    <h3 className="text-2xl font-bold">Recent Services</h3>
+                    <p className="text-sm text-white/80">Latest completed and pending services</p>
+                </div>
+
+                <div className="p-6">
+                    {services.length === 0 ? (
+                        <div className="text-gray-500">No services found.</div>
+                    ) : (
+                        services.slice(0, 10).map((srv) => (
+                            <div
+                                key={srv.id}
+                                className={`py-3 px-3 flex justify-between rounded-lg transition ${isDark
+                                        ? "hover:bg-gray-700 border-b border-gray-700"
+                                        : "hover:bg-gray-100 border-b border-gray-200"
+                                    }`}
+                            >
+                                <div className="flex flex-col">
+                                    <div className="font-semibold">{srv.type}</div>
+                                    <div className="text-xs text-gray-400">
+                                        {srv.client?.fullName || "Unassigned Client"}
+                                    </div>
+                                    <div className="text-xs text-gray-500">
+                                        {srv.date ? new Date(srv.date).toLocaleDateString() : "No date"}
+                                    </div>
+                                </div>
+
+                                <div className="text-right">
+                                    <div className="font-bold text-green-500">
+                                        ${Number(srv.cost || 0).toFixed(2)}
+                                    </div>
+                                    <div
+                                        className={`text-xs mt-1 ${srv.status === "Completed"
+                                                ? "text-green-500"
+                                                : srv.status === "Pending"
+                                                    ? "text-yellow-500"
+                                                    : "text-gray-400"
+                                            }`}
+                                    >
+                                        {srv.status}
+                                    </div>
+                                </div>
+                            </div>
+                        ))
+                    )}
+                </div>
+            </div>
+
+            {/* ============================
+          🪪 Invoice Details Modal
+      ============================ */}
             {invoiceDetails && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
                     <div
@@ -82,7 +146,9 @@ export default function ReportsList({ invoices, clients, isDark }) {
                     >
                         {/* Modal Header */}
                         <div
-                            className={`p-4 flex items-center justify-between border-b ${isDark ? "border-gray-800 bg-gray-800" : "border-gray-100 bg-gray-50"
+                            className={`p-4 flex items-center justify-between border-b ${isDark
+                                    ? "border-gray-800 bg-gray-800"
+                                    : "border-gray-100 bg-gray-50"
                                 }`}
                         >
                             <h3 className="text-xl font-bold">
@@ -150,9 +216,7 @@ export default function ReportsList({ invoices, clients, isDark }) {
 
                             {/* Vehicle Info */}
                             <div>
-                                <h3 className="font-semibold text-lg mb-2">
-                                    Vehicle Information
-                                </h3>
+                                <h3 className="font-semibold text-lg mb-2">Vehicle Information</h3>
                                 <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm">
                                     <div>
                                         <b>Make:</b> {invoiceDetails.client?.vehicleMake}
@@ -172,7 +236,7 @@ export default function ReportsList({ invoices, clients, isDark }) {
                                 </div>
                             </div>
 
-                            {/* Service Details */}
+                            {/* Linked Services */}
                             <div>
                                 <h3 className="font-semibold text-lg mb-3">Service Details</h3>
                                 {invoiceDetails.services?.length === 0 ? (
@@ -223,8 +287,7 @@ export default function ReportsList({ invoices, clients, isDark }) {
                             {/* Totals */}
                             <div className="border-t pt-4 text-right">
                                 <div className="text-sm text-gray-400">
-                                    Subtotal: ${Number(invoiceDetails.totalAmount || 0).toFixed(2)}{" "}
-                                    <br />
+                                    Subtotal: ${Number(invoiceDetails.totalAmount || 0).toFixed(2)} <br />
                                     Tax: ${Number(invoiceDetails.tax || 0).toFixed(2)} | Discount: $
                                     {Number(invoiceDetails.discount || 0).toFixed(2)}
                                 </div>

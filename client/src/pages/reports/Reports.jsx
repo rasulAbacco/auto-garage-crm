@@ -12,6 +12,7 @@ export default function Reports() {
   const [summary, setSummary] = useState(null);
   const [invoices, setInvoices] = useState([]);
   const [clients, setClients] = useState([]);
+  const [services, setServices] = useState([]);
   const [error, setError] = useState(null);
 
   const base = import.meta.env.VITE_API_BASE_URL || "http://localhost:5000";
@@ -20,26 +21,37 @@ export default function Reports() {
     try {
       setLoading(true);
       const token = localStorage.getItem("token");
+      if (!token) throw new Error("No auth token found");
+
       const headers = { Authorization: `Bearer ${token}` };
 
-      const [summaryRes, invoicesRes, clientsRes] = await Promise.all([
+      // Fetch everything in parallel
+      const [summaryRes, invoicesRes, clientsRes, servicesRes] = await Promise.all([
         fetch(`${base}/api/reports/summary`, { headers }),
         fetch(`${base}/api/invoices`, { headers }),
         fetch(`${base}/api/clients`, { headers }),
+        fetch(`${base}/api/reports/all-services`, { headers }),
       ]);
 
-      const [summaryData, invoicesData, clientsData] = await Promise.all([
+      // Handle HTTP errors quickly
+      if (!summaryRes.ok || !invoicesRes.ok || !clientsRes.ok || !servicesRes.ok) {
+        throw new Error("One or more requests failed");
+      }
+
+      const [summaryData, invoicesData, clientsData, servicesData] = await Promise.all([
         summaryRes.json(),
         invoicesRes.json(),
         clientsRes.json(),
+        servicesRes.json(),
       ]);
 
       setSummary(summaryData);
       setInvoices(invoicesData);
       setClients(clientsData);
+      setServices(servicesData);
     } catch (err) {
-      console.error(err);
-      setError("Failed to load reports");
+      console.error("❌ Failed to load reports:", err);
+      setError("Failed to load reports. Please try again later.");
     } finally {
       setLoading(false);
     }
@@ -70,7 +82,7 @@ export default function Reports() {
 
   return (
     <div className="lg:ml-16 p-6 space-y-6">
-      {/* Header */}
+      {/* Header Controls */}
       <div className="flex gap-4 items-center">
         <button
           onClick={() => toggleMode("analytics")}
@@ -102,6 +114,7 @@ export default function Reports() {
                 ? "bg-gray-800 text-white border border-gray-700"
                 : "bg-white text-gray-700 border border-gray-200"
               }`}
+            title="Print report"
           >
             <FiPrinter />
           </button>
@@ -111,18 +124,32 @@ export default function Reports() {
                 ? "bg-gray-800 text-white border border-gray-700"
                 : "bg-white text-gray-700 border border-gray-200"
               }`}
+            title="Export report"
           >
             <FiDownload />
           </button>
         </div>
       </div>
 
-      {error && <div className="text-red-500">{error}</div>}
+      {error && (
+        <div
+          className={`p-4 rounded-lg border ${isDark ? "bg-red-900/30 border-red-700 text-red-300" : "bg-red-50 border-red-300 text-red-600"
+            }`}
+        >
+          {error}
+        </div>
+      )}
 
+      {/* Content View Switch */}
       {mode === "analytics" ? (
         <AnalyticsView summary={summary} invoices={invoices} isDark={isDark} />
       ) : (
-        <ReportsList invoices={invoices} clients={clients} isDark={isDark} />
+        <ReportsList
+          invoices={invoices}
+          clients={clients}
+          services={services}
+          isDark={isDark}
+        />
       )}
     </div>
   );

@@ -34,6 +34,7 @@ import WashingCenter from "./pages/garages/WashingCenter.jsx";
 import BikeSpareParts from "./pages/spareparts/BikeSpareParts.jsx";
 import CarSpareParts from "./pages/spareparts/CarSpareParts.jsx";
 import ContactUs from "./pages/ContactUs.jsx";
+import ClientsLayout from "./components/ClientLayout.jsx";
 
 function App() {
   return (
@@ -65,10 +66,14 @@ function App() {
         >
           <Route index element={<Navigate to="/dashboard" />} />
           <Route path="/dashboard" element={<Dashboard />} />
-          <Route path="/clients" element={<ClientsList />} />
+          {/* More specific routes first */}
           <Route path="/clients/new" element={<ClientForm />} />
-          <Route path="/clients/:id" element={<ClientDetail />} />
           <Route path="/clients/:id/edit" element={<ClientForm />} />
+          <Route path="/clients/:id" element={<ClientDetail />} />
+
+          {/* Less specific routes last */}
+          <Route path="/clients" element={<ClientsList />} />
+
           <Route path="/services" element={<ServicesList />} />
           <Route path="/services/new" element={<ServiceForm />} />
           <Route path="/services/:id" element={<ServiceDetail />} />

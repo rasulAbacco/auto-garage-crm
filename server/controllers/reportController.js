@@ -9,13 +9,13 @@ import prisma from "../models/prismaClient.js";
 export const getRevenueSummary = async (req, res) => {
     try {
         const invoices = await prisma.invoice.findMany({
-            select: { grandTotal: true, status: true, issuedAt: true },
+            select: { grandTotal: true, status: true, createdAt: true },
         });
 
-        const totalRevenue = invoices.reduce((sum, inv) => sum + inv.grandTotal, 0);
+        const totalRevenue = invoices.reduce((sum, inv) => sum + (Number(inv.grandTotal) || 0), 0);
         const paidRevenue = invoices
             .filter((i) => i.status === "Paid")
-            .reduce((sum, inv) => sum + inv.grandTotal, 0);
+            .reduce((sum, inv) => sum + (Number(inv.grandTotal) || 0), 0);
         const pendingRevenue = totalRevenue - paidRevenue;
 
         res.json({
@@ -51,7 +51,9 @@ export const getTopClients = async (req, res) => {
                     select: { id: true, fullName: true, phone: true },
                 });
                 return {
-                    ...client,
+                    id: client?.id || item.clientId,
+                    fullName: client?.fullName || "Unknown",
+                    phone: client?.phone || "N/A",
                     totalSpent: item._sum.grandTotal || 0,
                 };
             })
@@ -65,16 +67,16 @@ export const getTopClients = async (req, res) => {
 };
 
 /**
- * @desc Service frequency report
+ * @desc Service frequency report (by status instead of type)
  * @route GET /api/reports/services
  * @access Private
  */
 export const getServiceStats = async (req, res) => {
     try {
         const serviceStats = await prisma.service.groupBy({
-            by: ["type"],
-            _count: { type: true },
-            orderBy: { _count: { type: "desc" } },
+            by: ["status"],
+            _count: { status: true },
+            orderBy: { _count: { status: "desc" } },
             take: 10,
         });
 
@@ -104,14 +106,18 @@ export const getInvoiceStatusSummary = async (req, res) => {
     }
 };
 
-// server/controllers/reportController.js
+/**
+ * @desc Full invoice details (used by reports list modal)
+ * @route GET /api/reports/invoice/:id
+ * @access Private
+ */
 export const getFullInvoiceDetails = async (req, res) => {
     try {
         const { id } = req.params;
         console.log(`🔍 Fetching full invoice #${id}`);
 
         const invoice = await prisma.invoice.findUnique({
-            where: { id: parseInt(id) },
+            where: { id: Number(id) },
             include: {
                 client: {
                     select: {
@@ -130,14 +136,14 @@ export const getFullInvoiceDetails = async (req, res) => {
                 services: {
                     select: {
                         id: true,
-                        type: true,
                         date: true,
+                        status: true,
                         partsCost: true,
                         laborCost: true,
                         cost: true,
-                        status: true,
-                        description: true,
-                        // Optional: if you add a nextServiceDate field later
+                        notes: true,
+                        category: { select: { name: true } },
+                        subService: { select: { name: true } },
                     },
                 },
             },
@@ -155,21 +161,21 @@ export const getFullInvoiceDetails = async (req, res) => {
     }
 };
 
-
 /**
- * Combined summary for all reports
+ * @desc Combined summary for all reports (invoices + services + clients + service stats)
  * @route GET /api/reports/summary
+ * @access Private
  */
 export const getReportsSummary = async (req, res) => {
     try {
-        const [invoices, services, topClientsGroup, invoiceStatus] = await Promise.all([
+        const [invoices, serviceGroups, topClientsGroup, invoiceStatus] = await Promise.all([
             prisma.invoice.findMany({
-                select: { grandTotal: true, status: true, createdAt: true }, // ✅ changed from issuedAt to createdAt
+                select: { grandTotal: true, status: true, createdAt: true },
             }),
             prisma.service.groupBy({
-                by: ["type"],
-                _count: { type: true },
-                orderBy: { _count: { type: "desc" } },
+                by: ["status"], // ✅ using status instead of type
+                _count: { status: true },
+                orderBy: { _count: { status: "desc" } },
                 take: 10,
             }),
             prisma.invoice.groupBy({
@@ -184,14 +190,14 @@ export const getReportsSummary = async (req, res) => {
             }),
         ]);
 
-        // ✅ compute revenue safely
-        const totalRevenue = invoices.reduce((sum, i) => sum + (i.grandTotal || 0), 0);
+        // Revenue calculations
+        const totalRevenue = invoices.reduce((sum, i) => sum + (Number(i.grandTotal) || 0), 0);
         const paidRevenue = invoices
             .filter((i) => i.status === "Paid")
-            .reduce((sum, i) => sum + (i.grandTotal || 0), 0);
+            .reduce((sum, i) => sum + (Number(i.grandTotal) || 0), 0);
         const pendingRevenue = totalRevenue - paidRevenue;
 
-        // ✅ top clients
+        // Top clients
         const topClients = await Promise.all(
             topClientsGroup.map(async (tc) => {
                 const client = await prisma.client.findUnique({
@@ -207,17 +213,58 @@ export const getReportsSummary = async (req, res) => {
             })
         );
 
-        // ✅ normalize invoice status data
+        // Invoice status normalization
         const invoiceStatusSummary = invoiceStatus.map((s) => ({
             status: s.status,
             count: s._count.status || 0,
         }));
 
+        // Services summary
+        const servicesRaw = await prisma.service.findMany({
+            select: { id: true, status: true, cost: true, date: true, categoryId: true, subServiceId: true },
+        });
+
+        const totalServices = servicesRaw.length;
+        const completedServices = servicesRaw.filter((s) => s.status === "Completed").length;
+        const pendingServices = servicesRaw.filter((s) => s.status === "Pending").length;
+        const cancelledServices = servicesRaw.filter((s) => s.status === "Cancelled" || s.status === "Void").length;
+
+        const totalServiceRevenue = servicesRaw.reduce((sum, s) => sum + (Number(s.cost) || 0), 0);
+        const averageServiceCost = totalServices > 0 ? totalServiceRevenue / totalServices : 0;
+
+        // Revenue grouped by category (instead of type)
+        const categoryRevenueMap = {};
+        for (const s of servicesRaw) {
+            const key = s.categoryId ? `Category #${s.categoryId}` : "Uncategorized";
+            categoryRevenueMap[key] = (categoryRevenueMap[key] || 0) + (Number(s.cost) || 0);
+        }
+        const topServiceCategories = Object.entries(categoryRevenueMap)
+            .map(([category, total]) => ({ category, total }))
+            .sort((a, b) => b.total - a.total)
+            .slice(0, 10);
+
+        // Frequency by service status
+        const serviceStats = serviceGroups.map((g) => ({
+            status: g.status || "Unknown",
+            count: g._count.status || 0,
+        }));
+
+        // Final payload
         res.json({
             revenueSummary: { totalRevenue, paidRevenue, pendingRevenue },
-            serviceStats: services,
+            invoiceCount: invoices.length,
+            serviceStats,
             topClients,
             invoiceStatusSummary,
+            serviceSummary: {
+                totalServices,
+                completedServices,
+                pendingServices,
+                cancelledServices,
+                totalServiceRevenue,
+                averageServiceCost,
+                topServiceCategories,
+            },
         });
     } catch (error) {
         console.error("❌ Error fetching reports summary:", error);
@@ -225,3 +272,37 @@ export const getReportsSummary = async (req, res) => {
     }
 };
 
+/**
+ * @desc All services list (simple) - useful for frontend recent services
+ * @route GET /api/reports/all-services
+ * @access Private
+ */
+export const getServicesList = async (req, res) => {
+    try {
+        const services = await prisma.service.findMany({
+            include: {
+                client: { select: { id: true, fullName: true } },
+                invoice: { select: { id: true } },
+                category: { select: { name: true } },
+                subService: { select: { name: true } },
+            },
+            orderBy: { date: "desc" },
+            take: 200,
+        });
+
+        res.json(services);
+    } catch (error) {
+        console.error("❌ Error fetching services list:", error);
+        res.status(500).json({ message: "Error fetching services list" });
+    }
+};
+
+export default {
+    getRevenueSummary,
+    getTopClients,
+    getServiceStats,
+    getInvoiceStatusSummary,
+    getFullInvoiceDetails,
+    getReportsSummary,
+    getServicesList,
+};
