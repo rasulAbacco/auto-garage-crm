@@ -31,7 +31,8 @@ app.use(helmet());
 // Enable CORS (allow frontend connection)
 const allowedOrigins = [
   "http://localhost:5173",
-  "https://auto-garage-crm-r7l4.onrender.com"
+  "https://auto-garage-crm-r7l4.onrender.com",
+  "https://themotordesk.com",
 ];
 
 app.use(
