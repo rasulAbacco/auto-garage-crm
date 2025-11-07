@@ -37,6 +37,7 @@ export default function ClientForm() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [loadingClient, setLoadingClient] = useState(false);
 
+  /** Fetch client for edit mode */
   useEffect(() => {
     if (!id) return;
     const fetchClient = async () => {
@@ -53,6 +54,8 @@ export default function ClientForm() {
         }
 
         const data = await res.json();
+
+        // Ensure defaults if fields missing (for backward compatibility)
         setForm({
           ...empty,
           ...data,
@@ -70,52 +73,42 @@ export default function ClientForm() {
     fetchClient();
   }, [id]);
 
+  /** ✅ Auto-fetch car image from Unsplash when make + model entered */
   useEffect(() => {
     if (!form.vehicleMake || !form.vehicleModel || isImageUploaded) return;
 
     const fetchCarImage = async () => {
-      const baseQuery = `${form.vehicleMake} ${form.vehicleModel}`;
-      const queryVariants = [`${baseQuery} car`];
-
+      const query = `${form.vehicleMake} ${form.vehicleModel} car`;
       try {
-        let bestImage = null;
-        for (const query of queryVariants) {
-          const res = await fetch(
-            `https://api.unsplash.com/search/photos?query=${encodeURIComponent(query)}&client_id=${UNSPLASH_KEY}&orientation=landscape&per_page=5`
-          );
-          if (!res.ok) {
-            console.warn(`Unsplash API error for query "${query}"`);
-            continue;
-          }
-          const data = await res.json();
-          if (data.results && data.results.length > 0) {
-            bestImage = data.results[0];
-            console.log(`✅ Found image for query "${query}"`);
-            break;
-          }
-        }
+        const res = await fetch(
+          `https://api.unsplash.com/search/photos?query=${encodeURIComponent(
+            query
+          )}&client_id=${UNSPLASH_KEY}&orientation=landscape&per_page=1`
+        );
+        const data = await res.json();
 
-        if (bestImage) {
-          const imgUrl = bestImage.urls.small;
+        if (data.results && data.results.length > 0) {
+          const imgUrl = data.results[0].urls.small;
           setForm((prev) => ({
             ...prev,
             carImage: imgUrl,
             adImage: imgUrl,
           }));
           setIsImageUploaded(true);
-          console.log(`✅ Auto image set: ${imgUrl}`);
+          console.log(`✅ Auto image found for ${query}: ${imgUrl}`);
         } else {
-          console.warn("⚠️ No suitable image found");
+          console.warn(`⚠️ No Unsplash image found for ${query}`);
         }
       } catch (err) {
-        console.error("Error fetching images from Unsplash:", err);
+        console.error("Unsplash fetch error:", err);
       }
     };
 
     const debounce = setTimeout(fetchCarImage, 800);
     return () => clearTimeout(debounce);
-  }, [form.vehicleMake, form.vehicleModel, isImageUploaded]);
+  }, [form.vehicleMake, form.vehicleModel]);
 
+  /** Basic validation */
   const validate = () => {
     if (!form.fullName || form.fullName.trim().length < 2) {
       alert("Please enter a valid full name");
@@ -140,6 +133,7 @@ export default function ClientForm() {
     return true;
   };
 
+  /** Submit form */
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!validate()) return;
@@ -183,101 +177,86 @@ export default function ClientForm() {
     }
   };
 
+  /** Render */
   return (
-    <div className={`min-h-screen ${isDark ? 'bg-gray-900' : 'bg-gray-50'} lg:ml-16`}>
-      <div className="max-w-6xl mx-auto p-4 sm:p-6 lg:p-8">
-        {/* Header */}
-        <div className="mb-6">
+    <div className="lg:ml-16 p-6 space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
           <Link
             to="/clients"
-            className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg mb-4 transition-colors ${isDark
-                ? "text-gray-300 hover:text-white hover:bg-gray-800"
-                : "text-gray-600 hover:text-gray-900 hover:bg-gray-100"
-              }`}
+            className={`inline-flex items-center gap-2 ${isDark
+              ? "text-gray-300 hover:text-white"
+              : "text-gray-600 hover:text-gray-900"
+              } transition-colors duration-200 mb-3`}
           >
-            <FiArrowLeft className="w-4 h-4" />
+            <FiArrowLeft />
             <span className="font-medium">Back to Clients</span>
           </Link>
-
-          <div className={`p-6 sm:p-8 rounded-2xl shadow-lg ${isDark ? 'bg-gradient-to-r from-blue-900/50 to-purple-900/50' : 'bg-gradient-to-r from-blue-600 to-purple-600'
-            }`}>
-            <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-white">
-              {id ? "Edit Client" : "Add New Client"}
-            </h1>
-            <p className="text-blue-100 mt-2">
-              {id ? "Update client and vehicle information" : "Enter client and vehicle details"}
-            </p>
-          </div>
+          <h1
+            className={`text-3xl font-bold ${isDark ? "text-white" : "text-gray-900"
+              }`}
+          >
+            {id ? "Edit Client" : "Add New Client"}
+          </h1>
         </div>
-
-        {/* Form */}
-        <form onSubmit={handleSubmit} className="space-y-6">
-          {/* Personal Info */}
-          <div className={`rounded-2xl p-6 sm:p-8 shadow-lg ${isDark ? 'bg-gray-800' : 'bg-white'}`}>
-            <PersonalInfoSection form={form} setForm={setForm} isDark={isDark} />
-          </div>
-
-          {/* Vehicle Info */}
-          <div className={`rounded-2xl p-6 sm:p-8 shadow-lg ${isDark ? 'bg-gray-800' : 'bg-white'}`}>
-            <VehicleInfoSection form={form} setForm={setForm} isDark={isDark} />
-          </div>
-
-          {/* Image Uploader */}
-          <div className={`rounded-2xl p-6 sm:p-8 shadow-lg ${isDark ? 'bg-gray-800' : 'bg-white'}`}>
-            <ImageUploader
-              form={form}
-              setForm={setForm}
-              isDark={isDark}
-              isImageUploaded={isImageUploaded}
-              setIsImageUploaded={setIsImageUploaded}
-            />
-          </div>
-
-          {/* 3D Vehicle Viewer */}
-          {(form.carImage || form.adImage) && (
-            <div className={`rounded-2xl p-6 sm:p-8 shadow-lg ${isDark ? 'bg-gray-800' : 'bg-white'}`}>
-              <Vehicle3DViewer
-                adImage={form.adImage}
-                carImage={form.carImage}
-                damageImages={form.damageImages}
-                vehicleMake={form.vehicleMake}
-                vehicleModel={form.vehicleModel}
-                isDark={isDark}
-              />
-            </div>
-          )}
-
-          {/* Action Buttons */}
-          <div className="flex flex-col sm:flex-row gap-4">
-            <button
-              type="submit"
-              disabled={isSubmitting || loadingClient}
-              className="flex-1 sm:flex-none flex items-center justify-center gap-2 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white rounded-xl px-8 py-4 font-bold text-lg transition-all duration-200 shadow-lg hover:shadow-xl disabled:opacity-60 disabled:cursor-not-allowed"
-            >
-              <FiSave size={20} />
-              {isSubmitting
-                ? id
-                  ? "Updating..."
-                  : "Saving..."
-                : id
-                  ? "Update Client"
-                  : "Save Client"}
-            </button>
-
-            <button
-              type="button"
-              onClick={() => navigate(-1)}
-              className={`flex-1 sm:flex-none flex items-center justify-center gap-2 px-8 py-4 rounded-xl font-bold text-lg transition-all duration-200 shadow-lg hover:shadow-xl ${isDark
-                  ? "bg-gray-700 hover:bg-gray-600 text-white"
-                  : "bg-white hover:bg-gray-50 text-gray-700 border-2 border-gray-300"
-                }`}
-            >
-              <FiX size={20} />
-              Cancel
-            </button>
-          </div>
-        </form>
       </div>
+
+      <form onSubmit={handleSubmit} className="space-y-8">
+        {/* Personal Info */}
+        <PersonalInfoSection form={form} setForm={setForm} isDark={isDark} />
+
+        {/* Vehicle Info */}
+        <VehicleInfoSection form={form} setForm={setForm} isDark={isDark} />
+
+        {/* Image Uploader */}
+        <ImageUploader
+          form={form}
+          setForm={setForm}
+          isDark={isDark}
+          isImageUploaded={isImageUploaded}
+          setIsImageUploaded={setIsImageUploaded}
+        />
+
+        {/* 3D Vehicle Viewer */}
+        <Vehicle3DViewer
+          adImage={form.adImage}
+          carImage={form.carImage}
+          damageImages={form.damageImages}
+          vehicleMake={form.vehicleMake}
+          vehicleModel={form.vehicleModel}
+          isDark={isDark}
+        />
+
+        {/* Buttons */}
+        <div className="flex gap-4">
+          <button
+            type="submit"
+            disabled={isSubmitting || loadingClient}
+            className="flex items-center gap-2 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white rounded-xl px-8 py-4 font-bold text-lg transition-all duration-200 shadow-xl hover:shadow-2xl disabled:opacity-60"
+          >
+            <FiSave size={20} />
+            {isSubmitting
+              ? id
+                ? "Updating..."
+                : "Saving..."
+              : id
+                ? "Update Client"
+                : "Save Client"}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => navigate(-1)}
+            className={`flex items-center gap-2 px-8 py-4 rounded-xl font-bold text-lg transition-all duration-200 shadow-lg hover:shadow-xl ${isDark
+              ? "bg-gray-700 hover:bg-gray-600 text-white border-2 border-gray-600"
+              : "bg-white hover:bg-gray-50 text-gray-700 border-2 border-gray-300"
+              }`}
+          >
+            <FiX size={20} />
+            Cancel
+          </button>
+        </div>
+      </form>
     </div>
   );
 }
