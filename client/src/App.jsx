@@ -39,7 +39,7 @@ import ClientsLayout from "./components/ClientLayout.jsx";
 function App() {
   return (
     <ThemeProvider>
-        <ScrollToTop />
+      <ScrollToTop />
       <Routes>
         {/* Public pages (landing, pricing) */}
         <Route element={<PublicLayout />}>
@@ -80,6 +80,7 @@ function App() {
           <Route path="/services/:id/edit" element={<ServiceForm />} />
           <Route path="/billing" element={<BillingList />} />
           <Route path="/billing/new" element={<BillingForm />} />
+          <Route path="/billing/:id/edit" element={<BillingForm />} />// Edit billing
           <Route path="/billing/:id" element={<Invoice />} />
           <Route path="/reminders" element={<RemindersList />} />
           <Route path="/reports" element={<Reports />} />

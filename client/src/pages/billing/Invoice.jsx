@@ -21,7 +21,7 @@ import {
   FiInfo,
   FiPercent,
 } from 'react-icons/fi'
-import { FaCar } from "react-icons/fa";
+import { FaRupeeSign, FaCar } from "react-icons/fa";
 import { useTheme } from '../../contexts/ThemeContext'
 
 const API_URL = import.meta.env.VITE_API_BASE_URL;
@@ -185,7 +185,7 @@ export default function Invoice() {
 
         {/* Cost Breakdown */}
         <div className="p-8">
-          <h2 className="text-xl font-bold mb-4 flex items-center gap-2"><FiDollarSign /> Cost Breakdown</h2>
+          <h2 className="text-xl font-bold mb-4 flex items-center gap-2"><FaRupeeSign /> Cost Breakdown</h2>
           <table className="w-full text-sm border-collapse">
             <thead className={`${isDark ? 'bg-gray-700' : 'bg-gray-100'}`}>
               <tr>
@@ -198,29 +198,29 @@ export default function Invoice() {
             <tbody>
               <tr className="border-b">
                 <td className="p-3 flex items-center gap-2"><FiTool /> Parts</td>
-                <td className="p-3 text-right">₹{partsCost.toFixed(2)}</td>
+                <td className="p-3 text-right">₹ {partsCost.toFixed(2)}</td>
                 <td className="p-3 text-right">{partsGst}%</td>
-                <td className="p-3 text-right font-bold">₹{partsTotal.toFixed(2)}</td>
+                <td className="p-3 text-right font-bold">₹ {partsTotal.toFixed(2)}</td>
               </tr>
               <tr className="border-b">
                 <td className="p-3 flex items-center gap-2"><FiUser /> Labor</td>
-                <td className="p-3 text-right">₹{laborCost.toFixed(2)}</td>
+                <td className="p-3 text-right">₹ {laborCost.toFixed(2)}</td>
                 <td className="p-3 text-right">{laborGst}%</td>
-                <td className="p-3 text-right font-bold">₹{laborTotal.toFixed(2)}</td>
+                <td className="p-3 text-right font-bold">₹ {laborTotal.toFixed(2)}</td>
               </tr>
               <tr>
                 <td className="p-3 font-semibold">Additional Taxes</td>
-                <td className="p-3 text-right" colSpan="3">₹{tax.toFixed(2)}</td>
+                <td className="p-3 text-right" colSpan="3">₹ {tax.toFixed(2)}</td>
               </tr>
               {discount > 0 && (
                 <tr>
                   <td className="p-3 font-semibold text-red-500">Discounts</td>
-                  <td className="p-3 text-right text-red-500" colSpan="3">-₹{discount.toFixed(2)}</td>
+                  <td className="p-3 text-right text-red-500" colSpan="3">-₹ {discount.toFixed(2)}</td>
                 </tr>
               )}
               <tr className="bg-gradient-to-r from-blue-600 via-purple-600 to-pink-600 text-white">
                 <td className="p-4 font-bold text-lg">Grand Total</td>
-                <td colSpan="3" className="p-4 text-right font-bold text-2xl">₹{grandTotal.toFixed(2)}</td>
+                <td colSpan="3" className="p-4 text-right font-bold text-2xl">₹ {grandTotal.toFixed(2)}</td>
               </tr>
             </tbody>
           </table>

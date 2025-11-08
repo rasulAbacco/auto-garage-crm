@@ -12,7 +12,7 @@ import {
   FiClipboard,
   FiTag,
 } from "react-icons/fi";
-import { FaCar } from "react-icons/fa";
+import { FaCar, FaRupeeSign } from "react-icons/fa";
 import { useTheme } from "../../contexts/ThemeContext";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:5000";
@@ -138,52 +138,40 @@ export default function ServiceDetail() {
         {/* Details Grid */}
         <div className="grid md:grid-cols-2 gap-6 p-8">
           {/* Service Info */}
-          <div
-            className={`p-6 rounded-2xl shadow ${isDark ? "bg-gray-700" : "bg-gray-100"
-              }`}
-          >
+          <div className={`p-6 rounded-2xl shadow ${isDark ? "bg-gray-700" : "bg-gray-100"}`}>
             <h2 className="font-bold text-xl flex items-center gap-2 mb-4">
               <FiTool /> Service Details
             </h2>
             <div className="space-y-3">
               <div>
                 <p className="text-sm text-gray-400">Category</p>
-                <p className="font-semibold">
-                  {service.category?.name || "N/A"}
-                </p>
+                <p className="font-semibold">{service.category?.name || "N/A"}</p>
               </div>
               <div>
                 <p className="text-sm text-gray-400">Sub-Service</p>
-                <p className="font-semibold">
-                  {service.subService?.name || "N/A"}
-                </p>
+                <p className="font-semibold">{service.subService?.name || "N/A"}</p>
               </div>
               {service.notes && (
                 <div>
                   <p className="text-sm text-gray-400">Notes</p>
-                  <p
-                    className={`whitespace-pre-wrap ${isDark ? "text-gray-300" : "text-gray-700"
-                      }`}
-                  >
+                  <p className={`whitespace-pre-wrap ${isDark ? "text-gray-300" : "text-gray-700"}`}>
                     {service.notes}
                   </p>
                 </div>
               )}
+              {/* (Images removed from here — moved to separate card below) */}
             </div>
           </div>
 
           {/* Cost Breakdown */}
-          <div
-            className={`p-6 rounded-2xl shadow ${isDark ? "bg-gray-700" : "bg-gray-100"
-              }`}
-          >
+          <div className={`p-6 rounded-2xl shadow ${isDark ? "bg-gray-700" : "bg-gray-100"}`}>
             <h2 className="font-bold text-xl flex items-center gap-2 mb-4">
-              <FiDollarSign /> Cost Breakdown
+              <FaRupeeSign /> Cost Breakdown
             </h2>
             <div className="space-y-3 text-sm">
               <div className="flex justify-between">
                 <span>Parts Cost</span>
-                <span>${partsCost.toFixed(2)}</span>
+                <span>₹{partsCost.toFixed(2)}</span>
               </div>
               <div className="flex justify-between">
                 <span>Parts GST</span>
@@ -191,7 +179,7 @@ export default function ServiceDetail() {
               </div>
               <div className="flex justify-between">
                 <span>Labor Cost</span>
-                <span>${laborCost.toFixed(2)}</span>
+                <span>₹{laborCost.toFixed(2)}</span>
               </div>
               <div className="flex justify-between">
                 <span>Labor GST</span>
@@ -200,28 +188,61 @@ export default function ServiceDetail() {
               <hr className="my-3 border-gray-500/30" />
               <div className="flex justify-between text-lg font-bold text-green-500">
                 <span>Estimated Total</span>
-                <span>${estimatedTotal}</span>
+                <span>₹{estimatedTotal}</span>
               </div>
             </div>
           </div>
 
-          {/* Client Info */}
+          {/* Uploaded Images — separate card */}
           <div
-            className={`p-6 rounded-2xl shadow ${isDark ? "bg-gray-700" : "bg-gray-100"
-              } md:col-span-2`}
+            className={`p-6 rounded-2xl shadow ${isDark ? "bg-gray-700" : "bg-gray-100"} md:col-span-2`}
           >
+            <h2 className="font-bold text-xl flex items-center gap-2 mb-4">
+              <FiFileText /> Uploaded Images
+            </h2>
+
+            {service.mediaFiles?.length > 0 ? (
+              <div className="max-h-[500px]overflow-y-auto pr-2">
+                <div className="flex flex-wrap align-center justify-center gap-4">
+                  {service.mediaFiles.map((file) => (
+                    <div
+                      key={file.id}
+                      className="rounded-lg w-[20rem] overflow-hidden bg-gray-50 dark:bg-gray-800"
+                    >
+                      <img
+                        src={file.data}
+                        alt={file.fileName}
+                        className="w-full h-40 object-cover"
+                        loading="lazy"
+                      />
+                      {/* <div className="p-2 text-xs text-gray-500 truncate">
+                        {file.fileName}
+                      </div> */}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <div className="text-sm text-gray-400">
+                No attachments or images for this service.
+              </div>
+            )}
+          </div>
+
+
+
+          {/* Client Info (stretches full width below on md+) */}
+          <div className={`p-6 rounded-2xl shadow ${isDark ? "bg-gray-700" : "bg-gray-100"} md:col-span-2`}>
             <h2 className="font-bold text-xl flex items-center gap-2 mb-4">
               <FiUser /> Client Information
             </h2>
             {service.client ? (
               <div className="grid sm:grid-cols-2 gap-3">
                 <div className="flex items-center gap-2">
-                  <FiUser className="text-green-500" />{" "}
-                  <span>{service.client.fullName}</span>
+                  <FiUser className="text-green-500" /> <span>{service.client.fullName}</span>
                 </div>
                 <div className="flex items-center gap-2">
-                  <FaCar className="text-blue-500" />{" "}
-                  <span>{service.client.regNumber}</span>
+                  <FaCar className="text-blue-500" /> <span>{service.client.regNumber}</span>
                 </div>
                 <div className="flex items-center gap-2 col-span-2 text-sm text-gray-400">
                   <FiTag />{" "}
@@ -238,6 +259,7 @@ export default function ServiceDetail() {
             )}
           </div>
         </div>
+
 
         {/* Billing CTA */}
         <div className="border-t p-6 flex justify-between items-center flex-wrap gap-3">
