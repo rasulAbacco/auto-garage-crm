@@ -13,6 +13,7 @@ import {
   FiUser,
   FiTag,
 } from "react-icons/fi";
+import { FaRupeeSign } from "react-icons/fa";
 import { useTheme } from "../../contexts/ThemeContext";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:5000";
@@ -227,9 +228,9 @@ export default function ServicesList() {
             isDark={isDark}
           />
           <StatCard
-            icon={<FiDollarSign />}
+            icon={<FaRupeeSign />}
             title="Total Revenue"
-            value={`$${totalRevenue.toFixed(2)}`}
+            value={`₹${totalRevenue.toFixed(2)}`}
             isDark={isDark}
           />
         </div>
@@ -286,7 +287,7 @@ export default function ServicesList() {
                       {s.status}
                     </span>
                     <span className="text-green-500 font-bold text-lg">
-                      ${estimatedTotal.toFixed(2)}
+                      ₹{estimatedTotal.toFixed(2)}
                     </span>
                     <button
                       onClick={() => navigate(`/services/${s.id}`)}

@@ -129,8 +129,8 @@ export default function ClientDetail() {
         <Link
           to="/clients"
           className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg transition-colors ${isDark
-              ? "text-gray-300 hover:text-white hover:bg-gray-800"
-              : "text-gray-700 hover:text-gray-900 hover:bg-gray-100"
+            ? "text-gray-300 hover:text-white hover:bg-gray-800"
+            : "text-gray-700 hover:text-gray-900 hover:bg-gray-100"
             }`}
         >
           <FiArrowLeft className="w-4 h-4" />
@@ -244,10 +244,10 @@ export default function ClientDetail() {
                     key={tab}
                     onClick={() => setActiveTab(tab)}
                     className={`px-4 py-2 rounded-lg font-medium transition-all whitespace-nowrap ${activeTab === tab
-                        ? "bg-gradient-to-r from-blue-600 to-purple-600 text-white shadow-md"
-                        : isDark
-                          ? "text-gray-300 hover:bg-gray-700"
-                          : "text-gray-700 hover:bg-gray-100"
+                      ? "bg-gradient-to-r from-blue-600 to-purple-600 text-white shadow-md"
+                      : isDark
+                        ? "text-gray-300 hover:bg-gray-700"
+                        : "text-gray-700 hover:bg-gray-100"
                       }`}
                   >
                     {tab.charAt(0).toUpperCase() + tab.slice(1)}
@@ -286,7 +286,7 @@ export default function ClientDetail() {
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                 <StatCard title="Last Service" value={lastService} icon={<FiCalendar />} isDark={isDark} />
                 <StatCard title="Total Services" value={totalServices} icon={<FiTool />} isDark={isDark} />
-                <StatCard title="Total Billed" value={`$${totalBilled.toFixed(2)}`} icon={<FiDollarSign />} isDark={isDark} />
+                <StatCard title="Total Billed" value={`₹${totalBilled.toFixed(2)}`} icon={<FiDollarSign />} isDark={isDark} />
               </div>
             )}
 
@@ -320,10 +320,10 @@ export default function ClientDetail() {
                         </div>
                         <span
                           className={`px-3 py-1 text-xs font-medium rounded-full whitespace-nowrap ${s.status === "Paid"
-                              ? "bg-green-500/20 text-green-400"
-                              : s.status === "In Progress"
-                                ? "bg-yellow-500/20 text-yellow-400"
-                                : "bg-red-500/20 text-red-400"
+                            ? "bg-green-500/20 text-green-400"
+                            : s.status === "In Progress"
+                              ? "bg-yellow-500/20 text-yellow-400"
+                              : "bg-red-500/20 text-red-400"
                             }`}
                         >
                           {s.status}
@@ -363,8 +363,8 @@ export default function ClientDetail() {
                         </div>
                         <span
                           className={`px-3 py-1 text-xs font-medium rounded-full whitespace-nowrap ${inv.status === "Paid"
-                              ? "bg-green-500/20 text-green-400"
-                              : "bg-yellow-500/20 text-yellow-400"
+                            ? "bg-green-500/20 text-green-400"
+                            : "bg-yellow-500/20 text-yellow-400"
                             }`}
                         >
                           {inv.status}

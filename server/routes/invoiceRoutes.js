@@ -1,4 +1,4 @@
-// server/routes/invoiceRoutes.js
+/// server/routes/invoiceRoutes.js
 import express from "express";
 import {
     getInvoices,
@@ -21,7 +21,7 @@ router.get("/:id", getInvoiceById);
 router.post("/", createInvoice);
 router.put("/:id", updateInvoice);
 router.delete("/:id", deleteInvoice);
-router.get("/", getClients);       // Lightweight paginated list
-router.get("/:id", getClientById); // Full detailed view for one client
+// router.get("/", getClients);       // Lightweight paginated list
+// router.get("/:id", getClientById); // Full detailed view for one client
 
 export default router;

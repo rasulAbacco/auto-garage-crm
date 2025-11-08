@@ -274,8 +274,7 @@ export default function BillingList() {
                     </span>
                   </div>
                   <div className="flex items-center gap-2 font-semibold text-lg text-green-600">
-                    <FiDollarSign />
-                    ₹{Number(inv.grandTotal || 0).toFixed(2)}
+                    ₹ {Number(inv.grandTotal || 0).toFixed(2)}
                   </div>
                 </div>
 

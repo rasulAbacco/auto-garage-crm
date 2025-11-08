@@ -65,6 +65,7 @@ model Service {
   categoryId   Int?
   subServiceId Int?
   invoiceId    Int? // ✅ NEW
+  mediaFiles   ServiceMedia[] // ✅ relation
   client       Client           @relation(fields: [clientId], references: [id])
   invoice      Invoice?         @relation(fields: [invoiceId], references: [id])
   category     ServiceCategory? @relation(fields: [categoryId], references: [id])
@@ -135,4 +136,17 @@ model SubService {
   services   Service[]
   createdAt  DateTime         @default(now())
   updatedAt  DateTime         @updatedAt
+}
+
+/**
+ * uploaded files which r related to Service
+ */
+model ServiceMedia {
+  id       Int    @id @default(autoincrement())
+  fileName String
+  mimeType String
+  data     Bytes
+
+  serviceId Int // ✅ relation required
+  service   Service @relation(fields: [serviceId], references: [id])
 }

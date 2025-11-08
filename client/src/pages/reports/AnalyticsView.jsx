@@ -23,7 +23,7 @@ import {
     FiTrendingUp,
     FiActivity,
 } from "react-icons/fi";
-
+import { FaRupeeSign } from "react-icons/fa";
 export default function AnalyticsView({ summary, invoices, isDark }) {
     const COLORS = ["#6366F1", "#06B6D4", "#10B981", "#F59E0B", "#EF4444", "#8B5CF6"];
 
@@ -53,7 +53,7 @@ export default function AnalyticsView({ summary, invoices, isDark }) {
             {/* ===== Revenue Summary ===== */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <div className="p-6 rounded-2xl bg-gradient-to-r from-green-500 to-teal-500 text-white shadow-xl">
-                    <FiDollarSign size={28} />
+                    <FaRupeeSign size={28} />
                     <h4 className="text-lg font-semibold mt-2">Total Revenue</h4>
                     <p className="text-2xl font-bold">
                         ${summary?.revenueSummary?.totalRevenue?.toFixed(2) || 0}
@@ -110,8 +110,8 @@ export default function AnalyticsView({ summary, invoices, isDark }) {
             >
                 <div
                     className={`p-5 border-b ${isDark
-                            ? "border-gray-700 bg-gradient-to-r from-gray-800 to-gray-700"
-                            : "border-gray-200 bg-gradient-to-r from-indigo-600 to-purple-600"
+                        ? "border-gray-700 bg-gradient-to-r from-gray-800 to-gray-700"
+                        : "border-gray-200 bg-gradient-to-r from-indigo-600 to-purple-600"
                         } text-white`}
                 >
                     <h3 className="text-2xl font-bold">Revenue Over Time</h3>
@@ -157,8 +157,8 @@ export default function AnalyticsView({ summary, invoices, isDark }) {
             >
                 <div
                     className={`p-5 border-b ${isDark
-                            ? "border-gray-700 bg-gradient-to-r from-gray-800 to-gray-700"
-                            : "border-gray-200 bg-gradient-to-r from-green-600 to-teal-600"
+                        ? "border-gray-700 bg-gradient-to-r from-gray-800 to-gray-700"
+                        : "border-gray-200 bg-gradient-to-r from-green-600 to-teal-600"
                         } text-white`}
                 >
                     <h3 className="text-2xl font-bold">Invoice Status Distribution</h3>
@@ -205,8 +205,8 @@ export default function AnalyticsView({ summary, invoices, isDark }) {
             >
                 <div
                     className={`p-5 border-b ${isDark
-                            ? "border-gray-700 bg-gradient-to-r from-gray-800 to-gray-700"
-                            : "border-gray-200 bg-gradient-to-r from-cyan-600 to-teal-500"
+                        ? "border-gray-700 bg-gradient-to-r from-gray-800 to-gray-700"
+                        : "border-gray-200 bg-gradient-to-r from-cyan-600 to-teal-500"
                         } text-white`}
                 >
                     <h3 className="text-2xl font-bold">Service Status Overview</h3>
@@ -253,8 +253,8 @@ export default function AnalyticsView({ summary, invoices, isDark }) {
             >
                 <div
                     className={`p-5 border-b ${isDark
-                            ? "border-gray-700 bg-gradient-to-r from-gray-800 to-gray-700"
-                            : "border-gray-200 bg-gradient-to-r from-pink-600 to-orange-500"
+                        ? "border-gray-700 bg-gradient-to-r from-gray-800 to-gray-700"
+                        : "border-gray-200 bg-gradient-to-r from-pink-600 to-orange-500"
                         } text-white`}
                 >
                     <h3 className="text-2xl font-bold">Top Services by Revenue</h3>
@@ -301,8 +301,8 @@ export default function AnalyticsView({ summary, invoices, isDark }) {
             >
                 <div
                     className={`p-5 border-b ${isDark
-                            ? "border-gray-700 bg-gradient-to-r from-gray-800 to-gray-700"
-                            : "border-gray-200 bg-gradient-to-r from-violet-600 to-indigo-600"
+                        ? "border-gray-700 bg-gradient-to-r from-gray-800 to-gray-700"
+                        : "border-gray-200 bg-gradient-to-r from-violet-600 to-indigo-600"
                         } text-white`}
                 >
                     <h3 className="text-2xl font-bold">Top Clients</h3>

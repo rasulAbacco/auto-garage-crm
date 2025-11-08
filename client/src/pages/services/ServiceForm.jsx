@@ -55,6 +55,8 @@ export default function ServiceForm() {
   const [subServices, setSubServices] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [media, setMedia] = useState([]);//media attachments support
+
 
   // ✅ Load clients list
   useEffect(() => {
@@ -188,11 +190,79 @@ export default function ServiceForm() {
     setForm((f) => ({ ...f, [name]: value }));
   };
 
+  // const handleSubmit = async (e) => {
+  //   e.preventDefault();
+  //   setLoading(true);
+  //   try {
+  //     // basic validation
+  //     if (!form.clientId) throw new Error("Please select a client.");
+  //     if (!form.date) throw new Error("Please select a date.");
+
+  //     const payload = {
+  //       ...form,
+  //       clientId: Number(form.clientId),
+  //       categoryId: form.categoryId ? Number(form.categoryId) : null,
+  //       subServiceId: form.subServiceId ? Number(form.subServiceId) : null,
+  //       partsCost: toNumber(form.partsCost),
+  //       laborCost: toNumber(form.laborCost),
+  //       partsGst: toNumber(form.partsGst),
+  //       laborGst: toNumber(form.laborGst),
+  //       // send estimated total as `cost` so backend stores it consistently
+  //       cost: Number(estimatedTotal.toFixed(2)),
+  //     };
+
+  //     // const res = await apiRequest(id ? `/api/services/${id}` : "/api/services", {
+  //     //   method: id ? "PUT" : "POST",
+  //     //   body: JSON.stringify(payload),
+  //     // });
+
+  //     // const result = await res.json();
+  //     // if (!res.ok) throw new Error(result.message || "Failed to save service");
+  //     // ✅ Build FormData
+  //     const formData = new FormData();
+
+  //     Object.entries(payload).forEach(([key, value]) => {
+  //       if (value !== null && value !== undefined) {
+  //         formData.append(key, value);
+  //       }
+  //     });
+
+  //     // ✅ Attach uploaded files
+  //     media.forEach((file) => {
+  //       formData.append("media", file);
+  //     });
+
+  //     const res = await fetch(
+  //       `${API_BASE}${id ? `/api/services/${id}` : "/api/services"}`,
+  //       {
+  //         method: id ? "PUT" : "POST",
+  //         headers: {
+  //           Authorization: `Bearer ${localStorage.getItem("token")}`,
+  //           // ✅ Do NOT set Content-Type
+  //         },
+  //         body: formData,
+  //       }
+  //     );
+
+  //     const result = await res.json();
+  //     if (!res.ok) throw new Error(result.message || "Failed to save service");
+
+
+  //     // in case backend returns created/updated service location
+  //     const serviceId = result?.service?.id ?? (id ? id : null);
+  //     if (serviceId) navigate(`/services/${serviceId}`);
+  //     else navigate("/services");
+  //   } catch (err) {
+  //     setError(err.message || "Error saving service");
+  //   } finally {
+  //     setLoading(false);
+  //   }
+  // };
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
+
     try {
-      // basic validation
       if (!form.clientId) throw new Error("Please select a client.");
       if (!form.date) throw new Error("Please select a date.");
 
@@ -205,19 +275,41 @@ export default function ServiceForm() {
         laborCost: toNumber(form.laborCost),
         partsGst: toNumber(form.partsGst),
         laborGst: toNumber(form.laborGst),
-        // send estimated total as `cost` so backend stores it consistently
         cost: Number(estimatedTotal.toFixed(2)),
       };
 
-      const res = await apiRequest(id ? `/api/services/${id}` : "/api/services", {
-        method: id ? "PUT" : "POST",
-        body: JSON.stringify(payload),
+      // ✅ Build FormData instead of JSON
+      const formData = new FormData();
+
+      // ✅ Append text fields first
+      Object.entries(payload).forEach(([key, value]) => {
+        if (value !== null && value !== undefined) {
+          formData.append(key, value);
+        }
       });
+
+      // ✅ Append images/files
+      media.forEach((file) => {
+        formData.append("media", file);
+      });
+
+      // ✅ Send using fetch not apiRequest (because apiRequest forces JSON header)
+      const res = await fetch(
+        `${API_BASE}${id ? `/api/services/${id}` : "/api/services"}`,
+        {
+          method: id ? "PUT" : "POST",
+          headers: {
+            Authorization: `Bearer ${localStorage.getItem("token")}`,
+            // ✅ DO NOT set "Content-Type"
+          },
+          body: formData,
+        }
+      );
 
       const result = await res.json();
       if (!res.ok) throw new Error(result.message || "Failed to save service");
 
-      // in case backend returns created/updated service location
+
       const serviceId = result?.service?.id ?? (id ? id : null);
       if (serviceId) navigate(`/services/${serviceId}`);
       else navigate("/services");
@@ -227,6 +319,7 @@ export default function ServiceForm() {
       setLoading(false);
     }
   };
+
 
   return (
     <div
@@ -347,6 +440,55 @@ export default function ServiceForm() {
             />
           </div>
 
+
+
+          {/* Media Upload */}
+          <div className="md:col-span-2 space-y-3">
+            <label className="font-semibold">Upload Media (Images/Files)</label>
+
+            {/* File picker + camera */}
+            <input
+              type="file"
+              multiple
+              accept="image/*"
+              capture="environment"    // ✅ opens camera on mobile
+              onChange={(e) => {
+                const files = Array.from(e.target.files);
+                setMedia((prev) => [...prev, ...files]);
+              }}
+              className={`w-full rounded-lg border p-3 ${isDark ? "bg-gray-700 border-gray-600" : "bg-gray-50 border-gray-300"}`}
+            />
+
+            {/* Preview Grid */}
+            {media.length > 0 && (
+              <div className="grid grid-cols-3 gap-3 mt-3">
+                {media.map((file, index) => (
+                  <div key={index} className="relative group border p-1 rounded-lg">
+                    {/* Thumbnail */}
+                    <img
+                      src={URL.createObjectURL(file)}
+                      alt="preview"
+                      className="w-full h-24 object-cover rounded-lg"
+                    />
+
+                    {/* Remove Button */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setMedia((prev) => prev.filter((_, i) => i !== index));
+                      }}
+                      className="absolute top-1 right-1 bg-red-600 text-white text-xs px-2 py-1 rounded opacity-80 hover:opacity-100"
+                    >
+                      X
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+
+
           {/* Parts Section */}
           <div className="md:col-span-2 rounded-lg border p-4">
             <h3 className="font-semibold mb-3 flex items-center gap-2">
@@ -382,8 +524,8 @@ export default function ServiceForm() {
               </div>
               <div className="flex items-end">
                 <div className="text-sm text-gray-600">
-                  <div>Subtotal: ${toFixedSafe(form.partsCost)}</div>
-                  <div>With GST: ${(toFixedSafe(form.partsCost) * (1 + (toNumber(form.partsGst) / 100))).toFixed(2)}</div>
+                  <div>Subtotal: ₹{toFixedSafe(form.partsCost)}</div>
+                  <div>With GST: ₹{(toFixedSafe(form.partsCost) * (1 + (toNumber(form.partsGst) / 100))).toFixed(2)}</div>
                 </div>
               </div>
             </div>
@@ -424,8 +566,8 @@ export default function ServiceForm() {
               </div>
               <div className="flex items-end">
                 <div className="text-sm text-gray-600">
-                  <div>Subtotal: ${toFixedSafe(form.laborCost)}</div>
-                  <div>With GST: ${(toFixedSafe(form.laborCost) * (1 + (toNumber(form.laborGst) / 100))).toFixed(2)}</div>
+                  <div>Subtotal: ₹{toFixedSafe(form.laborCost)}</div>
+                  <div>With GST: ₹{(toFixedSafe(form.laborCost) * (1 + (toNumber(form.laborGst) / 100))).toFixed(2)}</div>
                 </div>
               </div>
             </div>
@@ -450,7 +592,7 @@ export default function ServiceForm() {
           {/* Estimated Total Display */}
           <div className="flex items-center justify-between md:col-span-2 mt-4 border-t pt-4">
             <p className="font-semibold text-lg">Estimated Total:</p>
-            <p className="font-bold text-green-500 text-xl">${estimatedTotal.toFixed(2)}</p>
+            <p className="font-bold text-green-500 text-xl">₹{estimatedTotal.toFixed(2)}</p>
           </div>
 
           {/* Submit */}

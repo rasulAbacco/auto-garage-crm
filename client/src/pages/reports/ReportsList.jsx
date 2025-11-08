@@ -28,8 +28,8 @@ export default function ReportsList({ invoices, clients, services = [], isDark }
             >
                 <div
                     className={`p-5 border-b ${isDark
-                            ? "border-gray-700 bg-gradient-to-r from-gray-800 to-gray-700"
-                            : "border-gray-200 bg-gradient-to-r from-green-600 to-teal-600"
+                        ? "border-gray-700 bg-gradient-to-r from-gray-800 to-gray-700"
+                        : "border-gray-200 bg-gradient-to-r from-green-600 to-teal-600"
                         } text-white`}
                 >
                     <h3 className="text-2xl font-bold">Recent Invoices</h3>
@@ -54,14 +54,14 @@ export default function ReportsList({ invoices, clients, services = [], isDark }
                                 </div>
                                 <div className="text-right">
                                     <div className="font-bold">
-                                        ${Number(inv.grandTotal || 0).toFixed(2)}
+                                        ₹{Number(inv.grandTotal || 0).toFixed(2)}
                                     </div>
                                     <div
                                         className={`text-xs mt-1 ${inv.status === "Paid"
-                                                ? "text-green-500"
-                                                : inv.status === "Pending"
-                                                    ? "text-yellow-500"
-                                                    : "text-red-500"
+                                            ? "text-green-500"
+                                            : inv.status === "Pending"
+                                                ? "text-yellow-500"
+                                                : "text-red-500"
                                             }`}
                                     >
                                         {inv.status}
@@ -82,8 +82,8 @@ export default function ReportsList({ invoices, clients, services = [], isDark }
             >
                 <div
                     className={`p-5 border-b ${isDark
-                            ? "border-gray-700 bg-gradient-to-r from-gray-800 to-gray-700"
-                            : "border-gray-200 bg-gradient-to-r from-indigo-600 to-purple-600"
+                        ? "border-gray-700 bg-gradient-to-r from-gray-800 to-gray-700"
+                        : "border-gray-200 bg-gradient-to-r from-indigo-600 to-purple-600"
                         } text-white`}
                 >
                     <h3 className="text-2xl font-bold">Recent Services</h3>
@@ -98,8 +98,8 @@ export default function ReportsList({ invoices, clients, services = [], isDark }
                             <div
                                 key={srv.id}
                                 className={`py-3 px-3 flex justify-between rounded-lg transition ${isDark
-                                        ? "hover:bg-gray-700 border-b border-gray-700"
-                                        : "hover:bg-gray-100 border-b border-gray-200"
+                                    ? "hover:bg-gray-700 border-b border-gray-700"
+                                    : "hover:bg-gray-100 border-b border-gray-200"
                                     }`}
                             >
                                 <div className="flex flex-col">
@@ -114,14 +114,14 @@ export default function ReportsList({ invoices, clients, services = [], isDark }
 
                                 <div className="text-right">
                                     <div className="font-bold text-green-500">
-                                        ${Number(srv.cost || 0).toFixed(2)}
+                                        ₹{Number(srv.cost || 0).toFixed(2)}
                                     </div>
                                     <div
                                         className={`text-xs mt-1 ${srv.status === "Completed"
-                                                ? "text-green-500"
-                                                : srv.status === "Pending"
-                                                    ? "text-yellow-500"
-                                                    : "text-gray-400"
+                                            ? "text-green-500"
+                                            : srv.status === "Pending"
+                                                ? "text-yellow-500"
+                                                : "text-gray-400"
                                             }`}
                                     >
                                         {srv.status}
@@ -140,15 +140,15 @@ export default function ReportsList({ invoices, clients, services = [], isDark }
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
                     <div
                         className={`max-w-3xl w-full rounded-2xl overflow-hidden ${isDark
-                                ? "bg-gray-900 text-white border border-gray-700"
-                                : "bg-white text-gray-900 border border-gray-200"
+                            ? "bg-gray-900 text-white border border-gray-700"
+                            : "bg-white text-gray-900 border border-gray-200"
                             } shadow-2xl`}
                     >
                         {/* Modal Header */}
                         <div
                             className={`p-4 flex items-center justify-between border-b ${isDark
-                                    ? "border-gray-800 bg-gray-800"
-                                    : "border-gray-100 bg-gray-50"
+                                ? "border-gray-800 bg-gray-800"
+                                : "border-gray-100 bg-gray-50"
                                 }`}
                         >
                             <h3 className="text-xl font-bold">
@@ -157,8 +157,8 @@ export default function ReportsList({ invoices, clients, services = [], isDark }
                             <button
                                 onClick={() => setInvoiceDetails(null)}
                                 className={`px-4 py-2 rounded-lg ${isDark
-                                        ? "bg-gray-800 hover:bg-gray-700"
-                                        : "bg-gray-100 hover:bg-gray-200"
+                                    ? "bg-gray-800 hover:bg-gray-700"
+                                    : "bg-gray-100 hover:bg-gray-200"
                                     }`}
                             >
                                 Close
@@ -181,10 +181,10 @@ export default function ReportsList({ invoices, clients, services = [], isDark }
                                 </p>
                                 <p
                                     className={`font-semibold mt-1 ${invoiceDetails.status === "Paid"
-                                            ? "text-green-500"
-                                            : invoiceDetails.status === "Pending"
-                                                ? "text-yellow-500"
-                                                : "text-red-500"
+                                        ? "text-green-500"
+                                        : invoiceDetails.status === "Pending"
+                                            ? "text-yellow-500"
+                                            : "text-red-500"
                                         }`}
                                 >
                                     Status: {invoiceDetails.status}
@@ -248,14 +248,14 @@ export default function ReportsList({ invoices, clients, services = [], isDark }
                                         <div
                                             key={srv.id}
                                             className={`p-4 rounded-lg border mb-2 ${isDark
-                                                    ? "border-gray-700 bg-gray-800"
-                                                    : "border-gray-200 bg-gray-50"
+                                                ? "border-gray-700 bg-gray-800"
+                                                : "border-gray-200 bg-gray-50"
                                                 }`}
                                         >
                                             <div className="flex justify-between items-center">
                                                 <div className="font-semibold">{srv.type}</div>
                                                 <div className="font-bold text-green-500">
-                                                    ${Number(srv.cost || 0).toFixed(2)}
+                                                    ₹{Number(srv.cost || 0).toFixed(2)}
                                                 </div>
                                             </div>
                                             <p className="text-sm text-gray-400 mt-1">
@@ -287,12 +287,12 @@ export default function ReportsList({ invoices, clients, services = [], isDark }
                             {/* Totals */}
                             <div className="border-t pt-4 text-right">
                                 <div className="text-sm text-gray-400">
-                                    Subtotal: ${Number(invoiceDetails.totalAmount || 0).toFixed(2)} <br />
-                                    Tax: ${Number(invoiceDetails.tax || 0).toFixed(2)} | Discount: $
+                                    Subtotal: ₹{Number(invoiceDetails.totalAmount || 0).toFixed(2)} <br />
+                                    Tax: ₹{Number(invoiceDetails.tax || 0).toFixed(2)} | Discount: ₹
                                     {Number(invoiceDetails.discount || 0).toFixed(2)}
                                 </div>
                                 <h3 className="text-xl font-bold mt-2">
-                                    Grand Total: ${Number(invoiceDetails.grandTotal || 0).toFixed(2)}
+                                    Grand Total: ₹{Number(invoiceDetails.grandTotal || 0).toFixed(2)}
                                 </h3>
                             </div>
                         </div>
