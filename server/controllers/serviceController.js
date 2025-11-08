@@ -74,25 +74,41 @@ function mapMediaFiles(mediaFiles = []) {
 ============================================================ */
 export const getServices = async (req, res) => {
     try {
+        // 1) fetch services without relying on relation include (defensive for hosts)
         const services = await prisma.service.findMany({
             include: {
                 client: { select: { id: true, fullName: true, regNumber: true } },
                 category: { select: { id: true, name: true } },
                 subService: { select: { id: true, name: true } },
-                mediaFiles: true,
             },
             orderBy: { date: "desc" },
         });
 
+        // 2) fetch media rows for all services in one query
+        const serviceIds = services.map((s) => s.id);
+        const mediaRows = serviceIds.length
+            ? await prisma.serviceMedia.findMany({
+                where: { serviceId: { in: serviceIds } },
+                select: { id: true, fileName: true, mimeType: true, data: true, serviceId: true },
+            })
+            : [];
+
+        // 3) group media by serviceId
+        const mediaByService = mediaRows.reduce((acc, m) => {
+            (acc[m.serviceId] = acc[m.serviceId] || []).push(m);
+            return acc;
+        }, {});
+
+        // 4) attach normalized mediaFiles
         const formatted = services.map((s) => ({
             ...s,
-            mediaFiles: mapMediaFiles(s.mediaFiles),
+            mediaFiles: mapMediaFiles(mediaByService[s.id] || []),
         }));
 
         return res.json(formatted);
     } catch (error) {
         console.error("❌ Error fetching services:", error);
-        return res.status(500).json({ message: "Error fetching services" });
+        return res.status(500).json({ message: "Error fetching services", error: String(error) });
     }
 };
 
@@ -115,7 +131,6 @@ export const getServicesByClient = async (req, res) => {
                     include: {
                         category: { select: { id: true, name: true } },
                         subService: { select: { id: true, name: true } },
-                        mediaFiles: true,
                     },
                     orderBy: { date: "desc" },
                 },
@@ -126,10 +141,23 @@ export const getServicesByClient = async (req, res) => {
         if (!client.services.length)
             return res.status(404).json({ message: "No services found for this client" });
 
-        // Normalize any mediaFiles inside services
+        // Collect service IDs and fetch their media
+        const serviceIds = client.services.map((s) => s.id);
+        const mediaRows = serviceIds.length
+            ? await prisma.serviceMedia.findMany({
+                where: { serviceId: { in: serviceIds } },
+                select: { id: true, fileName: true, mimeType: true, data: true, serviceId: true },
+            })
+            : [];
+
+        const mediaByService = mediaRows.reduce((acc, m) => {
+            (acc[m.serviceId] = acc[m.serviceId] || []).push(m);
+            return acc;
+        }, {});
+
         const servicesWithMedia = client.services.map((s) => ({
             ...s,
-            mediaFiles: mapMediaFiles(s.mediaFiles),
+            mediaFiles: mapMediaFiles(mediaByService[s.id] || []),
         }));
 
         res.status(200).json({
@@ -144,7 +172,7 @@ export const getServicesByClient = async (req, res) => {
         });
     } catch (error) {
         console.error("❌ Error fetching services by client:", error);
-        res.status(500).json({ message: "Error fetching services for client" });
+        res.status(500).json({ message: "Error fetching services for client", error: String(error) });
     }
 };
 
@@ -161,27 +189,33 @@ export const getServiceById = async (req, res) => {
             return res.status(400).json({ message: "Invalid or missing service ID" });
         }
 
+        // fetch service without media relation include
         const service = await prisma.service.findUnique({
             where: { id: parseInt(id) },
             include: {
                 client: true,
                 category: true,
                 subService: true,
-                mediaFiles: true,
             },
         });
 
         if (!service) return res.status(404).json({ message: "Service not found" });
 
+        // fetch media for this service
+        const media = await prisma.serviceMedia.findMany({
+            where: { serviceId: service.id },
+            select: { id: true, fileName: true, mimeType: true, data: true },
+        });
+
         const modified = {
             ...service,
-            mediaFiles: mapMediaFiles(service.mediaFiles),
+            mediaFiles: mapMediaFiles(media),
         };
 
         res.json(modified);
     } catch (error) {
         console.error("❌ Error fetching service:", error);
-        res.status(500).json({ message: "Error fetching service" });
+        res.status(500).json({ message: "Error fetching service", error: String(error) });
     }
 };
 
@@ -263,7 +297,7 @@ export const createService = async (req, res) => {
         });
     } catch (error) {
         console.error("Error creating service:", error);
-        res.status(500).json({ message: "Error creating service" });
+        res.status(500).json({ message: "Error creating service", error: String(error) });
     }
 };
 
@@ -351,7 +385,7 @@ export const updateService = async (req, res) => {
         });
     } catch (error) {
         console.error("Error updating service:", error);
-        res.status(500).json({ message: "Error updating service" });
+        res.status(500).json({ message: "Error updating service", error: String(error) });
     }
 };
 
@@ -378,7 +412,7 @@ export const deleteService = async (req, res) => {
         res.json({ message: "🗑️ Service deleted successfully" });
     } catch (error) {
         console.error("❌ Error deleting service:", error);
-        res.status(500).json({ message: "Error deleting service" });
+        res.status(500).json({ message: "Error deleting service", error: String(error) });
     }
 };
 
@@ -404,11 +438,9 @@ export const getServiceTypes = async (req, res) => {
         res.status(200).json(categories);
     } catch (error) {
         console.error("❌ Error fetching service types:", error);
-        res.status(500).json({ message: "Error fetching service types" });
+        res.status(500).json({ message: "Error fetching service types", error: String(error) });
     }
 };
-
-
 
 
 
