@@ -52,7 +52,7 @@ model Client {
 }
 
 model Service {
-  id           Int              @id @default(autoincrement())
+  id           Int      @id @default(autoincrement())
   date         DateTime
   notes        String?
   partsCost    Float?
@@ -64,14 +64,31 @@ model Service {
   clientId     Int
   categoryId   Int?
   subServiceId Int?
-  invoiceId    Int? // ✅ NEW
-  mediaFiles   ServiceMedia[] // ✅ relation
-  client       Client           @relation(fields: [clientId], references: [id])
-  invoice      Invoice?         @relation(fields: [invoiceId], references: [id])
-  category     ServiceCategory? @relation(fields: [categoryId], references: [id])
-  subService   SubService?      @relation(fields: [subServiceId], references: [id])
-  createdAt    DateTime         @default(now())
-  updatedAt    DateTime         @updatedAt
+  invoiceId    Int?
+
+  // Relation: one Service -> many ServiceMedia
+  mediaFiles ServiceMedia[]
+
+  client     Client           @relation(fields: [clientId], references: [id])
+  invoice    Invoice?         @relation(fields: [invoiceId], references: [id])
+  category   ServiceCategory? @relation(fields: [categoryId], references: [id])
+  subService SubService?      @relation(fields: [subServiceId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model ServiceMedia {
+  id       Int    @id @default(autoincrement())
+  fileName String
+  mimeType String
+  data     Bytes
+
+  serviceId Int
+  service   Service @relation(fields: [serviceId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model Invoice {
@@ -136,17 +153,4 @@ model SubService {
   services   Service[]
   createdAt  DateTime         @default(now())
   updatedAt  DateTime         @updatedAt
-}
-
-/**
- * uploaded files which r related to Service
- */
-model ServiceMedia {
-  id       Int    @id @default(autoincrement())
-  fileName String
-  mimeType String
-  data     Bytes
-
-  serviceId Int // ✅ relation required
-  service   Service @relation(fields: [serviceId], references: [id])
 }
