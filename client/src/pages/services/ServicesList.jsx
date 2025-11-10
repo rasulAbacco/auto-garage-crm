@@ -55,7 +55,7 @@ export default function ServicesList() {
 
     const loadCategories = async () => {
       try {
-        const res = await apiRequest("/api/services/types/list");
+        const res = await apiRequest("/api/services/list");
         const data = await res.json();
         if (res.ok) setCategories(data);
       } catch (err) {

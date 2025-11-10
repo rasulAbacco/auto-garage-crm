@@ -13,6 +13,9 @@ import invoiceRoutes from "./routes/invoiceRoutes.js";
 import reportRoutes from "./routes/reportRoutes.js";
 import reminderRoutes from "./routes/reminderRoutes.js";
 
+console.log("Models in Prisma:", Object.keys(prisma));
+
+
 // Load environment variables
 dotenv.config();
 
@@ -33,6 +36,7 @@ const allowedOrigins = [
   "http://localhost:5173",
   "https://auto-garage-crm-r7l4.onrender.com",
   "https://themotordesk.com",
+  "https://tm04xn0p-5173.inc1.devtunnels.ms"
 ];
 
 app.use(
