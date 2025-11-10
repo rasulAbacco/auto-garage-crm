@@ -22,7 +22,7 @@ const upload = multer({ storage: multer.memoryStorage() });
    ======================== */
 
 // ✅ Service types route must be BEFORE :id
-router.get("/types/list", protect, getServiceTypes);
+router.get("/list", protect, getServiceTypes);
 
 // ✅ List services
 router.get("/", protect, getServices);
