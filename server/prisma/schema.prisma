@@ -19,6 +19,7 @@ model User {
   clients   Client[]
   invoices  Invoice[]
   reminders Reminder[]
+  ocrs      OcrRecord[] // <- linked OCR records
 }
 
 model Client {
@@ -41,10 +42,11 @@ model Client {
   updatedAt    DateTime @updatedAt
   userId       Int?
 
-  user      User?      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user      User?       @relation(fields: [userId], references: [id], onDelete: Cascade)
   services  Service[]
   invoices  Invoice[]
   reminders Reminder[] // FIXED: field name should be plural and distinct
+  ocrs      OcrRecord[] // <- linked OCR records
 
   @@unique([userId, regNumber])
   @@index([userId])
@@ -88,7 +90,7 @@ model ServiceMedia {
   service   Service @relation(fields: [serviceId], references: [id])
 
   createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  updatedAt DateTime? @updatedAt
 }
 
 model Invoice {
@@ -153,4 +155,21 @@ model SubService {
   services   Service[]
   createdAt  DateTime         @default(now())
   updatedAt  DateTime         @updatedAt
+}
+
+model OcrRecord {
+  id         Int      @id @default(autoincrement())
+  rawText    String
+  parsedData Json
+  confidence Float?
+  imageUrl   String?
+  createdAt  DateTime @default(now())
+  clientId   Int
+  userId     Int
+
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([clientId])
+  @@index([userId])
 }

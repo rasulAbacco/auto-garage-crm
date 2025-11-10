@@ -1,3 +1,4 @@
+//client/src/pages/details/components/OCRUploader.jsx
 import React, { useRef } from "react";
 import { FiUpload, FiCamera, FiX } from "react-icons/fi";
 import CameraComponent from "./CameraComponent";
@@ -35,8 +36,8 @@ const OCRUploader = ({ isDark, onImageSelect, onImageCaptured, selectedImage, on
                 <div
                     onClick={() => fileInputRef.current.click()}
                     className={`border-dashed border-2 rounded-2xl p-12 text-center cursor-pointer transition-all ${isDark
-                            ? "border-gray-600 bg-gray-700/30 hover:bg-gray-700/50 hover:border-blue-500"
-                            : "border-gray-300 bg-gray-50 hover:bg-blue-50 hover:border-blue-500"
+                        ? "border-gray-600 bg-gray-700/30 hover:bg-gray-700/50 hover:border-blue-500"
+                        : "border-gray-300 bg-gray-50 hover:bg-blue-50 hover:border-blue-500"
                         }`}
                 >
                     <div className="w-20 h-20 mx-auto mb-4 bg-gradient-to-br from-blue-600 to-purple-600 rounded-2xl flex items-center justify-center shadow-lg">

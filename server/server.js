@@ -12,6 +12,9 @@ import serviceRoutes from "./routes/serviceRoutes.js";
 import invoiceRoutes from "./routes/invoiceRoutes.js";
 import reportRoutes from "./routes/reportRoutes.js";
 import reminderRoutes from "./routes/reminderRoutes.js";
+import ocrRoutes from "./routes/OCRRoutes.js";
+
+
 
 console.log("Models in Prisma:", Object.keys(prisma));
 
@@ -36,7 +39,7 @@ const allowedOrigins = [
   "http://localhost:5173",
   "https://auto-garage-crm-r7l4.onrender.com",
   "https://themotordesk.com",
-  "https://tm04xn0p-5173.inc1.devtunnels.ms"
+  // "https://tm04xn0p-5173.inc1.devtunnels.ms"
 ];
 
 app.use(
@@ -83,6 +86,8 @@ app.use("/api/services", serviceRoutes); // 🧰 Service routes
 app.use("/api/invoices", invoiceRoutes);
 app.use("/api/reports", reportRoutes);
 app.use("/api/reminders", reminderRoutes);
+
+app.use("/api/ocr", ocrRoutes);
 
 /* -----------------------------------------------------
    ⚠️ 404 Handler (For undefined routes)

@@ -16,8 +16,8 @@ const OCRDebugPanel = ({ isDark, debugInfo }) => {
     return (
         <div
             className={`rounded-2xl p-6 border mt-4 ${isDark
-                    ? "bg-yellow-900/20 border-yellow-800"
-                    : "bg-yellow-50 border-yellow-200"
+                ? "bg-yellow-900/20 border-yellow-800"
+                : "bg-yellow-50 border-yellow-200"
                 }`}
         >
             <div className="flex items-center justify-between mb-3">
@@ -30,8 +30,8 @@ const OCRDebugPanel = ({ isDark, debugInfo }) => {
                 <button
                     onClick={() => setShow(!show)}
                     className={`text-sm font-semibold ${isDark
-                            ? "text-yellow-400 hover:text-yellow-300"
-                            : "text-yellow-700 hover:text-yellow-800"
+                        ? "text-yellow-400 hover:text-yellow-300"
+                        : "text-yellow-700 hover:text-yellow-800"
                         }`}
                 >
                     {show ? "Hide" : "Show"}
