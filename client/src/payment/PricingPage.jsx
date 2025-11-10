@@ -524,7 +524,7 @@ const TestimonialSection = ({ isDark }) => {
       name: 'Amit Patel',
       role: 'Auto Service',
       image: '👨‍🔧',
-      text: 'The API integration saved us countless hours. Highly recommended!'
+     
     }
   ];
 
@@ -593,10 +593,7 @@ const FAQSection = ({ isDark }) => {
       question: 'Is there a free trial available?',
       answer: 'All plans come with a 14-day money-back guarantee. Try risk-free!'
     },
-    {
-      question: 'How does the API access work?',
-      answer: 'API access is included in Standard and Premium plans. Full documentation provided upon signup.'
-    }
+    
   ];
 
   return (
@@ -658,7 +655,7 @@ export default function ModernPricingPage() {
         'Upload RC images (up to 10/day)',
         'Basic OCR extraction',
         'Save history locally',
-        'CSV/JSON export',
+        'CSV/EXCEL, PDF export',
         'Email support'
       ]
     },
@@ -673,8 +670,7 @@ export default function ModernPricingPage() {
         'Unlimited uploads',
         'High-accuracy OCR',
         'Priority support',
-        'Export CSV, JSON, PDF',
-        'API access (Limited)',
+        'Export CSV, PDF',
         'SMS/WhatsApp Alerts',
         'Team accounts (up to 3)',
       ]
@@ -689,7 +685,6 @@ export default function ModernPricingPage() {
       features: [
         'Everything in Standard',
         'Team accounts (up to 10)',
-        'Unlimited API access',
         'Maintenance Alert SMS',
         'Bulk processing',
         'Dedicated manager',

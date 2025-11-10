@@ -56,15 +56,15 @@ export default function AnalyticsView({ summary, invoices, isDark }) {
                     <FaRupeeSign size={28} />
                     <h4 className="text-lg font-semibold mt-2">Total Revenue</h4>
                     <p className="text-2xl font-bold">
-                        ${summary?.revenueSummary?.totalRevenue?.toFixed(2) || 0}
+                        ₹ {summary?.revenueSummary?.totalRevenue?.toFixed(2) || 0}
                     </p>
                 </div>
 
                 <div className="p-6 rounded-2xl bg-gradient-to-r from-blue-500 to-indigo-500 text-white shadow-xl">
                     <FiCheckCircle size={28} />
                     <h4 className="text-lg font-semibold mt-2">Paid Revenue</h4>
-                    <p className="text-2xl font-bold">
-                        ${summary?.revenueSummary?.paidRevenue?.toFixed(2) || 0}
+                    <p className="flex align-center text-2xl font-bold">
+                        ₹ {summary?.revenueSummary?.paidRevenue?.toFixed(2) || 0}
                     </p>
                 </div>
 
@@ -72,7 +72,7 @@ export default function AnalyticsView({ summary, invoices, isDark }) {
                     <FiClock size={28} />
                     <h4 className="text-lg font-semibold mt-2">Pending Revenue</h4>
                     <p className="text-2xl font-bold">
-                        ${summary?.revenueSummary?.pendingRevenue?.toFixed(2) || 0}
+                        ₹ {summary?.revenueSummary?.pendingRevenue?.toFixed(2) || 0}
                     </p>
                 </div>
             </div>
@@ -98,7 +98,7 @@ export default function AnalyticsView({ summary, invoices, isDark }) {
                     <FiActivity size={28} />
                     <h4 className="text-lg font-semibold mt-2">Avg Service Cost</h4>
                     <p className="text-2xl font-bold">
-                        ${serviceSummary.averageServiceCost?.toFixed(2) || 0}
+                        ₹ {serviceSummary.averageServiceCost?.toFixed(2) || 0}
                     </p>
                 </div>
             </div>
