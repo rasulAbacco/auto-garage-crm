@@ -61,7 +61,7 @@ export default function ContactUs() {
                                     </div>
                                     <div>
                                         <h4 className="font-semibold">Phone</h4>
-                                        <p className="text-sm text-gray-500">+91 98765 43210</p>
+                                        <p className={`text-sm ${isDark ? "text-gray-300" : "text-gray-700"}`}>+91 9972452044</p>
                                     </div>
                                 </div>
 
@@ -74,7 +74,7 @@ export default function ContactUs() {
                                     </div>
                                     <div>
                                         <h4 className="font-semibold">Email</h4>
-                                        <p className="text-sm text-gray-500">support@motordesk.com</p>
+                                        <p className={`text-sm ${isDark ? "text-gray-300": "text-gray-700"}`}>info@abaccotech.com</p>
                                     </div>
                                 </div>
 
@@ -87,8 +87,10 @@ export default function ContactUs() {
                                     </div>
                                     <div>
                                         <h4 className="font-semibold">Address</h4>
-                                        <p className="text-sm text-gray-500">
-                                            123 Garage Street, AutoCity, India 560001
+                                        <p className={`text-sm ${isDark ? "text-gray-300" : "text-gray-700"}`}>
+                                            No 12,13 & 12/A, Kirthan Arcade,<br />
+                                            3rd Floor, Aditya Nagar,<br />
+                                            Sandeep Unnikrishnan Road, Bangalore - 560097
                                         </p>
                                     </div>
                                 </div>
@@ -99,7 +101,9 @@ export default function ContactUs() {
                                 className={`mt-10 h-48 rounded-2xl flex items-center justify-center text-sm font-medium ${isDark ? "bg-white/5 text-gray-400" : "bg-gray-100 text-gray-600"
                                     }`}
                             >
-                                🗺️ Google Map Integration Coming Soon
+                                <iframe
+                                    src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d15544.932465958704!2d77.5527066637976!3d13.08440708030314!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x3bae2387c5242ab3%3A0xb5933098d4ce3ad9!2sAbacco%20technology!5e0!3m2!1sen!2sin!4v1762863117438!5m2!1sen!2sin"
+                                    className="w-full h-full" allowfullscreen="" loading="lazy" referrerpolicy="no-referrer-when-downgrade"></iframe>
                             </div>
                         </div>
 

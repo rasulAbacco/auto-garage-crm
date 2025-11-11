@@ -11,6 +11,11 @@ import {
   FiFileText,
   FiClipboard,
   FiTag,
+  FiCalendar,
+  FiPhone,
+  FiMail,
+  FiMapPin,
+  FiInfo,
 } from "react-icons/fi";
 import { FaCar, FaRupeeSign } from "react-icons/fa";
 import { useTheme } from "../../contexts/ThemeContext";
@@ -81,6 +86,31 @@ export default function ServiceDetail() {
         ? "bg-red-500"
         : "bg-gray-400";
 
+  // Prepare service data for invoice creation
+  const serviceDataForInvoice = {
+    id: service.id,
+    vehicle: `${service.client?.vehicleMake || ''} ${service.client?.vehicleModel || ''} (${service.client?.regNumber || ''})`,
+    mechanic: service.mechanic || "",
+    description: service.notes || "",
+    partsCost: partsCost,
+    partsGst: partsGst,
+    laborCost: laborCost,
+    laborGst: laborGst,
+    taxes: 0,
+    discounts: 0,
+    total: parseFloat(estimatedTotal),
+    paymentMode: "",
+    status: service.status || "Pending",
+    dueDate: "",
+    notes: service.notes || "",
+    // Add service type and category
+    serviceCategory: service.category?.name || "",
+    serviceSubCategory: service.subService?.name || "",
+    serviceNotes: service.notes || "",
+    // Include client ID
+    clientId: service.client?.id,
+  };
+
   return (
     <div
       className={`min-h-screen p-6 lg:ml-16 ${isDark ? "bg-gray-900 text-gray-100" : "bg-gray-50 text-gray-900"
@@ -101,7 +131,7 @@ export default function ServiceDetail() {
             </Link>
             <h1 className="text-3xl font-bold capitalize flex items-center gap-2">
               <FiTool />{" "}
-              {service.subService?.name || service.type || "Unnamed Service"}
+              {service.subService?.name || service.category?.name || "Unnamed Service"}
             </h1>
             <p
               className={`mt-1 ${isDark ? "text-gray-400" : "text-gray-500"
@@ -144,12 +174,16 @@ export default function ServiceDetail() {
             </h2>
             <div className="space-y-3">
               <div>
-                <p className="text-sm text-gray-400">Category</p>
+                <p className="text-sm text-gray-400">Service Category</p>
                 <p className="font-semibold">{service.category?.name || "N/A"}</p>
               </div>
               <div>
-                <p className="text-sm text-gray-400">Sub-Service</p>
+                <p className="text-sm text-gray-400">Service Sub-Category</p>
                 <p className="font-semibold">{service.subService?.name || "N/A"}</p>
+              </div>
+              <div>
+                <p className="text-sm text-gray-400">Service Date</p>
+                <p className="font-semibold">{new Date(service.date).toLocaleDateString()}</p>
               </div>
               {service.notes && (
                 <div>
@@ -159,7 +193,6 @@ export default function ServiceDetail() {
                   </p>
                 </div>
               )}
-              {/* (Images removed from here — moved to separate card below) */}
             </div>
           </div>
 
@@ -185,6 +218,14 @@ export default function ServiceDetail() {
                 <span>Labor GST</span>
                 <span>{laborGst}%</span>
               </div>
+              <div className="flex justify-between">
+                <span>Parts with GST</span>
+                <span>₹{totalParts.toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span>Labor with GST</span>
+                <span>₹{totalLabor.toFixed(2)}</span>
+              </div>
               <hr className="my-3 border-gray-500/30" />
               <div className="flex justify-between text-lg font-bold text-green-500">
                 <span>Estimated Total</span>
@@ -193,7 +234,7 @@ export default function ServiceDetail() {
             </div>
           </div>
 
-          {/* Uploaded Images — separate card */}
+          {/* Uploaded Images */}
           <div
             className={`p-6 rounded-2xl shadow ${isDark ? "bg-gray-700" : "bg-gray-100"} md:col-span-2`}
           >
@@ -202,7 +243,7 @@ export default function ServiceDetail() {
             </h2>
 
             {service.mediaFiles?.length > 0 ? (
-              <div className="max-h-[500px]overflow-y-auto pr-2">
+              <div className="max-h-[500px] overflow-y-auto pr-2">
                 <div className="flex flex-wrap align-center justify-center gap-4">
                   {service.mediaFiles.map((file) => (
                     <div
@@ -215,9 +256,9 @@ export default function ServiceDetail() {
                         className="w-full h-40 object-cover"
                         loading="lazy"
                       />
-                      {/* <div className="p-2 text-xs text-gray-500 truncate">
+                      <div className="p-2 text-xs text-gray-500 truncate">
                         {file.fileName}
-                      </div> */}
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -229,9 +270,7 @@ export default function ServiceDetail() {
             )}
           </div>
 
-
-
-          {/* Client Info (stretches full width below on md+) */}
+          {/* Client Info */}
           <div className={`p-6 rounded-2xl shadow ${isDark ? "bg-gray-700" : "bg-gray-100"} md:col-span-2`}>
             <h2 className="font-bold text-xl flex items-center gap-2 mb-4">
               <FiUser /> Client Information
@@ -244,22 +283,32 @@ export default function ServiceDetail() {
                 <div className="flex items-center gap-2">
                   <FaCar className="text-blue-500" /> <span>{service.client.regNumber}</span>
                 </div>
+                <div className="flex items-center gap-2">
+                  <FiPhone className="text-purple-500" /> <span>{service.client.phone || "N/A"}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <FiMail className="text-blue-500" /> <span>{service.client.email || "N/A"}</span>
+                </div>
                 <div className="flex items-center gap-2 col-span-2 text-sm text-gray-400">
                   <FiTag />{" "}
                   <span>
                     Vehicle:{" "}
                     {service.client.vehicleMake
-                      ? `${service.client.vehicleMake} ${service.client.vehicleModel}`
+                      ? `${service.client.vehicleMake} ${service.client.vehicleModel} (${service.client.vehicleYear || "N/A"})`
                       : "N/A"}
                   </span>
                 </div>
+                {service.client.address && (
+                  <div className="flex items-center gap-2 col-span-2 text-sm text-gray-400">
+                    <FiMapPin /> <span>{service.client.address}</span>
+                  </div>
+                )}
               </div>
             ) : (
               <p className="text-gray-400 italic">No client linked.</p>
             )}
           </div>
         </div>
-
 
         {/* Billing CTA */}
         <div className="border-t p-6 flex justify-between items-center flex-wrap gap-3">
@@ -273,14 +322,8 @@ export default function ServiceDetail() {
             to="/billing/new"
             state={{
               serviceId: service.id,
-              clientId: service.clientId,
-              description:
-                service.subService?.name || service.category?.name || "Service",
-              partsCost: service.partsCost,
-              laborCost: service.laborCost,
-              partsGst: service.partsGst,
-              laborGst: service.laborGst,
-              estimatedTotal,
+              clientId: service.client?.id,
+              serviceData: serviceDataForInvoice
             }}
             className="px-6 py-3 bg-gradient-to-r from-green-600 to-teal-600 hover:from-green-700 hover:to-teal-700 text-white font-semibold rounded-xl shadow-lg flex items-center gap-2"
           >

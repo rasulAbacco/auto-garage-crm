@@ -8,7 +8,13 @@ import prisma from "../models/prismaClient.js";
  */
 export const getRevenueSummary = async (req, res) => {
     try {
+        // Only get invoices for the authenticated user's clients
         const invoices = await prisma.invoice.findMany({
+            where: {
+                client: {
+                    userId: req.user.id // Filter by authenticated user
+                }
+            },
             select: { grandTotal: true, status: true, createdAt: true },
         });
 
@@ -37,17 +43,27 @@ export const getRevenueSummary = async (req, res) => {
  */
 export const getTopClients = async (req, res) => {
     try {
+        // Only get invoices for the authenticated user's clients
         const topClients = await prisma.invoice.groupBy({
             by: ["clientId"],
             _sum: { grandTotal: true },
             orderBy: { _sum: { grandTotal: "desc" } },
             take: 5,
+            where: {
+                client: {
+                    userId: req.user.id // Filter by authenticated user
+                }
+            }
         });
 
         const clients = await Promise.all(
             topClients.map(async (item) => {
-                const client = await prisma.client.findUnique({
-                    where: { id: item.clientId },
+                // Verify the client belongs to the authenticated user
+                const client = await prisma.client.findFirst({
+                    where: {
+                        id: item.clientId,
+                        userId: req.user.id // Filter by authenticated user
+                    },
                     select: { id: true, fullName: true, phone: true },
                 });
                 return {
@@ -73,11 +89,17 @@ export const getTopClients = async (req, res) => {
  */
 export const getServiceStats = async (req, res) => {
     try {
+        // Only get services for the authenticated user's clients
         const serviceStats = await prisma.service.groupBy({
             by: ["status"],
             _count: { status: true },
             orderBy: { _count: { status: "desc" } },
             take: 10,
+            where: {
+                client: {
+                    userId: req.user.id // Filter by authenticated user
+                }
+            }
         });
 
         res.json(serviceStats);
@@ -94,9 +116,15 @@ export const getServiceStats = async (req, res) => {
  */
 export const getInvoiceStatusSummary = async (req, res) => {
     try {
+        // Only get invoices for the authenticated user's clients
         const counts = await prisma.invoice.groupBy({
             by: ["status"],
             _count: { status: true },
+            where: {
+                client: {
+                    userId: req.user.id // Filter by authenticated user
+                }
+            }
         });
 
         res.json(counts);
@@ -116,8 +144,14 @@ export const getFullInvoiceDetails = async (req, res) => {
         const { id } = req.params;
         console.log(`🔍 Fetching full invoice #${id}`);
 
-        const invoice = await prisma.invoice.findUnique({
-            where: { id: Number(id) },
+        // Only get invoice if it belongs to the authenticated user's client
+        const invoice = await prisma.invoice.findFirst({
+            where: {
+                id: Number(id),
+                client: {
+                    userId: req.user.id // Filter by authenticated user
+                }
+            },
             include: {
                 client: {
                     select: {
@@ -150,8 +184,8 @@ export const getFullInvoiceDetails = async (req, res) => {
         });
 
         if (!invoice) {
-            console.warn(`⚠️ Invoice #${id} not found`);
-            return res.status(404).json({ message: "Invoice not found" });
+            console.warn(`⚠️ Invoice #${id} not found or access denied`);
+            return res.status(404).json({ message: "Invoice not found or access denied" });
         }
 
         res.json(invoice);
@@ -168,25 +202,46 @@ export const getFullInvoiceDetails = async (req, res) => {
  */
 export const getReportsSummary = async (req, res) => {
     try {
+        // Only get data for the authenticated user's clients
         const [invoices, serviceGroups, topClientsGroup, invoiceStatus] = await Promise.all([
             prisma.invoice.findMany({
+                where: {
+                    client: {
+                        userId: req.user.id // Filter by authenticated user
+                    }
+                },
                 select: { grandTotal: true, status: true, createdAt: true },
             }),
             prisma.service.groupBy({
-                by: ["status"], // ✅ using status instead of type
+                by: ["status"],
                 _count: { status: true },
                 orderBy: { _count: { status: "desc" } },
                 take: 10,
+                where: {
+                    client: {
+                        userId: req.user.id // Filter by authenticated user
+                    }
+                }
             }),
             prisma.invoice.groupBy({
                 by: ["clientId"],
                 _sum: { grandTotal: true },
                 orderBy: { _sum: { grandTotal: "desc" } },
                 take: 5,
+                where: {
+                    client: {
+                        userId: req.user.id // Filter by authenticated user
+                    }
+                }
             }),
             prisma.invoice.groupBy({
                 by: ["status"],
                 _count: { status: true },
+                where: {
+                    client: {
+                        userId: req.user.id // Filter by authenticated user
+                    }
+                }
             }),
         ]);
 
@@ -200,8 +255,12 @@ export const getReportsSummary = async (req, res) => {
         // Top clients
         const topClients = await Promise.all(
             topClientsGroup.map(async (tc) => {
-                const client = await prisma.client.findUnique({
-                    where: { id: tc.clientId },
+                // Verify the client belongs to the authenticated user
+                const client = await prisma.client.findFirst({
+                    where: {
+                        id: tc.clientId,
+                        userId: req.user.id // Filter by authenticated user
+                    },
                     select: { id: true, fullName: true, phone: true },
                 });
                 return {
@@ -219,8 +278,13 @@ export const getReportsSummary = async (req, res) => {
             count: s._count.status || 0,
         }));
 
-        // Services summary
+        // Services summary - only for the authenticated user's clients
         const servicesRaw = await prisma.service.findMany({
+            where: {
+                client: {
+                    userId: req.user.id // Filter by authenticated user
+                }
+            },
             select: { id: true, status: true, cost: true, date: true, categoryId: true, subServiceId: true },
         });
 
@@ -279,7 +343,13 @@ export const getReportsSummary = async (req, res) => {
  */
 export const getServicesList = async (req, res) => {
     try {
+        // Only get services for the authenticated user's clients
         const services = await prisma.service.findMany({
+            where: {
+                client: {
+                    userId: req.user.id // Filter by authenticated user
+                }
+            },
             include: {
                 client: { select: { id: true, fullName: true } },
                 invoice: { select: { id: true } },

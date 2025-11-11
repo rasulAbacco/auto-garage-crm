@@ -6,7 +6,13 @@ import prisma from "../models/prismaClient.js";
 ============================================================ */
 export const getInvoices = async (req, res) => {
     try {
+        // Only get invoices for the authenticated user's clients
         const invoices = await prisma.invoice.findMany({
+            where: {
+                client: {
+                    userId: req.user.id // Filter by authenticated user
+                }
+            },
             include: {
                 client: {
                     select: {
@@ -46,8 +52,15 @@ export const getInvoices = async (req, res) => {
 export const getInvoiceById = async (req, res) => {
     try {
         const { id } = req.params;
-        const invoice = await prisma.invoice.findUnique({
-            where: { id: parseInt(id) },
+
+        // Check that the invoice belongs to a client of the authenticated user
+        const invoice = await prisma.invoice.findFirst({
+            where: {
+                id: parseInt(id),
+                client: {
+                    userId: req.user.id // Filter by authenticated user
+                }
+            },
             include: {
                 client: true,
                 services: true,
@@ -55,7 +68,7 @@ export const getInvoiceById = async (req, res) => {
         });
 
         if (!invoice) {
-            return res.status(404).json({ message: "Invoice not found" });
+            return res.status(404).json({ message: "Invoice not found or access denied" });
         }
 
         res.status(200).json(invoice);
@@ -73,6 +86,8 @@ export const createInvoice = async (req, res) => {
         const {
             clientId,
             serviceIds = [],
+
+            // ✅ Pricing
             partsCost = 0,
             partsGst = 0,
             laborCost = 0,
@@ -81,22 +96,48 @@ export const createInvoice = async (req, res) => {
             tax = 0,
             discount = 0,
             grandTotal,
+
+            // ✅ Payment
             paymentMode = null,
             status = "Pending",
             dueDate,
             notes,
+
+            // ✅ Service details (missing earlier)
+            serviceCategory,
+            serviceSubCategory,
+            serviceNotes,
+            mechanic,
+            vehicle,
         } = req.body;
 
         // Validation
         if (!clientId || !grandTotal)
             return res.status(400).json({ message: "Missing required fields" });
 
-        // ✅ Verify all selected services are Paid before creating invoice
+        // Check correct ownership
+        const client = await prisma.client.findFirst({
+            where: {
+                id: parseInt(clientId),
+                userId: req.user.id,
+            },
+        });
+
+        if (!client) {
+            return res.status(403).json({
+                message: "You are not authorized to create an invoice for this client",
+            });
+        }
+
+        // ✅ Check serviceIds
         if (serviceIds.length > 0) {
             const unpaidServices = await prisma.service.findMany({
                 where: {
                     id: { in: serviceIds.map(Number) },
                     status: { notIn: ["Paid", "Processing"] },
+                    client: {
+                        userId: req.user.id,
+                    },
                 },
             });
 
@@ -111,10 +152,13 @@ export const createInvoice = async (req, res) => {
 
         const invoiceNumber = `INV-${Date.now()}`;
 
+        // ✅ Create Invoice With Service Fields
         const invoice = await prisma.invoice.create({
             data: {
                 invoiceNumber,
                 clientId: parseInt(clientId),
+
+                // Pricing
                 totalAmount: parseFloat(totalAmount || 0),
                 partsCost: parseFloat(partsCost || 0),
                 partsGst: parseFloat(partsGst || 0),
@@ -123,21 +167,36 @@ export const createInvoice = async (req, res) => {
                 tax: parseFloat(tax),
                 discount: parseFloat(discount),
                 grandTotal: parseFloat(grandTotal),
+
+                // Payment
                 paymentMode,
                 status,
                 paidAt: status === "Paid" ? new Date() : null,
                 dueDate: dueDate ? new Date(dueDate) : null,
+
                 notes: notes || null,
+
+                // ✅ Store service details (fix)
+                serviceCategory: serviceCategory || null,
+                serviceSubCategory: serviceSubCategory || null,
+                serviceNotes: serviceNotes || null,
+                mechanic: mechanic || null,
+                vehicle: vehicle || null,
             },
             include: {
                 client: true,
             },
         });
 
-        // ✅ Link services to invoice if applicable
+        // ✅ If invoice created for services → link them
         if (serviceIds.length > 0) {
             await prisma.service.updateMany({
-                where: { id: { in: serviceIds.map(Number) } },
+                where: {
+                    id: { in: serviceIds.map(Number) },
+                    client: {
+                        userId: req.user.id,
+                    },
+                },
                 data: {
                     invoiceId: invoice.id,
                     status: "Billed",
@@ -163,6 +222,7 @@ export const createInvoice = async (req, res) => {
     }
 };
 
+
 /* ============================================================
    ✏️ Update Invoice
 ============================================================ */
@@ -184,10 +244,17 @@ export const updateInvoice = async (req, res) => {
             notes,
         } = req.body;
 
-        const invoice = await prisma.invoice.findUnique({
-            where: { id: parseInt(id) },
+        // Check that the invoice belongs to a client of the authenticated user
+        const invoice = await prisma.invoice.findFirst({
+            where: {
+                id: parseInt(id),
+                client: {
+                    userId: req.user.id // Filter by authenticated user
+                }
+            },
         });
-        if (!invoice) return res.status(404).json({ message: "Invoice not found" });
+
+        if (!invoice) return res.status(404).json({ message: "Invoice not found or access denied" });
 
         const updatedInvoice = await prisma.invoice.update({
             where: { id: parseInt(id) },
@@ -228,13 +295,26 @@ export const updateInvoice = async (req, res) => {
 export const deleteInvoice = async (req, res) => {
     try {
         const { id } = req.params;
-        const invoice = await prisma.invoice.findUnique({
-            where: { id: parseInt(id) },
+
+        // Check that the invoice belongs to a client of the authenticated user
+        const invoice = await prisma.invoice.findFirst({
+            where: {
+                id: parseInt(id),
+                client: {
+                    userId: req.user.id // Filter by authenticated user
+                }
+            },
         });
-        if (!invoice) return res.status(404).json({ message: "Invoice not found" });
+
+        if (!invoice) return res.status(404).json({ message: "Invoice not found or access denied" });
 
         await prisma.service.updateMany({
-            where: { invoiceId: invoice.id },
+            where: {
+                invoiceId: invoice.id,
+                client: {
+                    userId: req.user.id // Ensure services belong to the user's clients
+                }
+            },
             data: { invoiceId: null, status: "Unpaid" },
         });
 
@@ -256,8 +336,7 @@ export const getClients = async (req, res) => {
         const limit = Math.min(100, parseInt(req.query.limit || "50"));
         const skip = (page - 1) * limit;
 
-        const where = {};
-        if (req.user?.id) where.userId = req.user.id;
+        const where = { userId: req.user.id }; // Only get clients for the authenticated user
 
         if (req.query.q) {
             const q = String(req.query.q).trim().toLowerCase();
@@ -316,8 +395,12 @@ export const getClientById = async (req, res) => {
             return res.status(400).json({ message: "Invalid client ID" });
         }
 
-        const client = await prisma.client.findUnique({
-            where: { id: parseInt(id) },
+        // Check that the client belongs to the authenticated user
+        const client = await prisma.client.findFirst({
+            where: {
+                id: parseInt(id),
+                userId: req.user.id // Filter by authenticated user
+            },
             include: {
                 services: {
                     select: {
@@ -351,7 +434,7 @@ export const getClientById = async (req, res) => {
         });
 
         if (!client)
-            return res.status(404).json({ message: "Client not found" });
+            return res.status(404).json({ message: "Client not found or access denied" });
 
         res.status(200).json({
             success: true,

@@ -1,179 +1,327 @@
-import React from 'react'
-import { LineChart, Line, AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts'
-import { TrendingUp, Users, Wrench, IndianRupee, Clock, Calendar, AlertCircle, Star } from 'lucide-react'
+// client/src/pages/Dashboard.jsx
+import React, { useState, useEffect, Suspense, lazy, useMemo } from 'react';
+import { motion } from 'framer-motion';
+import {
+  TrendingUp, Users, Wrench, IndianRupee, Clock, Calendar, AlertCircle,
+  Star, Car, ChevronRight, MoreHorizontal
+} from 'lucide-react';
+import { useTheme } from '../contexts/ThemeContext';
 
-// Mock data - replace with your actual data from storage
-const mockClients = [
-  { id: 1, name: 'John Smith', phone: '123-456-7890', email: 'john@example.com' },
-  { id: 2, name: 'Sarah Johnson', phone: '234-567-8901', email: 'sarah@example.com' },
-  { id: 3, name: 'Mike Wilson', phone: '345-678-9012', email: 'mike@example.com' },
-  { id: 4, name: 'Lisa Brown', phone: '456-789-0123', email: 'lisa@example.com' },
-  { id: 5, name: 'David Davis', phone: '567-890-1234', email: 'david@example.com' }
-]
+const API_URL = import.meta.env.VITE_API_BASE_URL;
 
-const mockServices = [
-  { id: 1, clientId: 1, type: 'Oil Change', date: '2024-09-01', cost: 150, status: 'Completed' },
-  { id: 2, clientId: 2, type: 'Brake Repair', date: '2024-09-02', cost: 300, status: 'In Progress' },
-  { id: 3, clientId: 3, type: 'Engine Tune-up', date: '2024-09-03', cost: 450, status: 'Completed' },
-  { id: 4, clientId: 4, type: 'Tire Rotation', date: '2024-09-04', cost: 80, status: 'Pending' },
-  { id: 5, clientId: 1, type: 'AC Service', date: '2024-09-05', cost: 200, status: 'Completed' }
-]
+// Define fetchWithAuth function
+const getAuthToken = () => localStorage.getItem('token');
 
-const mockBilling = [
-  { id: 1, serviceId: 1, amount: 150, status: 'Paid', dueDate: '2024-09-01' },
-  { id: 2, serviceId: 2, amount: 300, status: 'Pending', dueDate: '2024-09-15' },
-  { id: 3, serviceId: 3, amount: 450, status: 'Paid', dueDate: '2024-09-03' },
-  { id: 4, serviceId: 4, amount: 80, status: 'Overdue', dueDate: '2024-08-30' },
-  { id: 5, serviceId: 5, amount: 200, status: 'Paid', dueDate: '2024-09-05' }
-]
+const fetchWithAuth = async (url) => {
+  const token = getAuthToken();
+  if (!token) throw new Error('No authentication token found');
 
-const mockReminders = [
-  { id: 1, clientId: 1, message: 'Oil change due', date: '2024-10-01' },
-  { id: 2, clientId: 2, message: 'Inspection reminder', date: '2024-10-15' },
-  { id: 3, clientId: 3, message: 'Brake check', date: '2024-10-20' }
-]
+  const response = await fetch(url, {
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+  });
 
-// Generate chart data
-const generateRevenueData = () => {
-  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep']
-  return months.map(month => ({
-    month,
-    revenue: Math.floor(Math.random() * 5000) + 2000,
-    services: Math.floor(Math.random() * 30) + 10
-  }))
-}
+  if (response.status === 401) {
+    localStorage.removeItem('token');
+    window.location.href = '/login';
+  }
 
-const generateAppointmentData = () => {
-  const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
-  return days.map(day => ({
-    day,
-    appointments: Math.floor(Math.random() * 25) + 5,
-    completed: Math.floor(Math.random() * 20) + 3
-  }))
-}
+  return response;
+};
 
-const generateServiceTypes = () => [
-  { name: 'Oil Change', value: 35, color: '#3B82F6' },
-  { name: 'Brake Repair', value: 25, color: '#10B981' },
-  { name: 'Engine Work', value: 20, color: '#F59E0B' },
-  { name: 'Tire Service', value: 15, color: '#EF4444' },
-  { name: 'Other', value: 5, color: '#8B5CF6' }
-]
+// Lazy load entire chart components instead of individual Recharts components
+const RevenueChart = lazy(() => import('../components/Dashboard/RevenueChart'));
+const ServiceTypesPieChart = lazy(() => import('../components/Dashboard/ServiceTypesPieChart'));
+const WeeklyAppointmentsChart = lazy(() => import('../components/Dashboard/WeeklyAppointmentsChart'));
+const CustomerOverviewChart = lazy(() => import('../components/Dashboard/CustomerOverviewChart'));
 
-const StatCard = ({ title, value, change, icon: Icon, color = 'blue' }) => (
-  <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 hover:shadow-md transition-shadow">
-    <div className="flex items-center justify-between mb-4">
-      <div className={`p-3 rounded-xl bg-${color}-50`}>
-        <Icon className={`w-6 h-6 text-${color}-600`} />
-      </div>
-      {change && (
-        <div className={`flex items-center text-sm ${change > 0 ? 'text-green-600' : 'text-red-600'}`}>
-          <TrendingUp className="w-4 h-4 mr-1" />
-          {change > 0 ? '+' : ''}{change}%
-        </div>
-      )}
-    </div>
-    <h3 className="text-2xl font-bold text-gray-900 mb-1">{value}</h3>
-    <p className="text-sm text-gray-500">{title}</p>
-  </div>
-)
-
-const ChartCard = ({ title, children, subtitle }) => (
-  <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
-    <div className="mb-6">
-      <h3 className="text-lg font-semibold text-gray-900">{title}</h3>
-      {subtitle && <p className="text-sm text-gray-500 mt-1">{subtitle}</p>}
-    </div>
-    {children}
-  </div>
-)
-
-const AppointmentCard = ({ name, time, service, status, avatar }) => (
-  <div className="flex items-center justify-between p-4 hover:bg-gray-50 rounded-xl transition-colors">
-    <div className="flex items-center space-x-3">
-      <div className="w-10 h-10 rounded-full bg-gradient-to-r from-blue-500 to-purple-600 flex items-center justify-center text-white font-semibold">
-        {avatar}
-      </div>
-      <div>
-        <p className="font-medium text-gray-900">{name}</p>
-        <p className="text-sm text-gray-500">{service}</p>
-      </div>
-    </div>
-    <div className="text-right">
-      <p className="text-sm font-medium text-gray-900">{time}</p>
-      <span className={`inline-block px-2 py-1 rounded-full text-xs font-medium ${status === 'Confirmed' ? 'bg-green-100 text-green-800' :
-          status === 'Pending' ? 'bg-yellow-100 text-yellow-800' :
-            'bg-blue-100 text-blue-800'
-        }`}>
-        {status}
-      </span>
-    </div>
-  </div>
-)
-
-export default function Dashboard() {
-  const revenueData = generateRevenueData()
-  const appointmentData = generateAppointmentData()
-  const serviceTypesData = generateServiceTypes()
-
-  // Calculate stats
-  const totalRevenue = mockBilling.filter(b => b.status === 'Paid').reduce((sum, b) => sum + b.amount, 0)
-  const totalServices = mockServices.length
-  const totalClients = mockClients.length
-  const avgAppointmentTime = '2.5 hrs'
-  const customerRating = 4.8
-  const upcomingReminders = mockReminders.length
+// Memoize StatCard to prevent unnecessary re-renders
+const StatCard = React.memo(({ title, value, change, icon: Icon, color = 'blue', formatValue = false }) => {
+  const { isDark } = useTheme();
 
   return (
-    <div className="min-h-screen lg:pl-64 p-6">
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.5 }}
+      className={`rounded-2xl p-6 shadow-lg border transition-all duration-300 ${isDark
+        ? `bg-gradient-to-br from-gray-800 to-gray-900 border-gray-700 hover:shadow-gray-800/50`
+        : `bg-gradient-to-br from-white to-${color}-50 border-${color}-100 hover:shadow-xl`
+        }`}
+    >
+      <div className="flex items-center justify-between mb-4">
+        <div className={`p-3 rounded-xl shadow-md ${isDark
+          ? `bg-gradient-to-r from-${color}-600 to-${color}-700`
+          : `bg-gradient-to-r from-${color}-500 to-${color}-600`
+          }`}>
+          <Icon className="w-6 h-6 text-white" />
+        </div>
+        {change !== undefined && (
+          <div className={`flex items-center text-sm font-medium ${change > 0 ? 'text-green-500' : 'text-red-500'
+            }`}>
+            <TrendingUp className="w-4 h-4 mr-1" />
+            {change > 0 ? '+' : ''}{change}%
+          </div>
+        )}
+      </div>
+      <h3 className={`text-2xl font-bold mb-1 ${isDark ? 'text-white' : 'text-gray-900'
+        }`}>
+        {formatValue ? `₹${value.toLocaleString()}` : value}
+      </h3>
+      <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'
+        }`}>{title}</p>
+    </motion.div>
+  );
+});
+
+// Memoize ChartCard
+const ChartCard = React.memo(({ title, children, subtitle, action }) => {
+  const { isDark } = useTheme();
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.5, delay: 0.1 }}
+      className={`rounded-2xl p-6 shadow-lg border transition-all duration-300 ${isDark
+        ? 'bg-gray-800 border-gray-700'
+        : 'bg-white border-gray-100'
+        }`}
+    >
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <h3 className={`text-lg font-semibold ${isDark ? 'text-white' : 'text-gray-900'
+            }`}>{title}</h3>
+          {subtitle && <p className={`text-sm mt-1 ${isDark ? 'text-gray-400' : 'text-gray-500'
+            }`}>{subtitle}</p>}
+        </div>
+        {action && (
+          <button className={`transition-colors ${isDark ? 'text-gray-400 hover:text-gray-300' : 'text-gray-400 hover:text-gray-600'
+            }`}>
+            <MoreHorizontal className="w-5 h-5" />
+          </button>
+        )}
+      </div>
+      {children}
+    </motion.div>
+  );
+});
+
+// Memoize AppointmentCard
+const AppointmentCard = React.memo(({ name, time, service, status, avatar, onClick }) => {
+  const { isDark } = useTheme();
+
+  return (
+    <motion.div
+      whileHover={{ y: -5 }}
+      className={`flex items-center justify-between p-4 rounded-xl transition-colors cursor-pointer ${isDark
+        ? 'bg-gray-700 hover:bg-gray-600'
+        : 'bg-gray-50 hover:bg-gray-100'
+        }`}
+      onClick={onClick}
+    >
+      <div className="flex items-center space-x-3">
+        <div className="w-10 h-10 rounded-full bg-gradient-to-r from-blue-500 to-purple-600 flex items-center justify-center text-white font-semibold shadow-md">
+          {avatar}
+        </div>
+        <div>
+          <p className={`font-medium ${isDark ? 'text-white' : 'text-gray-900'
+            }`}>{name}</p>
+          <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'
+            }`}>{service}</p>
+        </div>
+      </div>
+      <div className="text-right">
+        <p className={`text-sm font-medium ${isDark ? 'text-white' : 'text-gray-900'
+          }`}>{time}</p>
+        <span className={`inline-block px-2 py-1 rounded-full text-xs font-medium ${status === 'Completed' ? (isDark ? 'bg-green-900/30 text-green-400' : 'bg-green-100 text-green-800') :
+          status === 'In Progress' ? (isDark ? 'bg-yellow-900/30 text-yellow-400' : 'bg-yellow-100 text-yellow-800') :
+            (isDark ? 'bg-blue-900/30 text-blue-400' : 'bg-blue-100 text-blue-800')
+          }`}>
+          {status}
+        </span>
+      </div>
+    </motion.div>
+  );
+});
+
+// Memoize QuickStat
+const QuickStat = React.memo(({ icon: Icon, title, value, color }) => {
+  const { isDark } = useTheme();
+
+  return (
+    <motion.div
+      whileHover={{ scale: 1.03 }}
+      className={`flex items-center justify-between p-4 rounded-xl transition-colors ${isDark
+        ? 'bg-gray-700 hover:bg-gray-600'
+        : 'bg-gray-50 hover:bg-gray-100'
+        }`}
+    >
+      <div className="flex items-center space-x-3">
+        <div className={`p-2 rounded-lg ${isDark ? `bg-${color}-900/30` : `bg-${color}-50`
+          }`}>
+          <Icon className={`w-5 h-5 ${isDark ? `text-${color}-400` : `text-${color}-600`
+            }`} />
+        </div>
+        <span className={
+          isDark ? 'text-gray-300' : 'text-gray-700'
+        }>{title}</span>
+      </div>
+      <span className={`font-bold ${isDark ? 'text-white' : 'text-gray-900'
+        }`}>{value}</span>
+    </motion.div>
+  );
+});
+
+// Chart Loading Component
+const ChartLoading = () => (
+  <div className="flex items-center justify-center h-64">
+    <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+  </div>
+);
+
+export default function Dashboard() {
+  const { isDark } = useTheme();
+  const [dashboardData, setDashboardData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    const fetchDashboardData = async () => {
+      try {
+        const response = await fetchWithAuth(`${API_URL}/api/dashboard`);
+        const data = await response.json();
+
+        if (!response.ok) {
+          throw new Error(data.message || 'Failed to fetch dashboard data');
+        }
+
+        setDashboardData(data);
+      } catch (err) {
+        console.error('Error fetching dashboard data:', err);
+        setError(err.message);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchDashboardData();
+  }, []);
+
+  // Memoize chart data to prevent unnecessary re-renders
+  const chartData = useMemo(() => {
+    if (!dashboardData) return null;
+
+    return {
+      monthlyRevenue: dashboardData.charts.monthlyRevenue,
+      serviceTypes: dashboardData.charts.serviceTypes,
+      weeklyAppointments: dashboardData.charts.weeklyAppointments,
+    };
+  }, [dashboardData]);
+
+  if (loading) {
+    return (
+      <div className={`min-h-screen w-full lg:pl-20 p-6 flex items-center justify-center ${isDark ? 'bg-gray-900' : 'bg-gray-50'
+        }`}>
+        <div className="text-center">
+          <div className="w-16 h-16 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto"></div>
+          <p className={`mt-4 ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>Loading dashboard...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className={`min-h-screen w-full lg:pl-20 p-6 flex items-center justify-center ${isDark ? 'bg-gray-900' : 'bg-gray-50'
+        }`}>
+        <div className={`text-center p-8 rounded-xl max-w-md ${isDark ? 'bg-red-900/20' : 'bg-red-50'
+          }`}>
+          <div className={`text-5xl mb-4 ${isDark ? 'text-red-400' : 'text-red-500'}`}>⚠️</div>
+          <h2 className={`text-xl font-bold mb-2 ${isDark ? 'text-red-300' : 'text-red-800'
+            }`}>Error Loading Dashboard</h2>
+          <p className={isDark ? 'text-red-400' : 'text-red-600'}>{error}</p>
+          <button
+            onClick={() => window.location.reload()}
+            className={`mt-4 px-4 py-2 rounded-lg transition-colors ${isDark ? 'bg-red-700 hover:bg-red-600 text-white' : 'bg-red-600 hover:bg-red-700 text-white'
+              }`}
+          >
+            Try Again
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (!dashboardData) {
+    return null;
+  }
+
+  const { stats, data: dashboardContent } = dashboardData;
+
+  return (
+    <div className={`min-h-screen w-full lg:pl-20 p-6 transition-colors duration-300 ${isDark ? 'bg-gray-900' : 'bg-gray-50'
+      }`}>
       {/* Header */}
-      <div className="mb-8">
-        <div className="flex items-center justify-between">
+      <motion.div
+        initial={{ opacity: 0, y: -20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5 }}
+        className="mb-8"
+      >
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900">Dashboard Overview</h1>
-            <p className="text-gray-600 mt-1">Welcome back! Here's what's happening in your garage today.</p>
+            <h1 className={`text-3xl font-bold ${isDark ? 'text-white' : 'text-gray-900'
+              }`}>Dashboard Overview</h1>
+            <p className={`mt-1 ${isDark ? 'text-gray-400' : 'text-gray-600'
+              }`}>Welcome back! Here's what's happening in your garage today.</p>
           </div>
           <div className="flex items-center space-x-4">
             <div className="text-right">
-              <p className="text-sm text-gray-500">Today</p>
-              <p className="font-semibold text-gray-900">{new Date().toLocaleDateString('en-US', {
-                weekday: 'long',
-                year: 'numeric',
-                month: 'long',
-                day: 'numeric'
-              })}</p>
+              <p className={`text-sm ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>Today</p>
+              <p className={`font-semibold ${isDark ? 'text-white' : 'text-gray-900'
+                }`}>
+                {new Date().toLocaleDateString('en-US', {
+                  weekday: 'long',
+                  year: 'numeric',
+                  month: 'long',
+                  day: 'numeric'
+                })}
+              </p>
             </div>
-            
           </div>
         </div>
-      </div>
+      </motion.div>
 
       {/* Stats Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
         <StatCard
           title="Total Revenue"
-          value={`₹${totalRevenue.toLocaleString()}`}
+          value={stats.totalRevenue}
           change={12}
           icon={IndianRupee}
           color="green"
+          formatValue={true}
         />
         <StatCard
           title="Total Services"
-          value={totalServices}
+          value={stats.totalServices}
           change={8}
           icon={Wrench}
           color="blue"
         />
         <StatCard
           title="Avg Service Time"
-          value={avgAppointmentTime}
+          value={stats.avgServiceTime}
           change={-5}
           icon={Clock}
           color="orange"
         />
         <StatCard
           title="Customer Rating"
-          value={customerRating}
+          value={stats.customerRating}
           icon={Star}
           color="yellow"
         />
@@ -184,88 +332,17 @@ export default function Dashboard() {
         {/* Revenue Chart */}
         <div className="lg:col-span-2">
           <ChartCard title="Revenue & Services" subtitle="Monthly overview of revenue and completed services">
-            <ResponsiveContainer width="100%" height={300}>
-              <AreaChart data={revenueData}>
-                <defs>
-                  <linearGradient id="revenueGradient" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#3B82F6" stopOpacity={0.3} />
-                    <stop offset="95%" stopColor="#3B82F6" stopOpacity={0} />
-                  </linearGradient>
-                  <linearGradient id="servicesGradient" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#10B981" stopOpacity={0.3} />
-                    <stop offset="95%" stopColor="#10B981" stopOpacity={0} />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                <XAxis dataKey="month" stroke="#666" fontSize={12} />
-                <YAxis stroke="#666" fontSize={12} />
-                <Tooltip
-                  contentStyle={{
-                    backgroundColor: 'white',
-                    border: 'none',
-                    borderRadius: '12px',
-                    boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)'
-                  }}
-                />
-                <Area
-                  type="monotone"
-                  dataKey="revenue"
-                  stroke="#3B82F6"
-                  fillOpacity={1}
-                  fill="url(#revenueGradient)"
-                  strokeWidth={3}
-                />
-                <Area
-                  type="monotone"
-                  dataKey="services"
-                  stroke="#10B981"
-                  fillOpacity={1}
-                  fill="url(#servicesGradient)"
-                  strokeWidth={3}
-                />
-              </AreaChart>
-            </ResponsiveContainer>
+            <Suspense fallback={<ChartLoading />}>
+              {chartData && <RevenueChart data={chartData.monthlyRevenue} isDark={isDark} />}
+            </Suspense>
           </ChartCard>
         </div>
 
         {/* Service Types Pie Chart */}
         <ChartCard title="Service Distribution" subtitle="Popular service types this month">
-          <ResponsiveContainer width="100%" height={300}>
-            <PieChart>
-              <Pie
-                data={serviceTypesData}
-                cx="50%"
-                cy="50%"
-                innerRadius={60}
-                outerRadius={100}
-                paddingAngle={5}
-                dataKey="value"
-              >
-                {serviceTypesData.map((entry, index) => (
-                  <Cell key={`cell-${index}`} fill={entry.color} />
-                ))}
-              </Pie>
-              <Tooltip
-                contentStyle={{
-                  backgroundColor: 'white',
-                  border: 'none',
-                  borderRadius: '12px',
-                  boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)'
-                }}
-              />
-            </PieChart>
-          </ResponsiveContainer>
-          <div className="mt-4 space-y-2">
-            {serviceTypesData.map((item, index) => (
-              <div key={index} className="flex items-center justify-between text-sm">
-                <div className="flex items-center space-x-2">
-                  <div className="w-3 h-3 rounded-full" style={{ backgroundColor: item.color }}></div>
-                  <span className="text-gray-700">{item.name}</span>
-                </div>
-                <span className="font-medium text-gray-900">{item.value}%</span>
-              </div>
-            ))}
-          </div>
+          <Suspense fallback={<ChartLoading />}>
+            {chartData && <ServiceTypesPieChart data={chartData.serviceTypes} isDark={isDark} />}
+          </Suspense>
         </ChartCard>
       </div>
 
@@ -273,59 +350,32 @@ export default function Dashboard() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
         {/* Weekly Appointments */}
         <ChartCard title="Weekly Appointments" subtitle="Appointments scheduled vs completed this week">
-          <ResponsiveContainer width="100%" height={250}>
-            <BarChart data={appointmentData} barCategoryGap="20%">
-              <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-              <XAxis dataKey="day" stroke="#666" fontSize={12} />
-              <YAxis stroke="#666" fontSize={12} />
-              <Tooltip
-                contentStyle={{
-                  backgroundColor: 'white',
-                  border: 'none',
-                  borderRadius: '12px',
-                  boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)'
-                }}
-              />
-              <Bar dataKey="appointments" fill="#3B82F6" radius={[4, 4, 0, 0]} />
-              <Bar dataKey="completed" fill="#10B981" radius={[4, 4, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
+          <Suspense fallback={<ChartLoading />}>
+            {chartData && <WeeklyAppointmentsChart data={chartData.weeklyAppointments} isDark={isDark} />}
+          </Suspense>
         </ChartCard>
 
         {/* Customer Overview */}
         <ChartCard title="Customer Overview" subtitle="New vs returning customers">
           <div className="grid grid-cols-2 gap-6 mb-6">
-            <div className="text-center">
-              <div className="text-3xl font-bold text-blue-600 mb-2">{totalClients}</div>
-              <div className="text-sm text-gray-500">Total Customers</div>
+            <div className={`text-center p-4 rounded-xl ${isDark ? 'bg-blue-900/30' : 'bg-blue-50'
+              }`}>
+              <div className={`text-3xl font-bold mb-2 ${isDark ? 'text-blue-400' : 'text-blue-600'
+                }`}>{stats.totalClients}</div>
+              <div className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'
+                }`}>Total Customers</div>
             </div>
-            <div className="text-center">
-              <div className="text-3xl font-bold text-green-600 mb-2">{upcomingReminders}</div>
-              <div className="text-sm text-gray-500">Upcoming Reminders</div>
+            <div className={`text-center p-4 rounded-xl ${isDark ? 'bg-green-900/30' : 'bg-green-50'
+              }`}>
+              <div className={`text-3xl font-bold mb-2 ${isDark ? 'text-green-400' : 'text-green-600'
+                }`}>{stats.upcomingReminders}</div>
+              <div className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'
+                }`}>Upcoming Reminders</div>
             </div>
           </div>
-          <ResponsiveContainer width="100%" height={150}>
-            <LineChart data={revenueData.slice(0, 7)}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-              <XAxis dataKey="month" stroke="#666" fontSize={12} />
-              <YAxis stroke="#666" fontSize={12} />
-              <Tooltip
-                contentStyle={{
-                  backgroundColor: 'white',
-                  border: 'none',
-                  borderRadius: '12px',
-                  boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)'
-                }}
-              />
-              <Line
-                type="monotone"
-                dataKey="services"
-                stroke="#8B5CF6"
-                strokeWidth={3}
-                dot={{ fill: '#8B5CF6', strokeWidth: 2, r: 4 }}
-              />
-            </LineChart>
-          </ResponsiveContainer>
+          <Suspense fallback={<ChartLoading />}>
+            {chartData && <CustomerOverviewChart data={chartData.monthlyRevenue} isDark={isDark} />}
+          </Suspense>
         </ChartCard>
       </div>
 
@@ -333,87 +383,71 @@ export default function Dashboard() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Today's Appointments */}
         <div className="lg:col-span-2">
-          <ChartCard title="Today's Appointments" subtitle="Scheduled appointments for today">
-            <div className="space-y-1">
-              <AppointmentCard
-                name="John Smith"
-                time="9:00 AM"
-                service="Oil Change"
-                status="Confirmed"
-                avatar="JS"
-              />
-              <AppointmentCard
-                name="Sarah Johnson"
-                time="11:30 AM"
-                service="Brake Inspection"
-                status="In Progress"
-                avatar="SJ"
-              />
-              <AppointmentCard
-                name="Mike Wilson"
-                time="2:00 PM"
-                service="Engine Diagnostic"
-                status="Pending"
-                avatar="MW"
-              />
-              <AppointmentCard
-                name="Lisa Brown"
-                time="4:30 PM"
-                service="Tire Rotation"
-                status="Confirmed"
-                avatar="LB"
-              />
+          <ChartCard
+            title="Today's Appointments"
+            subtitle="Scheduled appointments for today"
+            action={
+              <button className={`text-sm font-medium flex items-center ${isDark ? 'text-blue-400 hover:text-blue-300' : 'text-blue-600 hover:text-blue-800'
+                }`}>
+                View All <ChevronRight className="w-4 h-4 ml-1" />
+              </button>
+            }
+          >
+            <div className="space-y-3">
+              {dashboardContent.todayAppointments.length > 0 ? (
+                dashboardContent.todayAppointments.map((appointment) => (
+                  <AppointmentCard
+                    key={appointment.id}
+                    name={appointment.name}
+                    time={appointment.time}
+                    service={appointment.service}
+                    status={appointment.status}
+                    avatar={appointment.avatar}
+                    onClick={() => console.log('View appointment:', appointment.id)}
+                  />
+                ))
+              ) : (
+                <div className={`text-center py-8 ${isDark ? 'text-gray-500' : 'text-gray-500'
+                  }`}>
+                  <Calendar className={`w-12 h-12 mx-auto mb-3 ${isDark ? 'text-gray-600' : 'text-gray-300'
+                    }`} />
+                  <p>No appointments scheduled for today</p>
+                </div>
+              )}
             </div>
           </ChartCard>
         </div>
 
         {/* Quick Stats */}
         <ChartCard title="Quick Stats" subtitle="Key metrics at a glance">
-          <div className="space-y-6">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-3">
-                <div className="p-2 bg-blue-50 rounded-lg">
-                  <Users className="w-5 h-5 text-blue-600" />
-                </div>
-                <span className="text-gray-700">Active Clients</span>
-              </div>
-              <span className="font-bold text-gray-900">{totalClients}</span>
-            </div>
-
-            <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-3">
-                <div className="p-2 bg-green-50 rounded-lg">
-                  <Wrench className="w-5 h-5 text-green-600" />
-                </div>
-                <span className="text-gray-700">Services This Month</span>
-              </div>
-              <span className="font-bold text-gray-900">{totalServices}</span>
-            </div>
-
-            <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-3">
-                <div className="p-2 bg-orange-50 rounded-lg">
-                  <Calendar className="w-5 h-5 text-orange-600" />
-                </div>
-                <span className="text-gray-700">Pending Reminders</span>
-              </div>
-              <span className="font-bold text-gray-900">{upcomingReminders}</span>
-            </div>
-
-            <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-3">
-                <div className="p-2 bg-red-50 rounded-lg">
-                  <AlertCircle className="w-5 h-5 text-red-600" />
-                </div>
-                <span className="text-gray-700">Overdue Bills</span>
-              </div>
-              <span className="font-bold text-gray-900">
-                {mockBilling.filter(b => b.status === 'Overdue').length}
-              </span>
-            </div>
+          <div className="space-y-4">
+            <QuickStat
+              icon={Users}
+              title="Active Clients"
+              value={stats.totalClients}
+              color="blue"
+            />
+            <QuickStat
+              icon={Wrench}
+              title="Services This Month"
+              value={stats.totalServices}
+              color="green"
+            />
+            <QuickStat
+              icon={Calendar}
+              title="Pending Reminders"
+              value={stats.upcomingReminders}
+              color="orange"
+            />
+            <QuickStat
+              icon={AlertCircle}
+              title="Overdue Bills"
+              value={stats.overdueRevenue > 0 ? 'Yes' : 'No'}
+              color="red"
+            />
           </div>
         </ChartCard>
       </div>
     </div>
-  )
+  );
 }
