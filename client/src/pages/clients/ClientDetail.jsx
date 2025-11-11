@@ -1,4 +1,3 @@
-// client/src/pages/details/ClientDetail.jsx
 import React, { useState, useEffect } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
 import {
@@ -54,34 +53,66 @@ export default function ClientDetail() {
       try {
         setLoading(true);
         const token = localStorage.getItem("token");
+        if (!token) {
+          throw new Error("Authentication token not found. Please log in again.");
+        }
+
         const res = await fetch(`${API_BASE}/api/clients/${id}`, {
           headers: { Authorization: `Bearer ${token}` },
         });
-        if (!res.ok) throw new Error("Failed to fetch client data");
+
+        if (!res.ok) {
+          if (res.status === 401) {
+            localStorage.removeItem("token");
+            navigate("/login");
+            return;
+          }
+          throw new Error("Failed to fetch client data");
+        }
+
         const data = await res.json();
         setClient(data);
       } catch (err) {
         setError(err.message || "Unknown error");
+        if (err.message.includes("401") || err.message.includes("Unauthorized")) {
+          navigate("/login");
+        }
       } finally {
         setLoading(false);
       }
     };
     fetchData();
-  }, [id]);
+  }, [id, navigate]);
 
   // fetch OCR records for this client
   const fetchOCR = async () => {
     try {
       setIsLoadingOCR(true);
       const token = localStorage.getItem("token");
+      if (!token) {
+        throw new Error("Authentication token not found. Please log in again.");
+      }
+
       const res = await fetch(`${API_BASE}/api/ocr/history?clientId=${id}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
-      if (!res.ok) throw new Error("Failed to fetch OCR records");
+
+      if (!res.ok) {
+        if (res.status === 401) {
+          localStorage.removeItem("token");
+          navigate("/login");
+          return;
+        }
+        throw new Error("Failed to fetch OCR records");
+      }
+
       const data = await res.json();
       setOcrRecords(data || []);
     } catch (err) {
       console.error("OCR fetch failed:", err);
+      if (err.message.includes("401") || err.message.includes("Unauthorized")) {
+        navigate("/login");
+      }
     } finally {
       setIsLoadingOCR(false);
     }
@@ -95,15 +126,31 @@ export default function ClientDetail() {
   const handleDeleteOCR = async (recordId) => {
     try {
       const token = localStorage.getItem("token");
+      if (!token) {
+        throw new Error("Authentication token not found. Please log in again.");
+      }
+
       const res = await fetch(`${API_BASE}/api/ocr/${recordId}`, {
         method: "DELETE",
         headers: { Authorization: `Bearer ${token}` },
       });
-      if (!res.ok) throw new Error("Failed to delete OCR record");
+
+      if (!res.ok) {
+        if (res.status === 401) {
+          localStorage.removeItem("token");
+          navigate("/login");
+          return;
+        }
+        throw new Error("Failed to delete OCR record");
+      }
+
       setOcrRecords((prev) => prev.filter((r) => r.id !== recordId));
       toast.success("OCR record deleted successfully");
     } catch (err) {
       toast.error(err.message || "Delete failed");
+      if (err.message.includes("401") || err.message.includes("Unauthorized")) {
+        navigate("/login");
+      }
     }
   };
 
@@ -126,12 +173,17 @@ export default function ClientDetail() {
   const handleSaveOCR = async (data) => {
     try {
       const token = localStorage.getItem("token");
+      if (!token) {
+        throw new Error("Authentication token not found. Please log in again.");
+      }
+
       const body = {
         clientId: parseInt(id, 10),
         rawText: ocrRaw,
         parsedData: JSON.stringify(data),
         confidence: data.ocrConfidence || 85,
       };
+
       const res = await fetch(`${API_BASE}/api/ocr/upload`, {
         method: "POST",
         headers: {
@@ -142,6 +194,11 @@ export default function ClientDetail() {
       });
 
       if (!res.ok) {
+        if (res.status === 401) {
+          localStorage.removeItem("token");
+          navigate("/login");
+          return;
+        }
         const txt = await res.text();
         throw new Error(txt || "Failed to save OCR record");
       }
@@ -154,6 +211,9 @@ export default function ClientDetail() {
       toast.success("OCR data saved successfully!");
     } catch (err) {
       toast.error(err.message || "Failed to save OCR data");
+      if (err.message.includes("401") || err.message.includes("Unauthorized")) {
+        navigate("/login");
+      }
     }
   };
 
@@ -161,6 +221,10 @@ export default function ClientDetail() {
     try {
       setIsSavingService(true);
       const token = localStorage.getItem("token");
+      if (!token) {
+        throw new Error("Authentication token not found. Please log in again.");
+      }
+
       const res = await fetch(`${API_BASE}/api/services/${serviceForm.id}`, {
         method: "PUT",
         headers: {
@@ -169,7 +233,16 @@ export default function ClientDetail() {
         },
         body: JSON.stringify(serviceForm),
       });
-      if (!res.ok) throw new Error("Failed to update service");
+
+      if (!res.ok) {
+        if (res.status === 401) {
+          localStorage.removeItem("token");
+          navigate("/login");
+          return;
+        }
+        throw new Error("Failed to update service");
+      }
+
       const data = await res.json();
       setClient((prev) => ({
         ...prev,
@@ -181,6 +254,9 @@ export default function ClientDetail() {
       toast.success("Service updated successfully");
     } catch (err) {
       toast.error(err.message);
+      if (err.message.includes("401") || err.message.includes("Unauthorized")) {
+        navigate("/login");
+      }
     } finally {
       setIsSavingService(false);
     }
@@ -218,6 +294,12 @@ export default function ClientDetail() {
               Error Loading Client
             </h3>
             <p className={isDark ? 'text-gray-300' : 'text-gray-600'}>{error}</p>
+            <button
+              onClick={() => navigate("/login")}
+              className="mt-4 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+            >
+              Go to Login
+            </button>
           </div>
         </div>
       </div>
@@ -298,6 +380,7 @@ export default function ClientDetail() {
               <div className="flex gap-3 items-center">
                 <Link
                   to={`/clients/${id}/edit`}
+                  state={{ clientData: client }} // Pass client data via state
                   className="w-full sm:w-auto flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-white/10 hover:bg-white/20 backdrop-blur-sm text-white border border-white/20 transition-all duration-300 shadow-lg hover:shadow-xl hover:scale-105"
                 >
                   <FiEdit className="w-5 h-5" />

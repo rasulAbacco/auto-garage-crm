@@ -14,7 +14,7 @@ import reportRoutes from "./routes/reportRoutes.js";
 import reminderRoutes from "./routes/reminderRoutes.js";
 import ocrRoutes from "./routes/OCRRoutes.js";
 
-
+import dashboardRoutes from './routes/dashboardRoutes.js';
 
 console.log("Models in Prisma:", Object.keys(prisma));
 
@@ -88,6 +88,7 @@ app.use("/api/reports", reportRoutes);
 app.use("/api/reminders", reminderRoutes);
 
 app.use("/api/ocr", ocrRoutes);
+app.use('/api/dashboard', dashboardRoutes);
 
 /* -----------------------------------------------------
    ⚠️ 404 Handler (For undefined routes)

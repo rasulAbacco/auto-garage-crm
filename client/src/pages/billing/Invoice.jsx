@@ -1,4 +1,3 @@
-// client/src/pages/billing/Invoice.jsx
 import React, { useState, useEffect, useRef } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import {
@@ -20,8 +19,9 @@ import {
   FiHash,
   FiInfo,
   FiPercent,
+  FiTag,
 } from 'react-icons/fi'
-import { FaRupeeSign, FaCar } from "react-icons/fa";
+import { FaRupeeSign, FaCar, FaWrench } from "react-icons/fa";
 import { useTheme } from '../../contexts/ThemeContext'
 
 const API_URL = import.meta.env.VITE_API_BASE_URL;
@@ -66,6 +66,7 @@ export default function Invoice() {
         const data = await res.json();
         if (!res.ok) throw new Error(data.message || 'Failed to fetch invoice');
         setInvoice(data);
+        console.log("Invoice data:", data); // For debugging
       } catch (err) {
         setError(err.message);
       } finally {
@@ -80,7 +81,12 @@ export default function Invoice() {
     return new Date(date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
   };
 
-  const handlePrint = () => window.print();
+  const handlePrint = () => {
+    setTimeout(() => {
+      window.print();
+    }, 100);
+  };
+
   const handleDownloadPDF = () => alert('PDF download feature coming soon!');
 
   if (loading)
@@ -104,8 +110,8 @@ export default function Invoice() {
   const paymentMode = invoice.paymentMode || 'N/A';
 
   return (
-    <div className={`min-h-screen p-6 lg:ml-16 ${isDark ? 'bg-gray-900 text-gray-100' : 'bg-gray-50 text-gray-900'} print:bg-white`}>
-      {/* Action Bar */}
+    <div className={`min-h-screen p-6 lg:ml-16 ${isDark ? 'bg-gray-900 text-gray-100' : 'bg-gray-50 text-gray-900'} print:bg-white print:text-black`}>
+      {/* Action Bar - Hidden when printing */}
       <div className="flex justify-between items-center mb-6 print:hidden">
         <Link to="/billing" className={`flex items-center gap-2 font-medium ${isDark ? 'text-gray-400 hover:text-white' : 'text-gray-600 hover:text-gray-900'}`}>
           <FiArrowLeft /> Back to Billing
@@ -127,109 +133,128 @@ export default function Invoice() {
       </div>
 
       {/* Invoice Card */}
-      <div ref={printRef} className={`max-w-5xl mx-auto shadow-2xl rounded-3xl overflow-hidden ${isDark ? 'bg-gray-800' : 'bg-white'}`}>
+      <div ref={printRef} className="print-content max-w-5xl mx-auto shadow-2xl rounded-3xl overflow-hidden bg-white text-black print:shadow-none print:rounded-none">
         {/* Header */}
-        <div className="bg-gradient-to-r from-blue-600 to-purple-600 text-white p-8">
+        <div className="p-6 border-b-2 border-gray-300">
           <div className="flex justify-between items-start">
             <div>
-              <h1 className="text-4xl font-extrabold tracking-tight">AUTO GARAGE</h1>
-              <p className="text-sm opacity-90">Professional Auto Services</p>
-              <div className="mt-2 space-y-1 text-sm opacity-80">
-                <p className="flex items-center gap-2"><FiMapPin size={14} /> Bengaluru, India</p>
-                <p className="flex items-center gap-2"><FiMail size={14} /> contact@autogarage.com</p>
-                <p className="flex items-center gap-2"><FiPhone size={14} /> +91 98765 43210</p>
+              <h1 className="text-3xl font-extrabold tracking-tight">AUTO GARAGE</h1>
+              <p className="text-sm">Professional Auto Services</p>
+              <div className="mt-2 space-y-1 text-xs">
+                <p className="flex items-center gap-2"><FiMapPin size={12} /> Bengaluru, India</p>
+                <p className="flex items-center gap-2"><FiMail size={12} /> contact@autogarage.com</p>
+                <p className="flex items-center gap-2"><FiPhone size={12} /> +91 98765 43210</p>
               </div>
             </div>
             <div className="text-right">
-              <p className="text-sm opacity-90 font-semibold">INVOICE NUMBER</p>
-              <h2 className="text-3xl font-black mb-2">#{invoice.invoiceNumber}</h2>
-              <p className={`font-bold ${paymentStatus}`}>{invoice.status}</p>
+              <p className="text-xs font-semibold">INVOICE NUMBER</p>
+              <h2 className="text-2xl font-black mb-1">#{invoice.invoiceNumber}</h2>
+              <p className={`font-bold text-sm ${paymentStatus}`}>{invoice.status}</p>
             </div>
           </div>
 
-          <div className="grid grid-cols-3 gap-4 mt-6">
+          <div className="grid grid-cols-2 gap-4 mt-4">
             <div>
-              <p className="text-xs opacity-80">Invoice Date</p>
-              <p className="font-semibold">{formatDate(invoice.createdAt)}</p>
+              <p className="text-xs">Invoice Date</p>
+              <p className="font-semibold text-sm">{formatDate(invoice.createdAt)}</p>
             </div>
             <div>
-              <p className="text-xs opacity-80">Due Date</p>
-              <p className="font-semibold">{formatDate(invoice.dueDate)}</p>
-            </div>
-            <div>
-              <p className="text-xs opacity-80">Payment Mode</p>
-              <p className="font-semibold capitalize">{paymentMode}</p>
+              <p className="text-xs">Payment Mode</p>
+              <p className="font-semibold text-sm capitalize">{paymentMode}</p>
             </div>
           </div>
         </div>
 
         {/* Client Info */}
-        <div className="grid md:grid-cols-2 gap-6 p-8 border-b border-gray-200">
+        <div className="grid md:grid-cols-2 gap-4 p-6 border-b border-gray-300">
           <div>
-            <h3 className="text-lg font-bold flex items-center gap-2 mb-2">
+            <h3 className="text-base font-bold flex items-center gap-2 mb-2">
               <FiUser /> Bill To
             </h3>
-            <p className="font-semibold">{c.fullName}</p>
-            <p className="text-sm opacity-80">{c.address || 'Address not provided'}</p>
-            <p className="text-sm opacity-80 mt-1 flex items-center gap-2"><FiPhone size={14} /> {c.phone}</p>
-            <p className="text-sm opacity-80 flex items-center gap-2"><FiMail size={14} /> {c.email}</p>
+            <p className="font-semibold text-sm">{c.fullName}</p>
+            <p className="text-xs">{c.address || 'Address not provided'}</p>
+            <p className="text-xs mt-1 flex items-center gap-2"><FiPhone size={12} /> {c.phone}</p>
+            <p className="text-xs flex items-center gap-2"><FiMail size={12} /> {c.email}</p>
           </div>
 
           <div>
-            <h3 className="text-lg font-bold flex items-center gap-2 mb-2">
+            <h3 className="text-base font-bold flex items-center gap-2 mb-2">
               <FaCar /> Vehicle Details
             </h3>
-            <p className="font-semibold">{c.vehicleMake} {c.vehicleModel} ({c.regNumber})</p>
+            <p className="font-semibold text-sm">{c.vehicleMake} {c.vehicleModel} ({c.regNumber})</p>
+          </div>
+        </div>
+
+        {/* Service Details */}
+        <div className="p-6 border-b border-gray-300">
+          <h2 className="text-base font-bold mb-3 flex items-center gap-2"><FiTool /> Service Details</h2>
+          <div className="grid md:grid-cols-2 gap-4">
+            <div>
+              <p className="text-xs">Service Category</p>
+              <p className="font-semibold text-sm">{invoice.serviceCategory || 'N/A'}</p>
+            </div>
+            <div>
+              <p className="text-xs">Service Sub-Category</p>
+              <p className="font-semibold text-sm">{invoice.serviceSubCategory || 'N/A'}</p>
+            </div>
+          </div>
+          <div className="mt-3">
+            <p className="text-xs">Service Description</p>
+            <p className="font-semibold text-sm">{invoice.serviceNotes || invoice.notes || 'N/A'}</p>
+          </div>
+          <div className="mt-3">
+            <p className="text-xs">Mechanic</p>
+            <p className="font-semibold text-sm">{invoice.mechanic || 'N/A'}</p>
           </div>
         </div>
 
         {/* Cost Breakdown */}
-        <div className="p-8">
-          <h2 className="text-xl font-bold mb-4 flex items-center gap-2"><FaRupeeSign /> Cost Breakdown</h2>
-          <table className="w-full text-sm border-collapse">
-            <thead className={`${isDark ? 'bg-gray-700' : 'bg-gray-100'}`}>
+        <div className="p-6">
+          <h2 className="text-base font-bold mb-3 flex items-center gap-2"><FaRupeeSign /> Cost Breakdown</h2>
+          <table className="w-full text-xs border-collapse">
+            <thead className="bg-gray-100">
               <tr>
-                <th className="text-left p-3 font-semibold">Description</th>
-                <th className="text-right p-3 font-semibold">Cost</th>
-                <th className="text-right p-3 font-semibold">GST (%)</th>
-                <th className="text-right p-3 font-semibold">Total</th>
+                <th className="text-left p-2 font-semibold">Description</th>
+                <th className="text-right p-2 font-semibold">Cost</th>
+                <th className="text-right p-2 font-semibold">GST (%)</th>
+                <th className="text-right p-2 font-semibold">Total</th>
               </tr>
             </thead>
             <tbody>
               <tr className="border-b">
-                <td className="p-3 flex items-center gap-2"><FiTool /> Parts</td>
-                <td className="p-3 text-right">₹ {partsCost.toFixed(2)}</td>
-                <td className="p-3 text-right">{partsGst}%</td>
-                <td className="p-3 text-right font-bold">₹ {partsTotal.toFixed(2)}</td>
+                <td className="p-2 flex items-center gap-2"><FiTool /> Parts</td>
+                <td className="p-2 text-right">₹ {partsCost.toFixed(2)}</td>
+                <td className="p-2 text-right">{partsGst}%</td>
+                <td className="p-2 text-right font-bold">₹ {partsTotal.toFixed(2)}</td>
               </tr>
               <tr className="border-b">
-                <td className="p-3 flex items-center gap-2"><FiUser /> Labor</td>
-                <td className="p-3 text-right">₹ {laborCost.toFixed(2)}</td>
-                <td className="p-3 text-right">{laborGst}%</td>
-                <td className="p-3 text-right font-bold">₹ {laborTotal.toFixed(2)}</td>
+                <td className="p-2 flex items-center gap-2"><FaWrench /> Labor</td>
+                <td className="p-2 text-right">₹ {laborCost.toFixed(2)}</td>
+                <td className="p-2 text-right">{laborGst}%</td>
+                <td className="p-2 text-right font-bold">₹ {laborTotal.toFixed(2)}</td>
               </tr>
               <tr>
-                <td className="p-3 font-semibold">Additional Taxes</td>
-                <td className="p-3 text-right" colSpan="3">₹ {tax.toFixed(2)}</td>
+                <td className="p-2 font-semibold">Additional Taxes</td>
+                <td className="p-2 text-right" colSpan="3">₹ {tax.toFixed(2)}</td>
               </tr>
               {discount > 0 && (
                 <tr>
-                  <td className="p-3 font-semibold text-red-500">Discounts</td>
-                  <td className="p-3 text-right text-red-500" colSpan="3">-₹ {discount.toFixed(2)}</td>
+                  <td className="p-2 font-semibold text-red-500">Discounts</td>
+                  <td className="p-2 text-right text-red-500" colSpan="3">-₹ {discount.toFixed(2)}</td>
                 </tr>
               )}
-              <tr className="bg-gradient-to-r from-blue-600 via-purple-600 to-pink-600 text-white">
-                <td className="p-4 font-bold text-lg">Grand Total</td>
-                <td colSpan="3" className="p-4 text-right font-bold text-2xl">₹ {grandTotal.toFixed(2)}</td>
+              <tr className="bg-gray-100">
+                <td className="p-3 font-bold">Grand Total</td>
+                <td colSpan="3" className="p-3 text-right font-bold text-lg">₹ {grandTotal.toFixed(2)}</td>
               </tr>
             </tbody>
           </table>
         </div>
 
         {/* Payment Info */}
-        <div className={`p-8 border-t ${isDark ? 'border-gray-700' : 'border-gray-200'} bg-gradient-to-r from-green-100 to-green-50`}>
-          <h3 className="font-bold text-lg mb-3 flex items-center gap-2"><FiCreditCard /> Payment Details</h3>
-          <div className="grid sm:grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+        <div className="p-6 border-t border-gray-300 bg-gray-50">
+          <h3 className="font-bold text-base mb-2 flex items-center gap-2"><FiCreditCard /> Payment Details</h3>
+          <div className="grid sm:grid-cols-2 md:grid-cols-4 gap-3 text-xs">
             <div>
               <p className="font-semibold">Bank Name</p>
               <p>Auto Garage Bank</p>
@@ -250,18 +275,141 @@ export default function Invoice() {
         </div>
 
         {/* Footer */}
-        <div className="text-center py-6">
-          <p className="font-semibold text-lg">Thank You for Your Business!</p>
-          <p className="text-sm opacity-70">For any queries, contact us at contact@autogarage.com</p>
+        <div className="text-center py-4">
+          <p className="font-semibold text-base">Thank You for Your Business!</p>
+          <p className="text-xs">For any queries, contact us at contact@autogarage.com</p>
         </div>
       </div>
 
       {/* Print Styles */}
-      <style>{`
+      <style jsx global>{`
         @media print {
-          @page { margin: 0.5cm; }
-          .print\\:hidden { display: none !important; }
-          body { background: white !important; }
+          @page { 
+            margin: 0.5cm; 
+            size: A4;
+          }
+          
+          /* Hide everything except the invoice when printing */
+          body * {
+            visibility: hidden;
+          }
+          
+          /* Show only the invoice and its children */
+          .print-content, .print-content * {
+            visibility: visible;
+          }
+          
+          /* Position the invoice at the top left when printing */
+          .print-content {
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 100%;
+          }
+          
+          /* Remove shadows and rounded corners for print */
+          .shadow-2xl, .shadow-xl {
+            box-shadow: none !important;
+          }
+          
+          .rounded-3xl, .rounded-xl, .rounded-lg {
+            border-radius: 0 !important;
+          }
+          
+          /* Ensure text is black */
+          .text-blue-600, .text-purple-600, .text-green-500, .text-yellow-500, .text-red-500 { 
+            color: black !important; 
+          }
+          
+          /* Ensure backgrounds are white */
+          .bg-gradient-to-r, .bg-gray-100, .bg-gray-50, .bg-gray-800, .bg-gray-900 { 
+            background-color: white !important; 
+          }
+          
+          /* Ensure borders are visible */
+          .border-gray-300, .border-gray-200, .border-gray-700 { 
+            border-color: #d1d5db !important; 
+          }
+          
+          /* Reduce padding for print */
+          .p-8 {
+            padding: 1rem !important;
+          }
+          
+          .p-6 {
+            padding: 0.75rem !important;
+          }
+          
+          .p-4 {
+            padding: 0.5rem !important;
+          }
+          
+          .p-3 {
+            padding: 0.4rem !important;
+          }
+          
+          .p-2 {
+            padding: 0.3rem !important;
+          }
+          
+          /* Reduce font sizes for print */
+          .text-4xl {
+            font-size: 1.75rem !important;
+          }
+          
+          .text-3xl {
+            font-size: 1.5rem !important;
+          }
+          
+          .text-2xl {
+            font-size: 1.25rem !important;
+          }
+          
+          .text-xl {
+            font-size: 1.1rem !important;
+          }
+          
+          .text-lg {
+            font-size: 1rem !important;
+          }
+          
+          .text-base {
+            font-size: 0.9rem !important;
+          }
+          
+          .text-sm {
+            font-size: 0.8rem !important;
+          }
+          
+          .text-xs {
+            font-size: 0.7rem !important;
+          }
+          
+          /* Reduce gaps for print */
+          .gap-6 {
+            gap: 1rem !important;
+          }
+          
+          .gap-4 {
+            gap: 0.75rem !important;
+          }
+          
+          .gap-3 {
+            gap: 0.5rem !important;
+          }
+          
+          .gap-2 {
+            gap: 0.4rem !important;
+          }
+          
+          /* Reduce margins for print */
+          .mb-6, .mb-4, .mb-3, .mb-2, .mb-1 {
+            margin-bottom: 0.5rem !important;
+          }
+          
+          .mt-6, .mt-4, .mt-3, .mt-2, .mt-1 {
+            margin-top: 0.5rem !important;
+          }
         }
       `}</style>
     </div>

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { useNavigate, useParams, Link } from "react-router-dom";
+import { useNavigate, useParams, Link, useLocation } from "react-router-dom";
 import { FiArrowLeft, FiSave, FiX } from "react-icons/fi";
 import { useTheme } from "../../contexts/ThemeContext";
 import PersonalInfoSection from "./components/PersonalInfoSection";
@@ -30,6 +30,7 @@ const UNSPLASH_KEY = import.meta.env.VITE_UNSPLASH_ACCESS_KEY;
 export default function ClientForm() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const { isDark } = useTheme();
 
   const [form, setForm] = useState(empty);
@@ -39,16 +40,40 @@ export default function ClientForm() {
 
   /** Fetch client for edit mode */
   useEffect(() => {
+    // If we have client data passed via state, use it directly
+    if (location.state?.clientData) {
+      const clientData = location.state.clientData;
+      setForm({
+        ...empty,
+        ...clientData,
+        receiverName: clientData.receiverName ?? clientData.staffPerson ?? "",
+        damageImages: Array.isArray(clientData.damageImages) ? clientData.damageImages : [],
+      });
+      setIsImageUploaded(!!clientData.carImage);
+      return;
+    }
+
+    // Otherwise, fetch from API if we have an ID
     if (!id) return;
+
     const fetchClient = async () => {
       try {
         setLoadingClient(true);
         const token = localStorage.getItem("token");
+        if (!token) {
+          throw new Error("No authentication token found. Please log in again.");
+        }
+
         const res = await fetch(`${API_BASE}/api/clients/${id}`, {
           headers: { Authorization: `Bearer ${token}` },
         });
 
         if (!res.ok) {
+          if (res.status === 401) {
+            localStorage.removeItem("token");
+            navigate("/login");
+            return;
+          }
           const err = await res.json().catch(() => ({}));
           throw new Error(err.message || "Failed to fetch client");
         }
@@ -66,12 +91,15 @@ export default function ClientForm() {
       } catch (err) {
         console.error("Error fetching client:", err);
         alert(err.message || "Failed to load client");
+        if (err.message.includes("401") || err.message.includes("Unauthorized")) {
+          navigate("/login");
+        }
       } finally {
         setLoadingClient(false);
       }
     };
     fetchClient();
-  }, [id]);
+  }, [id, location.state, navigate]);
 
   /** ✅ Auto-fetch car image from Unsplash when make + model entered */
   useEffect(() => {
@@ -106,7 +134,7 @@ export default function ClientForm() {
 
     const debounce = setTimeout(fetchCarImage, 800);
     return () => clearTimeout(debounce);
-  }, [form.vehicleMake, form.vehicleModel]);
+  }, [form.vehicleMake, form.vehicleModel, isImageUploaded]);
 
   /** Basic validation */
   const validate = () => {
@@ -141,6 +169,10 @@ export default function ClientForm() {
     try {
       setIsSubmitting(true);
       const token = localStorage.getItem("token");
+      if (!token) {
+        throw new Error("No authentication token found. Please log in again.");
+      }
+
       const method = id ? "PUT" : "POST";
       const url = id
         ? `${API_BASE}/api/clients/${id}`
@@ -167,11 +199,19 @@ export default function ClientForm() {
         const clientId = data?.client?.id || data?.id || data?.clientId;
         navigate(`/clients/${clientId}`);
       } else {
+        if (res.status === 401) {
+          localStorage.removeItem("token");
+          navigate("/login");
+          return;
+        }
         alert(`Error: ${data.message || "Failed to save client"}`);
       }
     } catch (err) {
       console.error("Error saving client:", err);
       alert("Error saving client.");
+      if (err.message.includes("401") || err.message.includes("Unauthorized")) {
+        navigate("/login");
+      }
     } finally {
       setIsSubmitting(false);
     }
@@ -246,7 +286,7 @@ export default function ClientForm() {
 
           <button
             type="button"
-            onClick={() => navigate(-1)}
+            onClick={() => navigate("/clients")} // Changed from navigate(-1) to navigate("/clients")
             className={`flex items-center gap-2 px-8 py-4 rounded-xl font-bold text-lg transition-all duration-200 shadow-lg hover:shadow-xl ${isDark
               ? "bg-gray-700 hover:bg-gray-600 text-white border-2 border-gray-600"
               : "bg-white hover:bg-gray-50 text-gray-700 border-2 border-gray-300"
