@@ -1,4 +1,8 @@
 // server/controllers/OCRControllers.js
+// server/controllers/OCRController.js
+import { PrismaClient } from "@prisma/client";
+const prisma = new PrismaClient();
+
 import { parseOCRText } from "../utils/OCRUtils.js";
 import * as ocrService from "../services/OCRServices.js";
 
@@ -12,7 +16,6 @@ export const uploadRecord = async (req, res, next) => {
 
         let imageUrl = req.file ? `/uploads/${req.file.filename}` : null;
 
-        // Parse JSON safely if needed
         let parsed = null;
         if (parsedData) {
             try {
@@ -24,9 +27,37 @@ export const uploadRecord = async (req, res, next) => {
 
         const conf = confidence ? parseFloat(confidence) : null;
 
-        // If frontend didn’t parse, parse server-side
         if (!parsed && rawText) parsed = parseOCRText(rawText, conf || 0);
 
+        /* 🔥 DUPLICATE CHECK */
+        const regNo = parsed?.regNo?.trim();
+
+        if (regNo) {
+          const existing = await prisma.ocrRecord.findFirst({
+            where: {
+              parsedData: {
+                path: ["regNo"], // JSON path
+                string_contains: regNo, // match string inside that key
+              },
+            },
+            include: {
+              client: true,
+            },
+          });
+
+          if (existing) {
+            return res.status(400).json({
+              success: false,
+              duplicate: true,
+              message: `This RC (${regNo}) is already registered to ${existing.client.fullName}`,
+              clientName: existing.client.fullName,
+              clientId: existing.client.id,
+            });
+          }
+        }
+
+
+        /* SAVE NEW RECORD */
         const record = await ocrService.createRecord({
             userId,
             clientId: parseInt(clientId, 10),
@@ -36,11 +67,12 @@ export const uploadRecord = async (req, res, next) => {
             imageUrl,
         });
 
-        res.status(201).json({ record });
+        res.status(201).json({ success: true, record });
     } catch (err) {
         next(err);
     }
 };
+
 
 export const listRecords = async (req, res, next) => {
     try {
