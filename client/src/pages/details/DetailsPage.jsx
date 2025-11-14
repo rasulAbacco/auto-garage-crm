@@ -201,6 +201,17 @@ const DetailsPage = () => {
         }),
       });
 
+      if (res.status === 400) {
+        const errorData = await res.json();
+        if (errorData.duplicate) {
+          toast.error(
+            `Duplicate! RC already registered to ${errorData.clientName}`
+          );
+          return;
+        }
+      }
+
+
       if (!res.ok) {
         const errMsg = await res.text();
         throw new Error(errMsg || "Failed to save record");
