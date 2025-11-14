@@ -39,7 +39,8 @@ const allowedOrigins = [
   "http://localhost:5173",
   "https://auto-garage-crm-r7l4.onrender.com",
   "https://themotordesk.com",
-  "https://www.themotordesk.com",
+ "https://www.themotordesk.com",
+
   // "https://tm04xn0p-5173.inc1.devtunnels.ms"
 ];
 

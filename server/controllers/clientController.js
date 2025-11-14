@@ -143,26 +143,46 @@ export const getClientById = async (req, res) => {
  * ===========================
  */
 export const createClient = async (req, res) => {
-    try {
-        const parsed = clientCreateSchema.parse(req.body);
+  try {
+    const parsed = clientCreateSchema.parse(req.body);
 
-        const client = await prisma.client.create({
-            data: {
-                ...parsed,
-                userId: req.user?.id || null, // ✅ ensure ownership is set
-                damageImages: parsed.damageImages ?? null,
-            },
-        });
+    // 🔥 DUPLICATE CHECK (inside same garage)
+    const existing = await prisma.client.findFirst({
+      where: {
+        regNumber: parsed.regNumber,
+        userId: req.user?.id, // check only for this garage/user
+      },
+    });
 
-        return res.status(201).json(client);
-    } catch (err) {
-        console.error("createClient err:", err);
-        if (err?.errors) {
-            return res.status(400).json({ error: err.errors });
-        }
-        return res.status(500).json({ error: "Server error" });
+    if (existing) {
+      return res.status(400).json({
+        success: false,
+        duplicate: true,
+        message: `This client (${parsed.regNumber}) is already registered in your garage under ${existing.fullName}.`,
+        clientId: existing.id,
+        client: existing,
+      });
     }
+
+    // ✔ Create new client
+    const client = await prisma.client.create({
+      data: {
+        ...parsed,
+        userId: req.user?.id || null,
+        damageImages: parsed.damageImages ?? null,
+      },
+    });
+
+    return res.status(201).json(client);
+  } catch (err) {
+    console.error("createClient err:", err);
+    if (err?.errors) {
+      return res.status(400).json({ error: err.errors });
+    }
+    return res.status(500).json({ error: "Server error" });
+  }
 };
+
 
 /**
  * ===========================

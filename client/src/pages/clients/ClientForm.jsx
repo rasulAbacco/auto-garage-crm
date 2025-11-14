@@ -68,6 +68,14 @@ export default function ClientForm() {
           headers: { Authorization: `Bearer ${token}` },
         });
 
+        if (res.status === 400) {
+          if (data.duplicate) {
+            alert(data.message);
+            navigate(`/clients/${data.clientId}`);
+            return;
+          }
+        }
+
         if (!res.ok) {
           if (res.status === 401) {
             localStorage.removeItem("token");
