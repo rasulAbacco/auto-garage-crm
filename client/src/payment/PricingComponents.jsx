@@ -164,7 +164,7 @@ export const TrustSection = ({ isDark }) => {
     const features = [
         { icon: Shield, label: 'Bank-level Security', desc: 'Your data is safe' },
         { icon: HeartHandshake, label: '24/7 Support', desc: 'Always here to help' },
-        { icon: BadgeCheck, label: '30-Day Guarantee', desc: 'Risk-free trial' },
+        { icon: BadgeCheck, label: '15-Day Guarantee', desc: 'Risk-free trial' },
         { icon: Timer, label: 'Instant Setup', desc: 'Start in minutes' }
     ];
 

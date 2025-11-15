@@ -41,7 +41,7 @@ const allowedOrigins = [
   "https://themotordesk.com",
  "https://www.themotordesk.com",
 
-  // "https://tm04xn0p-5173.inc1.devtunnels.ms"
+  "https://tm04xn0p-5173.inc1.devtunnels.ms"
 ];
 
 app.use(
