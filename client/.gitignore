@@ -47,3 +47,18 @@ yarn.lock
 
 
 *.env.production
+# Android / Gradle
+.gradle/
+**/build/
+local.properties
+/.idea
+*.iml
+
+# OS / editor
+.DS_Store
+.vscode/
+node_modules/
+
+# React Native / Flutter / others (if applicable)
+*.keystore
+.gradle/

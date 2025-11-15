@@ -1,13 +1,17 @@
-import React, { useEffect, useState } from "react";
-import { useNavigate, useParams, Link, useLocation } from "react-router-dom";
-import { FiArrowLeft, FiSave, FiX } from "react-icons/fi";
+// ClientForm.jsx
+import React, { useEffect, useRef, useState } from "react";
+import { useNavigate, useParams, useLocation } from "react-router-dom";
+import { FiSave, FiX, FiEye, FiEyeOff, FiCamera } from "react-icons/fi";
+import { Toaster, toast } from "react-hot-toast";
 import { useTheme } from "../../contexts/ThemeContext";
 import PersonalInfoSection from "./components/PersonalInfoSection";
 import VehicleInfoSection from "./components/VehicleInfoSection";
 import ImageUploader from "./components/ImageUploader";
-import Vehicle3DViewer from "./components/Vehicle3DViewer";
+import { processImage } from "../details/utils/OCRProcessor.js";
 
-const empty = {
+const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:5000";
+
+const EMPTY_FORM = {
   fullName: "",
   phone: "",
   email: "",
@@ -17,15 +21,13 @@ const empty = {
   vehicleYear: "",
   regNumber: "",
   vin: "",
+  color: "",
+  fuel: "",
+  notes: "",
   carImage: "",
   adImage: "",
-  staffPerson: "",
-  receiverName: "",
   damageImages: [],
 };
-
-const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:5000";
-const UNSPLASH_KEY = import.meta.env.VITE_UNSPLASH_ACCESS_KEY;
 
 export default function ClientForm() {
   const { id } = useParams();
@@ -33,168 +35,197 @@ export default function ClientForm() {
   const location = useLocation();
   const { isDark } = useTheme();
 
-  const [form, setForm] = useState(empty);
-  const [isImageUploaded, setIsImageUploaded] = useState(false);
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [form, setForm] = useState({ ...EMPTY_FORM });
+  const [loading, setLoading] = useState(false);
   const [loadingClient, setLoadingClient] = useState(false);
+  const [isProcessingRC, setIsProcessingRC] = useState(false);
+  const [isImageUploaded, setIsImageUploaded] = useState(false);
 
-  /** Fetch client for edit mode */
+  const fileInputRef = useRef(null);
+  const cameraInputRef = useRef(null);
+
+  // ========== GET EXISTING CLIENT IF EDIT MODE ==========
   useEffect(() => {
-    // If we have client data passed via state, use it directly
-    if (location.state?.clientData) {
-      const clientData = location.state.clientData;
+    if (location?.state?.clientData) {
+      const c = location.state.clientData;
       setForm({
-        ...empty,
-        ...clientData,
-        receiverName: clientData.receiverName ?? clientData.staffPerson ?? "",
-        damageImages: Array.isArray(clientData.damageImages) ? clientData.damageImages : [],
+        ...EMPTY_FORM,
+        ...c,
+        receiverName: c.receiverName ?? c.staffPerson ?? "",
+        damageImages: Array.isArray(c.damageImages) ? c.damageImages : [],
       });
-      setIsImageUploaded(!!clientData.carImage);
+      setIsImageUploaded(!!c.carImage);
       return;
     }
 
-    // Otherwise, fetch from API if we have an ID
     if (!id) return;
 
     const fetchClient = async () => {
       try {
         setLoadingClient(true);
         const token = localStorage.getItem("token");
-        if (!token) {
-          throw new Error("No authentication token found. Please log in again.");
-        }
+        if (!token) return navigate("/login");
 
         const res = await fetch(`${API_BASE}/api/clients/${id}`, {
           headers: { Authorization: `Bearer ${token}` },
         });
 
-        if (res.status === 400) {
-          if (data.duplicate) {
-            alert(data.message);
-            navigate(`/clients/${data.clientId}`);
-            return;
-          }
+        let body;
+        try {
+          body = await res.json();
+        } catch (err) {
+          body = await res.text();
         }
 
-        if (!res.ok) {
-          if (res.status === 401) {
-            localStorage.removeItem("token");
-            navigate("/login");
-            return;
-          }
-          const err = await res.json().catch(() => ({}));
-          throw new Error(err.message || "Failed to fetch client");
+        if (res.status === 401) {
+          localStorage.removeItem("token");
+          return navigate("/login");
         }
 
-        const data = await res.json();
+        if (!res.ok) throw new Error(body?.message || "Failed to load client");
 
-        // Ensure defaults if fields missing (for backward compatibility)
+        const data = body || {};
         setForm({
-          ...empty,
+          ...EMPTY_FORM,
           ...data,
           receiverName: data.receiverName ?? data.staffPerson ?? "",
-          damageImages: Array.isArray(data.damageImages) ? data.damageImages : [],
+          damageImages: Array.isArray(data.damageImages)
+            ? data.damageImages
+            : [],
         });
         setIsImageUploaded(!!data.carImage);
       } catch (err) {
-        console.error("Error fetching client:", err);
-        alert(err.message || "Failed to load client");
-        if (err.message.includes("401") || err.message.includes("Unauthorized")) {
-          navigate("/login");
-        }
+        toast.error(err.message || "Failed to load client");
       } finally {
         setLoadingClient(false);
       }
     };
     fetchClient();
-  }, [id, location.state, navigate]);
+  }, [id, location?.state]);
 
-  /** ✅ Auto-fetch car image from Unsplash when make + model entered */
-  useEffect(() => {
-    if (!form.vehicleMake || !form.vehicleModel || isImageUploaded) return;
+  // ========== OCR AUTOFILL ==========
+  const normalizeReg = (s = "") =>
+    String(s).toUpperCase().replace(/[^A-Z0-9]/g, "");
 
-    const fetchCarImage = async () => {
-      const query = `${form.vehicleMake} ${form.vehicleModel} car`;
-      try {
-        const res = await fetch(
-          `https://api.unsplash.com/search/photos?query=${encodeURIComponent(
-            query
-          )}&client_id=${UNSPLASH_KEY}&orientation=landscape&per_page=1`
+  const mapOcrToForm = (parsed = {}) => {
+    const mapped = {};
+
+    const get = (keys) => {
+      for (let k of keys) {
+        if (parsed[k]) return parsed[k];
+        const found = Object.keys(parsed).find((p) =>
+          p.toLowerCase().includes(k.toLowerCase())
         );
-        const data = await res.json();
-
-        if (data.results && data.results.length > 0) {
-          const imgUrl = data.results[0].urls.small;
-          setForm((prev) => ({
-            ...prev,
-            carImage: imgUrl,
-            adImage: imgUrl,
-          }));
-          setIsImageUploaded(true);
-          console.log(`✅ Auto image found for ${query}: ${imgUrl}`);
-        } else {
-          console.warn(`⚠️ No Unsplash image found for ${query}`);
-        }
-      } catch (err) {
-        console.error("Unsplash fetch error:", err);
+        if (found) return parsed[found];
       }
+      return "";
     };
 
-    const debounce = setTimeout(fetchCarImage, 800);
-    return () => clearTimeout(debounce);
-  }, [form.vehicleMake, form.vehicleModel, isImageUploaded]);
+    const reg = get(["reg", "regno", "registration"]);
+    if (reg) mapped.regNumber = normalizeReg(reg);
 
-  /** Basic validation */
-  const validate = () => {
-    if (!form.fullName || form.fullName.trim().length < 2) {
-      alert("Please enter a valid full name");
-      return false;
+    const owner = get(["owner", "owner name"]);
+    if (owner) mapped.fullName = owner;
+
+    const address = get(["address"]);
+    if (address) mapped.address = address;
+
+    const vin = get(["vin", "chassis"]);
+    if (vin) mapped.vin = vin.replace(/\s+/g, "").toUpperCase();
+
+    const maker = get(["maker", "make", "manufacturer", "mfr"]);
+    if (maker) mapped.vehicleMake = maker;
+
+    const model = get(["model", "variant"]);
+    if (model) mapped.vehicleModel = model;
+
+    const yearCand = get(["mfg", "year"]);
+    if (yearCand) {
+      const y = yearCand.match(/\b(19|20)\d{2}\b/);
+      if (y) mapped.vehicleYear = y[0];
     }
-    if (!form.phone || form.phone.trim().length < 6) {
-      alert("Please enter a valid phone number");
-      return false;
-    }
-    if (!form.vehicleMake || !form.vehicleModel) {
-      alert("Please provide vehicle make & model");
-      return false;
-    }
-    if (!form.vehicleYear || isNaN(Number(form.vehicleYear))) {
-      alert("Please enter a valid vehicle year");
-      return false;
-    }
-    if (!form.regNumber) {
-      alert("Please provide registration number");
-      return false;
-    }
-    return true;
+
+    const color = get(["color", "colour"]);
+    if (color) mapped.color = color;
+
+    const fuel = get(["fuel"]);
+    if (fuel) mapped.fuel = fuel;
+
+    return mapped;
   };
 
-  /** Submit form */
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    if (!validate()) return;
+  const handleScanButtonClick = () => {
+    if (navigator.mediaDevices?.getUserMedia) cameraInputRef.current.click();
+    else fileInputRef.current.click();
+  };
+
+  const handleRCFile = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsProcessingRC(true);
+    try {
+      const objectUrl = URL.createObjectURL(file);
+      const img = new Image();
+
+      img.onload = async () => {
+        const canvas = document.createElement("canvas");
+        canvas.width = img.width;
+        canvas.height = img.height;
+        const ctx = canvas.getContext("2d");
+        ctx.drawImage(img, 0, 0);
+
+        const dataUrl = canvas.toDataURL("image/jpeg", 0.9);
+        URL.revokeObjectURL(objectUrl);
+
+        const ocr = await processImage(dataUrl);
+        const parsed = ocr?.parsed || {};
+        const mapped = mapOcrToForm(parsed);
+
+        setForm((prev) => ({ ...prev, ...mapped }));
+        toast.success("RC scanned — auto-filled form!");
+      };
+
+      img.src = objectUrl;
+    } catch (err) {
+      toast.error("Failed to scan RC. Try again.");
+    } finally {
+      setIsProcessingRC(false);
+      e.target.value = "";
+    }
+  };
+
+  // ========== SAVE CLIENT ==========
+  const handleSubmit = async (ev) => {
+    ev.preventDefault();
+    setLoading(true);
 
     try {
-      setIsSubmitting(true);
       const token = localStorage.getItem("token");
-      if (!token) {
-        throw new Error("No authentication token found. Please log in again.");
-      }
-
-      const method = id ? "PUT" : "POST";
-      const url = id
-        ? `${API_BASE}/api/clients/${id}`
-        : `${API_BASE}/api/clients`;
+      if (!token) return navigate("/login");
 
       const payload = {
-        ...form,
-        vehicleYear: Number(form.vehicleYear) || null,
-        receiverName: form.receiverName || null,
+        fullName: form.fullName || "",
+        phone: form.phone || "",
+        email: form.email || "",
+        address: form.address || "",
+        vehicleMake: form.vehicleMake || "",
+        vehicleModel: form.vehicleModel || "",
+        vehicleYear: form.vehicleYear || "",
+        regNumber: form.regNumber || "",
+        vin: form.vin || "",
+        color: form.color || "",
+        fuel: form.fuel || "",
+        notes: form.notes || "",
+
+        // ⭐ ADDED: now images will save correctly
+        carImage: form.carImage || "",
+        adImage: form.adImage || "",
         damageImages: form.damageImages || [],
       };
 
-      const res = await fetch(url, {
-        method,
+      const res = await fetch(`${API_BASE}/api/clients${id ? `/${id}` : ""}`, {
+        method: id ? "PUT" : "POST",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
@@ -202,61 +233,85 @@ export default function ClientForm() {
         body: JSON.stringify(payload),
       });
 
-      const data = await res.json();
-      if (res.ok) {
-        const clientId = data?.client?.id || data?.id || data?.clientId;
-        navigate(`/clients/${clientId}`);
-      } else {
-        if (res.status === 401) {
-          localStorage.removeItem("token");
-          navigate("/login");
-          return;
-        }
-        alert(`Error: ${data.message || "Failed to save client"}`);
-      }
+      let body;
+      try { body = await res.json(); } catch { }
+
+      if (!res.ok) throw new Error(body?.message || "Save failed");
+
+      toast.success("Client saved!");
+      navigate("/clients");
+
     } catch (err) {
-      console.error("Error saving client:", err);
-      alert("Error saving client.");
-      if (err.message.includes("401") || err.message.includes("Unauthorized")) {
-        navigate("/login");
-      }
+      toast.error(err.message || "Save failed");
     } finally {
-      setIsSubmitting(false);
+      setLoading(false);
     }
   };
 
-  /** Render */
+
+  const handleCancel = () => navigate("/clients");
+
+  // ========== UI ==========
   return (
-    <div className="lg:ml-16 p-6 space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <Link
-            to="/clients"
-            className={`inline-flex items-center gap-2 ${isDark
-              ? "text-gray-300 hover:text-white"
-              : "text-gray-600 hover:text-gray-900"
-              } transition-colors duration-200 mb-3`}
-          >
-            <FiArrowLeft />
-            <span className="font-medium">Back to Clients</span>
-          </Link>
-          <h1
-            className={`text-3xl font-bold ${isDark ? "text-white" : "text-gray-900"
-              }`}
-          >
-            {id ? "Edit Client" : "Add New Client"}
-          </h1>
-        </div>
+    <form onSubmit={handleSubmit} className="max-w-4xl mx-auto p-6">
+      <Toaster position="top-right" />
+
+      {/* Hidden Inputs */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={handleRCFile}
+      />
+
+      <input
+        ref={cameraInputRef}
+        type="file"
+        accept="image/*"
+        capture="environment"
+        className="hidden"
+        onChange={handleRCFile}
+      />
+
+      <div className="flex justify-between items-center mb-6">
+        <h1 className="text-2xl font-semibold">
+          {id ? "Edit Client" : "New Client"}
+        </h1>
+
+        <button
+          type="button"
+          onClick={handleScanButtonClick}
+          disabled={isProcessingRC}
+          className={`px-4 py-2 rounded-lg flex items-center gap-2 text-white ${isDark ? "bg-indigo-600" : "bg-indigo-500"
+            }`}
+        >
+          <FiCamera />
+          {isProcessingRC ? "Scanning..." : "Scan RC & Auto-Fill"}
+        </button>
       </div>
 
-      <form onSubmit={handleSubmit} className="space-y-8">
-        {/* Personal Info */}
-        <PersonalInfoSection form={form} setForm={setForm} isDark={isDark} />
+      {/* Personal Info */}
+      <div className={`rounded-2xl p-6 shadow ${isDark ? "bg-gray-800" : "bg-white"}`}>
+        <h2 className={`text-xl font-semibold mb-4 ${isDark ? "text-white" : "text-gray-800"}`}>
+          Personal Information
+        </h2>
+        <PersonalInfoSection form={form} setForm={setForm} />
+      </div>
 
-        {/* Vehicle Info */}
-        <VehicleInfoSection form={form} setForm={setForm} isDark={isDark} />
+      {/* Vehicle Info */}
+      <div className={`rounded-2xl p-6 mt-6 shadow ${isDark ? "bg-gray-800" : "bg-white"}`}>
+        <h2 className={`text-xl font-semibold mb-4 ${isDark ? "text-white" : "text-gray-800"}`}>
+          Vehicle Information
+        </h2>
+        <VehicleInfoSection form={form} setForm={setForm} />
+      </div>
 
-        {/* Image Uploader */}
+      {/* Images */}
+      <div className={`rounded-2xl p-6 mt-6 shadow ${isDark ? "bg-gray-800" : "bg-white"}`}>
+        <h2 className={`text-xl font-semibold mb-4 ${isDark ? "text-white" : "text-gray-800"}`}>
+          Vehicle Images
+        </h2>
         <ImageUploader
           form={form}
           setForm={setForm}
@@ -264,47 +319,27 @@ export default function ClientForm() {
           isImageUploaded={isImageUploaded}
           setIsImageUploaded={setIsImageUploaded}
         />
+      </div>
 
-        {/* 3D Vehicle Viewer */}
-        <Vehicle3DViewer
-          adImage={form.adImage}
-          carImage={form.carImage}
-          damageImages={form.damageImages}
-          vehicleMake={form.vehicleMake}
-          vehicleModel={form.vehicleModel}
-          isDark={isDark}
-        />
+      {/* Buttons */}
+      <div className="flex justify-end gap-4 mt-6">
+        <button
+          type="button"
+          onClick={handleCancel}
+          className="px-6 py-3 rounded-xl bg-gray-300 hover:bg-gray-400"
+        >
+          <FiX /> Cancel
+        </button>
 
-        {/* Buttons */}
-        <div className="flex gap-4">
-          <button
-            type="submit"
-            disabled={isSubmitting || loadingClient}
-            className="flex items-center gap-2 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white rounded-xl px-8 py-4 font-bold text-lg transition-all duration-200 shadow-xl hover:shadow-2xl disabled:opacity-60"
-          >
-            <FiSave size={20} />
-            {isSubmitting
-              ? id
-                ? "Updating..."
-                : "Saving..."
-              : id
-                ? "Update Client"
-                : "Save Client"}
-          </button>
-
-          <button
-            type="button"
-            onClick={() => navigate("/clients")} // Changed from navigate(-1) to navigate("/clients")
-            className={`flex items-center gap-2 px-8 py-4 rounded-xl font-bold text-lg transition-all duration-200 shadow-lg hover:shadow-xl ${isDark
-              ? "bg-gray-700 hover:bg-gray-600 text-white border-2 border-gray-600"
-              : "bg-white hover:bg-gray-50 text-gray-700 border-2 border-gray-300"
-              }`}
-          >
-            <FiX size={20} />
-            Cancel
-          </button>
-        </div>
-      </form>
-    </div>
+        <button
+          type="submit"
+          disabled={loading}
+          className={`px-6 py-3 rounded-xl text-white ${loading ? "bg-gray-400" : "bg-green-600 hover:bg-green-700"
+            }`}
+        >
+          <FiSave /> {loading ? "Saving..." : "Save Client"}
+        </button>
+      </div>
+    </form>
   );
 }

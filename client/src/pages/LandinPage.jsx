@@ -351,7 +351,7 @@ export default function LandingPage() {
                                 </button>
                             </div>
                             <p className="text-sm text-white/80 pt-4">
-                                No credit card required • 14-day free trial • Cancel anytime
+                                No credit card required • 15-day free trial • Cancel anytime
                             </p>
                         </div>
                     </div>

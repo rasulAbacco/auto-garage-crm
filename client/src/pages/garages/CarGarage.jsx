@@ -2,7 +2,8 @@ import React from "react";
 import {
     Car, Shield, Wrench, Users, Clock,
     Calendar, Hammer, AlertTriangle, Sparkles, Circle,
-    Droplet, Zap, Settings, Gauge, Truck
+    Droplet, Zap, Settings, Gauge, Truck,
+    ClipboardList, FileText, Package, MessageSquare, BarChart, Smartphone
 } from "lucide-react";
 import { useTheme } from "../../contexts/ThemeContext";
 import PublicLayout from "../../components/PublicLayout";
@@ -12,10 +13,13 @@ export default function CarGarage() {
 
     // Software features
     const features = [
-        { icon: Shield, title: "Service Records", desc: "Track and manage vehicle history securely." },
-        { icon: Users, title: "Customer Profiles", desc: "Keep customer info and preferences in one dashboard." },
-        { icon: Wrench, title: "Job Management", desc: "Assign and monitor tasks to your mechanics easily." },
-        { icon: Clock, title: "Quick Turnaround", desc: "Improve workshop efficiency with real-time updates." },
+        { icon: Users, title: "Customer & Vehicle Management", desc: "Store complete customer records, track vehicle history, view past jobs, and instantly access service recommendations." },
+        { icon: ClipboardList, title: "Job Cards & Workflow Tracking", desc: "Create job cards in seconds, assign technicians, track progress in real time, and ensure every job stays on schedule." },
+        { icon: FileText, title: "Estimates & Invoices", desc: "Send professional estimates and invoices with one click, auto-calculate taxes, and accept online payments." },
+        { icon: Package, title: "Parts & Inventory", desc: "Monitor stock levels, set low-inventory alerts, and track part usage across all jobs." },
+        { icon: MessageSquare, title: "SMS & Email Reminders", desc: "Reduce missed appointments with automated service reminders, follow-ups, and marketing campaigns." },
+        { icon: BarChart, title: "Reports & Analytics", desc: "View revenue trends, technician productivity, job profitability, and customer insights." },
+        { icon: Smartphone, title: "Mobile App Access", desc: "Technicians can update job status, upload photos, and add notes directly from their phones." }
     ];
 
     // Garage service categories
@@ -107,7 +111,7 @@ export default function CarGarage() {
                     {/* Software Features */}
                     <div className="mt-16">
                         <h2 className={`text-3xl font-bold mb-8 ${isDark ? "text-white" : "text-gray-900"}`}>Software Features</h2>
-                        <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
+                        <div className="grid md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
                             {features.map((f, i) => (
                                 <div key={i}
                                     className={`p-6 rounded-2xl shadow-lg transition-all hover:scale-[1.03] ${isDark ? "bg-white/10" : "bg-white"}`}>
