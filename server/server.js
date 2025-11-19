@@ -13,6 +13,7 @@ import invoiceRoutes from "./routes/invoiceRoutes.js";
 import reportRoutes from "./routes/reportRoutes.js";
 import reminderRoutes from "./routes/reminderRoutes.js";
 import ocrRoutes from "./routes/OCRRoutes.js";
+import paymentRoutes from "./routes/payments.js";
 
 import dashboardRoutes from './routes/dashboardRoutes.js';
 
@@ -84,6 +85,7 @@ app.get("/api/health", (req, res) =>
 app.use("/api/auth", authRoutes); // 🔑 Auth routes (login/register/profile)
 app.use("/api/clients", clientRoutes); // 👥 Client routes
 app.use("/api/services", serviceRoutes); // 🧰 Service routes
+app.use("/api/payments", paymentRoutes);
 
 app.use("/api/invoices", invoiceRoutes);
 app.use("/api/reports", reportRoutes);
