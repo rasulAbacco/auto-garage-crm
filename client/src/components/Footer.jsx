@@ -206,7 +206,7 @@ const Footer = () => {
                                     </p>
                                 </div>
                             </div>
-                            <p className={`text-sm mb-4 ${isDark ? 'text-gray-300' : 'text-gray-600'
+                            <p className={`text-sm font-semibold mb-4 ${isDark ? 'text-gray-300' : 'text-gray-800'
                                 } max-w-md leading-relaxed`}>
                                 Your comprehensive solution for garage management, automotive services,
                                 car washing, and quality spare parts.
@@ -269,7 +269,7 @@ const Footer = () => {
 
                         {/* Quick Links */}
                         <div>
-                            <h3 className={`text-sm font-semibold mb-4 pb-2 border-b ${isDark ? 'border-gray-700 text-white' : 'border-gray-300 text-gray-900'
+                            <h3 className={`text-md font-bold mb-4 pb-2 border-b ${isDark ? 'border-gray-700 text-white' : 'border-gray-300 text-gray-900'
                                 }`}>
                                 Quick Links
                             </h3>
@@ -278,7 +278,7 @@ const Footer = () => {
                                     <li key={item}>
                                         <Link
                                             to={`/${item.toLowerCase().replace(' ', '-')}`}
-                                            className={`link-hover text-sm ${isDark ? 'text-gray-300 hover:text-white' : 'text-gray-600 hover:text-gray-900'
+                                            className={`link-hover text-sm font-semibold ${isDark ? 'text-gray-300 hover:text-white' : 'text-gray-800 hover:text-gray-900'
                                                 }`}
                                         >
                                             {item}
@@ -290,7 +290,7 @@ const Footer = () => {
 
                         {/* Services */}
                         <div>
-                            <h3 className={`text-sm font-semibold mb-4 pb-2 border-b ${isDark ? 'border-gray-700 text-white' : 'border-gray-300 text-gray-900'
+                            <h3 className={`text-md font-bold mb-4 pb-2 border-b ${isDark ? 'border-gray-700 text-white' : 'border-gray-300 text-gray-900'
                                 }`}>
                                 Our Services
                             </h3>
@@ -299,7 +299,7 @@ const Footer = () => {
                                     <li key={service}>
                                         <Link
                                             to={`/${service.toLowerCase().replace(' ', '-')}`}
-                                            className={`link-hover text-sm ${isDark ? 'text-gray-300 hover:text-white' : 'text-gray-600 hover:text-gray-900'
+                                            className={`link-hover text-sm font-semibold ${isDark ? 'text-gray-300 hover:text-white' : 'text-gray-800 hover:text-gray-900'
                                                 }`}
                                         >
                                             {service}
@@ -323,7 +323,7 @@ const Footer = () => {
                                     </svg>
                                 </div>
                                 <div>
-                                    <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Email</p>
+                                    <p className={`text-sm font-semibold ${isDark ? 'text-gray-200' : 'text-gray-900'}`}>Email</p>
                                     <p className="text-sm">info@abaccotech.com</p>
                                 </div>
                             </div>
@@ -336,7 +336,7 @@ const Footer = () => {
                                     </svg>
                                 </div>
                                 <div>
-                                    <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Phone</p>
+                                    <p className={`text-sm font-semibold ${isDark ? 'text-gray-200' : 'text-gray-900'}`}>Phone</p>
                                     <p className="text-sm">+91 9972452044</p>
                                 </div>
                             </div>
@@ -350,7 +350,7 @@ const Footer = () => {
                                     </svg>
                                 </div>
                                 <div>
-                                    <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Address</p>
+                                    <p className={`text-sm font-semibold ${isDark ? 'text-gray-200' : 'text-gray-900'}`}>Address</p>
                                     <p className="text-sm">No 12,13 & 12/A, Kirthan Arcade, 3rd Floor, Aditya Nagar, Sandeep Unnikrishnan Road, Bangalore - 560097</p>
                                 </div>
                             </div>
@@ -360,7 +360,7 @@ const Footer = () => {
                     {/* Bottom Section with Bouncing Links - Fixed Position */}
                     <div className={`pt-6 border-t ${isDark ? 'border-gray-800' : 'border-gray-200'
                         } flex flex-col md:flex-row justify-between items-center space-y-3 md:space-y-0`}>
-                        <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'} text-center md:text-left`}>
+                        <p className={`text-sm ${isDark ? 'text-gray-200' : 'text-gray-900'} text-center md:text-left`}>
                             © {new Date().getFullYear()} Auto Garage Desk by Abacco Technology. All rights reserved.
                         </p>
                         <div className="flex flex-wrap justify-center gap-4 md:gap-6">
