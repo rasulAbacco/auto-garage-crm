@@ -38,6 +38,8 @@ import ContactUs from "./pages/ContactUs.jsx";
 import ClientsLayout from "./components/ClientLayout.jsx";
 import Register from "./pages/Register.jsx";
 import TermsPage from "./pages/terms.jsx";
+import RefundPage from "./pages/RefundT&C.jsx";
+import ReferencePage from "./pages/ReferenceT&C.jsx";
 
 function App() {
   return (
@@ -55,6 +57,8 @@ function App() {
           <Route path="/spare-parts/car" element={<CarSpareParts />} />
           <Route path="/contactus" element={<ContactUs />} />
           <Route path="/terms" element={<TermsPage />} />
+          <Route path="/refundt&c" element={<RefundPage />} />
+          <Route path="/referencet&c" element={<ReferencePage />} />
         </Route>
 
         {/* Login route (public) */}

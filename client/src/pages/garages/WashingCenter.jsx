@@ -6,6 +6,7 @@ import {
 } from "lucide-react";
 import { useTheme } from "../../contexts/ThemeContext";
 import PublicLayout from "../../components/PublicLayout";
+import Footer from "../../components/Footer";
 
 export default function WashingCenter() {
     const { isDark } = useTheme();
@@ -227,6 +228,7 @@ export default function WashingCenter() {
                     </div>
                 </div>
             </div>
+            <Footer />
         </PublicLayout>
     );
 }

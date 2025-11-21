@@ -3,7 +3,7 @@ import { useTheme } from "../contexts/ThemeContext";
 import { Hero, PricingCard, TrustSection, StatsSection, TestimonialSection, FAQSection } from "./PricingComponents";
 import PaymentModal from "./PaymentModal";
 import { Zap, Star, Crown, ArrowRight, MessageCircle } from 'lucide-react';
-
+import Footer from '../components/Footer.jsx';
 export default function ModernPricingPage() {
   const { isDark } = useTheme();
   const [billingPeriod, setBillingPeriod] = useState('monthly');
@@ -151,15 +151,6 @@ export default function ModernPricingPage() {
         </div>
       </section>
 
-      {/* Footer */}
-      <footer className={`relative z-10 px-4 sm:px-6 py-8 border-t ${isDark ? 'border-gray-800' : 'border-gray-200'
-        }`}>
-        <div className="max-w-7xl mx-auto text-center">
-          <p className={`text-sm ${isDark ? 'text-gray-500' : 'text-gray-600'}`}>
-            © 2025 MotorDesk. All rights reserved.
-          </p>
-        </div>
-      </footer>
 
       {/* Payment Modal */}
       <PaymentModal
@@ -170,6 +161,7 @@ export default function ModernPricingPage() {
         onClose={() => setShowModal(false)}
         onComplete={handlePaymentComplete}
       />
+      <Footer />
     </div>
   );
 }

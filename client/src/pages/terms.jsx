@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import { ArrowLeft, FileText, Shield, Users, AlertCircle, CheckCircle, XCircle, CreditCard, Award, Moon, Sun } from 'lucide-react';
-
+import { useTheme } from "../../src/contexts/ThemeContext";   // ✅ use global theme
 export default function TermsPage() {
-    const [isDark, setIsDark] = useState(true);
+    const { isDark } = useTheme();
 
     const sections = [
         {
@@ -123,21 +123,8 @@ export default function TermsPage() {
     return (
 
         // <div className={`min-h-screen ${isDark ? 'bg-gray-950 text-white' : 'bg-gray-50 text-gray-900'}`}>
-             <div className={`min-h-screen ${isDark ? 'text-white' : 'text-gray-900'} pt-[5%]`}> 
-            {/* Theme Toggle */}
-            <div className="fixed top-6 right-6 z-50">
-                <button
-                    onClick={() => setIsDark(!isDark)}
-                    className={`p-3 rounded-full transition-all ${
-                        isDark 
-                            ? 'bg-gray-800 hover:bg-gray-700 text-yellow-400' 
-                            : 'bg-white hover:bg-gray-100 text-indigo-600 shadow-lg'
-                    }`}
-                >
-                    {isDark ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
-                </button>
-            </div>
-
+        <div className={`min-h-screen ${isDark ? 'text-white' : 'text-gray-900'} pt-[5%]`}>
+           
             {/* Header */}
             <section className="relative px-6 py-16">
                 <div className="absolute inset-0 overflow-hidden pointer-events-none">
@@ -151,22 +138,21 @@ export default function TermsPage() {
                             <FileText className="w-4 h-4" />
                             <span className="text-sm font-medium">Referral Program</span>
                         </div> */}
-                        
+
                         <h1 className="text-4xl lg:text-5xl font-bold">
                             <span className={`  ${isDark ? 'text-gray-400' : 'text-gray-900'}`}>Terms & </span>
                             <span className="bg-gradient-to-r from-indigo-500 to-purple-500 bg-clip-text text-transparent">
                                 Conditions
                             </span>
                         </h1>
-                        
+
                         <p className={`text-lg ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
                             Effective Date: November 18, 2025
                         </p>
                     </div>
 
-                    <div className={`p-6 rounded-2xl ${
-                        isDark ? 'bg-gray-900 border border-gray-800' : 'bg-white border border-gray-200 shadow-lg'
-                    }`}>
+                    <div className={`p-6 rounded-2xl ${isDark ? 'bg-gray-900 border border-gray-800' : 'bg-white border border-gray-200 shadow-lg'
+                        }`}>
                         <p className={isDark ? 'text-gray-300' : 'text-gray-700'}>
                             These Terms & Conditions apply to the referral reward program offered by{' '}
                             <span className="font-semibold bg-gradient-to-r from-indigo-500 to-purple-500 bg-clip-text text-transparent">
@@ -186,11 +172,10 @@ export default function TermsPage() {
                         return (
                             <div
                                 key={index}
-                                className={`p-8 rounded-2xl transition-all ${
-                                    isDark
+                                className={`p-8 rounded-2xl transition-all ${isDark
                                         ? 'bg-gray-900 border border-gray-800 hover:border-gray-700'
                                         : 'bg-white border border-gray-200 shadow-lg hover:shadow-xl'
-                                }`}
+                                    }`}
                             >
                                 <div className="flex items-start gap-4">
                                     <div className="w-12 h-12 rounded-xl bg-gradient-to-r from-indigo-500 to-purple-500 flex items-center justify-center flex-shrink-0">
@@ -200,7 +185,7 @@ export default function TermsPage() {
                                         <h2 className={`text-2xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>
                                             {section.title}
                                         </h2>
-                                        
+
                                         {section.content && (
                                             <div className={`space-y-2 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
                                                 {section.content.map((line, i) => (
@@ -213,9 +198,8 @@ export default function TermsPage() {
 
                                         {section.subsections && section.subsections.map((subsection, subIndex) => (
                                             <div key={subIndex} className="space-y-2 mt-4">
-                                                <h3 className={`text-lg font-semibold ${
-                                                    isDark ? 'text-indigo-400' : 'text-indigo-600'
-                                                }`}>
+                                                <h3 className={`text-lg font-semibold ${isDark ? 'text-indigo-400' : 'text-indigo-600'
+                                                    }`}>
                                                     {subsection.subtitle}
                                                 </h3>
                                                 <div className={`space-y-2 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
@@ -235,17 +219,10 @@ export default function TermsPage() {
                 </div>
             </section>
 
-            
-           
 
-            {/* Footer */}
-            <footer className={`px-6 py-8 border-t ${isDark ? 'border-gray-800' : 'border-gray-200'}`}>
-                <div className="max-w-7xl mx-auto text-center">
-                    <p className={`text-sm ${isDark ? 'text-gray-500' : 'text-gray-600'}`}>
-                        © 2025 MotorDesk. All rights reserved.
-                    </p>
-                </div>
-            </footer>
+
+
+            
         </div>
     );
 }
