@@ -8,6 +8,7 @@ import Landing from "./pages/LandinPage.jsx";
 import PricingPage from "./payment/PricingPage.jsx";
 import ScrollToTop from "./components/ScrollToTop.jsx";
 /* Auth / App */
+
 import Login from "./pages/Login.jsx";
 import Layout from "./components/Layout.jsx";
 import ProtectedRoute from "./routes/ProtectedRoute.jsx";
@@ -35,6 +36,8 @@ import BikeSpareParts from "./pages/spareparts/BikeSpareParts.jsx";
 import CarSpareParts from "./pages/spareparts/CarSpareParts.jsx";
 import ContactUs from "./pages/ContactUs.jsx";
 import ClientsLayout from "./components/ClientLayout.jsx";
+import Register from "./pages/Register.jsx";
+import TermsPage from "./pages/terms.jsx";
 
 function App() {
   return (
@@ -51,10 +54,12 @@ function App() {
           <Route path="/spare-parts/bike" element={<BikeSpareParts />} />
           <Route path="/spare-parts/car" element={<CarSpareParts />} />
           <Route path="/contactus" element={<ContactUs />} />
+          <Route path="/terms" element={<TermsPage />} />
         </Route>
 
         {/* Login route (public) */}
         <Route path="/login" element={<Login />} />
+        <Route path="/register" element={<Register />} />
 
         {/* Protected routes */}
         <Route

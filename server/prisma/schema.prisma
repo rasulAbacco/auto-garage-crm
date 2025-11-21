@@ -187,3 +187,26 @@ model OcrRecord {
   @@index([clientId])
   @@index([userId])
 }
+
+model Payment {
+  id String @id @default(cuid())
+
+  // Customer details (saved before payment)
+  customerName  String?
+  companyName   String?
+  email         String?
+  phone         String?
+  plan          String?
+  billingPeriod String?
+  amount        Float?
+
+  // Razorpay details (saved after payment)
+  paymentId String? @unique
+  orderId   String?
+  signature String?
+
+  status String @default("PENDING")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}

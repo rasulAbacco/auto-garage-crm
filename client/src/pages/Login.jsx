@@ -533,15 +533,7 @@ export default function Login() {
                                         ))}
                                     </div>
 
-                                    {/* Sign Up Link */}
-                                    <div className="text-center">
-                                        <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
-                                            Don't have an account?{' '}
-                                            <button className="font-bold text-indigo-500 hover:text-indigo-400 transition-colors">
-                                                Sign up for free
-                                            </button>
-                                        </p>
-                                    </div>
+                                    
 
                                     {/* Demo Credentials */}
                                     <div className={`p-4 rounded-xl border-2 ${isDark

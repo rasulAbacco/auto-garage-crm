@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
     Award, ChevronRight, CheckCircle, Lock
 } from 'lucide-react';
@@ -13,27 +14,59 @@ const PaymentModal = ({
 }) => {
     const [isProcessing, setIsProcessing] = useState(false);
     const [showSuccess, setShowSuccess] = useState(false);
+    const [paymentResponse, setPaymentResponse] = useState(null);
     const [formData, setFormData] = useState({
         name: '', companyName: '', email: '', phone: ''
     });
     const [errors, setErrors] = useState({});
     const [razorpayLoaded, setRazorpayLoaded] = useState(false);
+    const navigate = useNavigate();
 
     // Load Razorpay script when component mounts
     useEffect(() => {
-        const loadRazorpayScript = () => {
-            const script = document.createElement('script');
-            script.src = 'https://checkout.razorpay.com/v1/checkout.js';
-            script.onload = () => setRazorpayLoaded(true);
-            document.body.appendChild(script);
-        };
-
-        if (!window.Razorpay) {
-            loadRazorpayScript();
-        } else {
-            setRazorpayLoaded(true);
-        }
+        const script = document.createElement("script");
+        script.src = "https://checkout.razorpay.com/v2/checkout.js"; // ⭐ v2 script
+        script.async = true;
+        script.onload = () => setRazorpayLoaded(true);
+        document.body.appendChild(script);
     }, []);
+
+
+    // Handle navigation when payment is successful
+    useEffect(() => {
+        if (showSuccess && paymentResponse) {
+            const timer = setTimeout(() => {
+                // First call onComplete to let parent know payment is complete
+                onComplete(plan, formData);
+                
+                // Create a clean, serializable version of the plan object
+                const cleanPlan = {
+                    name: plan.name,
+                    numericPrice: plan.numericPrice,
+                    // Add any other serializable properties from the plan object
+                };
+                
+                // Then navigate to register page with only serializable data
+                navigate('/register', {
+                    state: {
+                        paymentData: {
+                            plan: cleanPlan,
+                            billingPeriod,
+                            finalPrice: billingPeriod === 'yearly'
+                                ? Math.round(plan.numericPrice * 12 * 0.9)
+                                : plan.numericPrice,
+                            formData,
+                            paymentId: paymentResponse.razorpay_payment_id
+                        }
+                    }
+                });
+                
+                setIsProcessing(false);
+            }, 2000);
+            
+            return () => clearTimeout(timer);
+        }
+    }, [showSuccess, paymentResponse, plan, formData, billingPeriod, navigate, onComplete]);
 
     if (!show || !plan) return null;
 
@@ -51,61 +84,77 @@ const PaymentModal = ({
         return Object.keys(newErrors).length === 0;
     };
 
-    const handlePayment = () => {
-        if (!validateForm()) return;
+const handlePayment = async () => {
+    if (!validateForm()) return;
 
-        if (!razorpayLoaded) {
-            alert('Payment gateway is loading. Please try again in a moment.');
-            return;
-        }
+    setIsProcessing(true);
+    const API = "http://localhost:5000";
 
-        setIsProcessing(true);
+    // 1️⃣ Create Order
+    const orderRes = await fetch(`${API}/api/payments/create-order`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ amount: finalPrice }),
+    });
 
-        // Create a new Razorpay order
-        // In a real application, you would create an order on your server
-        // and get an order ID. Here we're simulating it.
-        const options = {
-            key: 'rzp_test_1DP5mmOlF5G5ag', // Replace with your Razorpay key
-            amount: finalPrice * 100, // Razorpay expects amount in paise
-            currency: 'INR',
-            name: 'Abacco Technology',
-            description: `${plan.name} Plan Subscription`,
-            image: 'https://abaccotech.com/Logo/icon.png', // Replace with your logo URL
-            prefill: {
-                name: formData.name,
-                email: formData.email,
-                contact: formData.phone,
-            },
-            notes: {
-                company: formData.companyName,
-                plan: plan.name,
-                billingPeriod: billingPeriod,
-            },
-            theme: {
-                color: isDark ? '#8B5CF6' : '#7C3AED', // Violet color to match your theme
-            },
-            modal: {
-                ondismiss: () => {
-                    setIsProcessing(false);
-                },
-            },
-            handler: function (response) {
-                // Payment successful
-                // In a real app, you would verify the payment on your server
-                // using the razorpay_payment_id and razorpay_order_id
-                console.log('Payment successful:', response);
+    const orderData = await orderRes.json();
+    if (!orderData.success) {
+        alert("Failed to create order");
+        setIsProcessing(false);
+        return;
+    }
 
-                setShowSuccess(true);
-                setTimeout(() => {
-                    onComplete(plan, formData);
-                    setIsProcessing(false);
-                }, 2000);
-            },
-        };
+    // 2️⃣ Save Form Data BEFORE payment
+    await fetch(`${API}/api/payments/save-form`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+            customerName: formData.name,
+            companyName: formData.companyName,
+            email: formData.email,
+            phone: formData.phone,
+            plan: plan.name,
+            billingPeriod,
+            amount: finalPrice,
+            orderId: orderData.order.id
+        })
+    });
 
-        const rzp = new window.Razorpay(options);
-        rzp.open();
-    };
+   const options = {
+    key: "rzp_test_ReqQSmLnQ60S7l",
+    order_id: orderData.order.id,
+    amount: finalPrice * 100,
+    currency: "INR",
+    name: "Abacco Technology",
+    description: `${plan.name} Plan Subscription`,
+
+    prefill: {
+        name: formData.name,
+        email: formData.email,
+        contact: formData.phone,
+    },
+
+    notes: {
+        companyName: formData.companyName,
+        plan: plan.name,
+        billingPeriod,
+    },
+
+    // ⭐ REQUIRED FOR FRONTEND REDIRECTION ⭐
+    handler: function (response) {
+        console.log("Payment Success:", response);
+        setPaymentResponse(response);
+        setShowSuccess(true);
+    },
+
+    callback_url: `${API}/api/payments/verify`,
+    theme: { color: isDark ? "#8B5CF6" : "#7C3AED" },
+};
+
+
+    const rzp = new window.Razorpay(options);
+    rzp.open();
+};
 
     return (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-md flex items-center justify-center z-50 p-4 animate-fadeIn">
@@ -119,7 +168,7 @@ const PaymentModal = ({
                         <div>
                             <h2 className="text-2xl font-bold mb-2">Payment Successful!</h2>
                             <p className={isDark ? 'text-gray-400' : 'text-gray-600'}>
-                                Redirecting to your dashboard...
+                                Redirecting to registration...
                             </p>
                         </div>
                     </div>

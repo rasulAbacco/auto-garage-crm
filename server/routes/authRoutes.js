@@ -14,7 +14,7 @@ const router = express.Router();
  * @desc Auth Routes
  * @route /api/auth
  */
-
+ 
 // 🟢 Public Routes
 router.post("/register", registerUser); // Register new user
 router.post("/login", loginUser);       // Login and get token
