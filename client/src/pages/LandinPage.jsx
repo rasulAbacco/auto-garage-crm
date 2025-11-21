@@ -8,6 +8,7 @@ import {
     TrendingUp, Award, Headphones, Gauge, Car,
     Calendar, CreditCard, Bell, Settings
 } from "lucide-react";
+import Footer from "../components/Footer.jsx";
 
 export default function LandingPage() {
     const navigate = useNavigate();
@@ -333,7 +334,7 @@ export default function LandingPage() {
                                 Ready to Transform Your Garage?
                             </h2>
                             <p className="text-xl text-white/90 max-w-2xl mx-auto">
-                                Join thousands of successful garage owners. Start your free 14-day trial today.
+                                Join thousands of successful garage owners. Start your free 15-day trial today.
                             </p>
                             <div className="flex flex-wrap gap-4 justify-center pt-4">
                                 <button
@@ -358,27 +359,8 @@ export default function LandingPage() {
                 </div>
             </section>
             {/* Footer */}
-            <footer
-                className={`relative z-10 px-4 sm:px-6 py-8 border-t ${
-                    isDark ? "border-gray-800" : "border-gray-200"
-                }`}
-            >
-                <div className="max-w-7xl mx-auto text-center space-y-2">
-                    <p className={`text-sm ${isDark ? "text-gray-500" : "text-gray-600"}`}>
-                        © 2025 MotorDesk. All rights reserved.
-                    </p>
-
-                    <Link
-                        to="/terms"
-                        className={`text-sm font-medium ${
-                            isDark ? "text-blue-400 hover:text-blue-300" : "text-blue-600 hover:text-blue-700"
-                        } underline`}
-                    >
-                        Terms and Conditions
-                    </Link>
-                </div>
-            </footer>
-
+            
+            <Footer />
         </div>
     );
 }

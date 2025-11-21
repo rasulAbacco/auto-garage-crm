@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { useTheme } from "../contexts/ThemeContext";
 import PublicLayout from "../components/PublicLayout";
 import { Mail, Phone, MapPin, Send, User, MessageSquare, Loader2 } from "lucide-react";
+import Footer from "../components/Footer.jsx";
 
 export default function ContactUs() {
     const { isDark } = useTheme();
@@ -46,8 +47,8 @@ export default function ContactUs() {
                         {/* Contact Information */}
                         <div
                             className={`p-8 rounded-3xl shadow-xl backdrop-blur-xl transition-all ${isDark
-                                    ? "bg-white/10 border border-white/10"
-                                    : "bg-white border border-gray-200"
+                                ? "bg-white/10 border border-white/10"
+                                : "bg-white border border-gray-200"
                                 }`}
                         >
                             <h2 className="text-2xl font-semibold mb-6">Contact Information</h2>
@@ -74,7 +75,7 @@ export default function ContactUs() {
                                     </div>
                                     <div>
                                         <h4 className="font-semibold">Email</h4>
-                                        <p className={`text-sm ${isDark ? "text-gray-300": "text-gray-700"}`}>info@abaccotech.com</p>
+                                        <p className={`text-sm ${isDark ? "text-gray-300" : "text-gray-700"}`}>info@abaccotech.com</p>
                                     </div>
                                 </div>
 
@@ -111,8 +112,8 @@ export default function ContactUs() {
                         <form
                             onSubmit={handleSubmit}
                             className={`p-8 rounded-3xl shadow-xl backdrop-blur-xl transition-all ${isDark
-                                    ? "bg-white/10 border border-white/10"
-                                    : "bg-white border border-gray-200"
+                                ? "bg-white/10 border border-white/10"
+                                : "bg-white border border-gray-200"
                                 }`}
                         >
                             <h2 className="text-2xl font-semibold mb-6">Send Us a Message</h2>
@@ -120,8 +121,8 @@ export default function ContactUs() {
                             {submitted ? (
                                 <div
                                     className={`p-6 text-center rounded-xl ${isDark
-                                            ? "bg-green-500/10 border border-green-400/20 text-green-300"
-                                            : "bg-green-50 border border-green-200 text-green-700"
+                                        ? "bg-green-500/10 border border-green-400/20 text-green-300"
+                                        : "bg-green-50 border border-green-200 text-green-700"
                                         }`}
                                 >
                                     <p>🎉 Thank you! Your message has been received.</p>
@@ -141,8 +142,8 @@ export default function ContactUs() {
                                             onChange={handleChange}
                                             required
                                             className={`w-full px-4 py-3 rounded-xl border-2 outline-none transition-all ${isDark
-                                                    ? "bg-white/5 border-white/10 focus:border-indigo-500 text-white placeholder-gray-400"
-                                                    : "bg-white border-gray-200 focus:border-indigo-500 text-gray-900 placeholder-gray-500"
+                                                ? "bg-white/5 border-white/10 focus:border-indigo-500 text-white placeholder-gray-400"
+                                                : "bg-white border-gray-200 focus:border-indigo-500 text-gray-900 placeholder-gray-500"
                                                 }`}
                                             placeholder="Enter your full name"
                                         />
@@ -161,8 +162,8 @@ export default function ContactUs() {
                                             onChange={handleChange}
                                             required
                                             className={`w-full px-4 py-3 rounded-xl border-2 outline-none transition-all ${isDark
-                                                    ? "bg-white/5 border-white/10 focus:border-indigo-500 text-white placeholder-gray-400"
-                                                    : "bg-white border-gray-200 focus:border-indigo-500 text-gray-900 placeholder-gray-500"
+                                                ? "bg-white/5 border-white/10 focus:border-indigo-500 text-white placeholder-gray-400"
+                                                : "bg-white border-gray-200 focus:border-indigo-500 text-gray-900 placeholder-gray-500"
                                                 }`}
                                             placeholder="your@email.com"
                                         />
@@ -181,8 +182,8 @@ export default function ContactUs() {
                                             required
                                             rows={5}
                                             className={`w-full px-4 py-3 rounded-xl border-2 outline-none resize-none transition-all ${isDark
-                                                    ? "bg-white/5 border-white/10 focus:border-indigo-500 text-white placeholder-gray-400"
-                                                    : "bg-white border-gray-200 focus:border-indigo-500 text-gray-900 placeholder-gray-500"
+                                                ? "bg-white/5 border-white/10 focus:border-indigo-500 text-white placeholder-gray-400"
+                                                : "bg-white border-gray-200 focus:border-indigo-500 text-gray-900 placeholder-gray-500"
                                                 }`}
                                             placeholder="Write your message..."
                                         />
@@ -212,6 +213,7 @@ export default function ContactUs() {
                     </div>
                 </div>
             </div>
+            <Footer />
         </PublicLayout>
     );
 }
