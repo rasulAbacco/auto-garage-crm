@@ -333,7 +333,7 @@ export default function LandingPage() {
                                 Ready to Transform Your Garage?
                             </h2>
                             <p className="text-xl text-white/90 max-w-2xl mx-auto">
-                                Join thousands of successful garage owners. Start your free 14-day trial today.
+                                Join thousands of successful garage owners. Start your free 15-day trial today.
                             </p>
                             <div className="flex flex-wrap gap-4 justify-center pt-4">
                                 <button
