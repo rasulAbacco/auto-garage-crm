@@ -1,6 +1,6 @@
 // src/pages/Landing.jsx
 import React, { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useTheme } from "../contexts/ThemeContext";
 import {
     ArrowRight, Play, Shield, Zap, Users, BarChart3,
@@ -358,14 +358,27 @@ export default function LandingPage() {
                 </div>
             </section>
             {/* Footer */}
-            <footer className={`relative z-10 px-4 sm:px-6 py-8 border-t ${isDark ? 'border-gray-800' : 'border-gray-200'
-                }`}>
-                <div className="max-w-7xl mx-auto text-center">
-                    <p className={`text-sm ${isDark ? 'text-gray-500' : 'text-gray-600'}`}>
+            <footer
+                className={`relative z-10 px-4 sm:px-6 py-8 border-t ${
+                    isDark ? "border-gray-800" : "border-gray-200"
+                }`}
+            >
+                <div className="max-w-7xl mx-auto text-center space-y-2">
+                    <p className={`text-sm ${isDark ? "text-gray-500" : "text-gray-600"}`}>
                         © 2025 MotorDesk. All rights reserved.
                     </p>
+
+                    <Link
+                        to="/terms"
+                        className={`text-sm font-medium ${
+                            isDark ? "text-blue-400 hover:text-blue-300" : "text-blue-600 hover:text-blue-700"
+                        } underline`}
+                    >
+                        Terms and Conditions
+                    </Link>
                 </div>
             </footer>
+
         </div>
     );
 }

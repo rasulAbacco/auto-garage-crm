@@ -7,7 +7,7 @@ import { generateToken } from "../utils/generateToken.js";
 /**
  * @desc Register a new user
  * @route POST /api/auth/register
- * @access Public
+ * @access Public 
  */
 export const registerUser = async (req, res) => {
     try {
