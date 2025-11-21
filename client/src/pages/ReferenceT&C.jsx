@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import {Link} from "react-router-dom";
 import {
     Gift, TrendingUp, Award, Users, FileText, CheckCircle,
     XCircle, CreditCard, Shield, AlertCircle, Zap, Star,
@@ -23,7 +24,7 @@ const ReferralProgram = () => {
         {
             name: "Standard Plan",
             monthly: "₹2,000",
-            annual: "₹1,200",
+            annual: "1,200",
             reward: "₹100",
             color: "from-blue-500 to-cyan-500",
             icon: Star,
@@ -32,7 +33,7 @@ const ReferralProgram = () => {
         {
             name: "Premium Plan",
             monthly: "₹3,000",
-            annual: "₹2,400",
+            annual: "2,400",
             reward: "₹200",
             color: "from-purple-500 to-pink-500",
             icon: Crown,
@@ -215,17 +216,32 @@ const ReferralProgram = () => {
                             </p>
 
                             <div className="flex items-center justify-center gap-4 flex-wrap">
-                                <button className="group px-8 py-4 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-500 text-white font-bold text-lg shadow-2xl shadow-emerald-500/30 hover:shadow-emerald-500/50 transition-all duration-300 hover:scale-110 flex items-center gap-2">
+
+                                {/* Get Started → /login */}
+                                <Link
+                                    to="/login"
+                                    className="group px-8 py-4 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-500 
+        text-white font-bold text-lg shadow-2xl shadow-emerald-500/30 hover:shadow-emerald-500/50 
+        transition-all duration-300 hover:scale-110 flex items-center gap-2"
+                                >
                                     Get Started
                                     <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
-                                </button>
-                                <button className={`px-8 py-4 rounded-2xl backdrop-blur-xl font-bold text-lg transition-all duration-300 hover:scale-105 ${isDark
-                                    ? 'bg-gray-800/50 text-white hover:bg-gray-700/50'
-                                    : 'bg-white/50 text-gray-900 hover:bg-white/80'
-                                    } border ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
-                                    Learn More
-                                </button>
+                                </Link>
+
+                                {/* Know More → /pricing */}
+                                <Link
+                                    to="/pricing"
+                                    className={`px-8 py-4 rounded-2xl backdrop-blur-xl font-bold text-lg transition-all duration-300 
+        hover:scale-105 ${isDark
+                                            ? 'bg-gray-800/50 text-white hover:bg-gray-700/50'
+                                            : 'bg-white/50 text-gray-900 hover:bg-white/80'
+                                        } border ${isDark ? 'border-gray-700' : 'border-gray-200'}`}
+                                >
+                                    Know More
+                                </Link>
+
                             </div>
+
 
                             <p className={`text-sm ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>
                                 Effective Date: November 18, 2025
