@@ -203,10 +203,10 @@ const ReferralProgram = () => {
                             </div>
 
                             <h1 className="text-5xl md:text-7xl font-black leading-tight">
-                                <span className={isDark ? 'text-gray-300' : 'text-gray-700'}>Earn Money </span>
+                                <span className={isDark ? 'text-gray-300' : 'text-gray-700'}>Reference Bounce </span>
                                 <br />
                                 <span className="bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500 bg-clip-text text-transparent">
-                                    Sharing Success
+                                    Term & Conditions
                                 </span>
                             </h1>
 

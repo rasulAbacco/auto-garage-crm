@@ -57,7 +57,7 @@ function App() {
           <Route path="/spare-parts/car" element={<CarSpareParts />} />
           <Route path="/contactus" element={<ContactUs />} />
           <Route path="/terms" element={<TermsPage />} />
-          <Route path="/refundt&c" element={<RefundPage />} />
+          <Route path="/term&conditions" element={<RefundPage />} />
           <Route path="/referencet&c" element={<ReferencePage />} />
         </Route>
 

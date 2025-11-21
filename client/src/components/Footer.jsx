@@ -379,7 +379,7 @@ const Footer = () => {
                                 Reference Bounce T&C
                             </Link>
                             <Link
-                                to="/refundt&c"
+                                to="/term&conditions"
                                 className={`policy-link text-sm font-medium px-2 py-1 rounded ${isDark ? 'text-blue-300 hover:text-blue-200 hover:bg-blue-900/30' : 'text-blue-600 hover:text-blue-800 hover:bg-blue-100'
                                     } transition-all duration-300`}
                             >
