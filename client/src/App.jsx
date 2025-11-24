@@ -69,7 +69,6 @@ function App() {
         {/* Login route (public) */}
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
-        <Route path="/profile" element={<Profile />} />
 
         {/* Protected routes */}
         <Route
@@ -100,6 +99,7 @@ function App() {
           <Route path="/details" element={<DetailsPage />} />
           <Route path="/ocr-Scanner" element={<DetailsPage />} />
           <Route path="/plan" element={<Plans />} />
+          <Route path="/profile" element={<Profile />} />
 
         </Route>
 
@@ -109,8 +109,7 @@ function App() {
 
           {/* Washing CRM Routes */}
           <Route path="/wash-dashboard" element={<WashDashboard />} />
-
-        </Route>
+ 
         {/* Fallback */}
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

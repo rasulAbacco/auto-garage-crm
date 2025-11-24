@@ -207,4 +207,24 @@ router.post("/verify", async (req, res) => {
   }
 });
 
+// Fetch logged-in user's active plan
+router.get("/user-plan/:email", async (req, res) => {
+  try {
+    const { email } = req.params;
+
+    const payment = await prisma.payment.findFirst({
+      where: { email, status: "SUCCESS" },
+      orderBy: { paidAt: "desc" },
+    });
+
+    if (!payment) {
+      return res.json({ success: false, message: "No active plan found" });
+    }
+
+    return res.json({ success: true, payment });
+  } catch (err) {
+    res.status(500).json({ error: "Error fetching plan" });
+  }
+});
+
 export default router;

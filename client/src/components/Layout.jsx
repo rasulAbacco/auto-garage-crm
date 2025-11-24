@@ -1,5 +1,5 @@
 // Layout.js (redesigned)
-import React, { useState, useContext,useEffect  } from "react";
+import React, { useState, useContext, useEffect } from "react";
 import { Outlet, NavLink, useNavigate } from "react-router-dom";
 import {
   Car,
@@ -26,30 +26,30 @@ export default function Layout() {
   const { isDark, toggleTheme } = useTheme();
 
   const menu = [
-    { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+    { to: "/car-dashboard", label: "Dashboard", icon: LayoutDashboard },
     { to: "/clients", label: "Clients", icon: Users },
     { to: "/services", label: "Services", icon: Wrench },
     { to: "/billing", label: "Billing", icon: Receipt },
     { to: "/reminders", label: "Reminders", icon: Bell },
     { to: "/reports", label: "Reports", icon: BarChart2 },
     { to: "/ocr-scanner", label: "OCR Scanner", icon: FileText },
-    // { to: "/plan", label: "Your Plan", icon: IndianRupee },
+    { to: "/plan", label: "Your Plan", icon: IndianRupee },
   ];
   const [openProfileMenu, setOpenProfileMenu] = useState(false);
   const [showLogoutModal, setShowLogoutModal] = useState(false);
   const [user, setUser] = useState(
-  JSON.parse(localStorage.getItem("user")) || {}
-);
+    JSON.parse(localStorage.getItem("user")) || {}
+  );
 
-useEffect(() => {
-  const handleUserUpdate = () => {
-    const updatedUser = JSON.parse(localStorage.getItem("user"));
-    setUser(updatedUser);
-  };
+  useEffect(() => {
+    const handleUserUpdate = () => {
+      const updatedUser = JSON.parse(localStorage.getItem("user"));
+      setUser(updatedUser);
+    };
 
-  window.addEventListener("user-updated", handleUserUpdate);
-  return () => window.removeEventListener("user-updated", handleUserUpdate);
-}, []);
+    window.addEventListener("user-updated", handleUserUpdate);
+    return () => window.removeEventListener("user-updated", handleUserUpdate);
+  }, []);
   const logout = () => {
     localStorage.removeItem("auth");
     navigate("/login", { replace: true });
@@ -240,68 +240,85 @@ useEffect(() => {
 
               {/* User Profile */}
               {/* User Profile */}
-            <div className="relative">
-              <button
-                onClick={() => setOpenProfileMenu(!openProfileMenu)}
-                className="flex items-center gap-3"
-              >
-                {/* Avatar */}
-                <div className="w-10 h-10 rounded-full overflow-hidden border border-gray-300 dark:border-gray-600">
-                  {user?.profileImage ? (
-                    <img
+              <div className="relative">
+                <button
+                  onClick={() => setOpenProfileMenu(!openProfileMenu)}
+                  className="flex items-center gap-3"
+                >
+                  {/* Avatar */}
+                  <div className="w-10 h-10 rounded-full overflow-hidden border border-gray-300 dark:border-gray-600">
+                    {user?.profileImage ? (
+                      <img
                         src={user.profileImage}
                         alt="Profile"
                         className="w-full h-full object-cover"
                       />
-
-                  ) : (
-                    <div
-                      className={`w-full h-full flex items-center justify-center 
-                      ${isDark ? "bg-gradient-to-br from-blue-600 to-purple-600"
-                              : "bg-gradient-to-br from-blue-500 to-purple-500"}`}
-                    >
-                      <span className="text-white font-medium">
-                        {user.username ? user.username.charAt(0).toUpperCase() : "U"}
-                      </span>
-                    </div>
-                  )}
-                </div>
-
-                {/* Username & Email */}
-                <div className={`hidden sm:block ${isDark ? "text-white" : "text-gray-800"}`}>
-                  <div className="font-medium">{user.username || "User"}</div>
-                  <div className={`text-xs ${isDark ? "text-gray-400" : "text-gray-500"}`}>
-                    {user.email || "no-email@example.com"}
+                    ) : (
+                      <div
+                        className={`w-full h-full flex items-center justify-center 
+                      ${
+                        isDark
+                          ? "bg-gradient-to-br from-blue-600 to-purple-600"
+                          : "bg-gradient-to-br from-blue-500 to-purple-500"
+                      }`}
+                      >
+                        <span className="text-white font-medium">
+                          {user.username
+                            ? user.username.charAt(0).toUpperCase()
+                            : "U"}
+                        </span>
+                      </div>
+                    )}
                   </div>
-                </div>
-              </button>
 
-              {/* Dropdown Menu */}
-              {openProfileMenu && (
-                <div
-                  className={`
-                    absolute right-0 mt-3 w-48 rounded-xl shadow-lg border p-3 z-50
-                    ${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'}
-                  `}
-                >
-                  <button
-                    onClick={() => {
-                      navigate("/profile");
-                      setOpenProfileMenu(false);
-                    }}
-                    className={`
-                       text-left px-1   rounded-lg font-medium text-white
-                      ${isDark ? 'hover:bg-gray-700' : 'hover:bg-gray-100'}
-                    `}
+                  {/* Username & Email */}
+                  <div
+                    className={`hidden sm:block ${
+                      isDark ? "text-white" : "text-gray-800"
+                    }`}
                   >
-                    Profile
-                  </button>
+                    <div className="font-medium">{user.username || "User"}</div>
+                    <div
+                      className={`text-xs ${
+                        isDark ? "text-gray-400" : "text-gray-500"
+                      }`}
+                    >
+                      {user.email || "no-email@example.com"}
+                    </div>
+                  </div>
+                </button>
 
-                   
-                </div>
-              )}
-            </div>
-
+                {/* Dropdown Menu */}
+                {openProfileMenu && (
+                  <div
+                    className={`
+                    absolute right-0 mt-3 w-48 rounded-xl shadow-lg border p-3 z-50
+                    ${
+                      isDark
+                        ? "bg-gray-800 border-gray-700"
+                        : "bg-white border-gray-200"
+                    }
+                  `}
+                  >
+                    <button
+                      onClick={() => {
+                        navigate("/profile");
+                        setOpenProfileMenu(false);
+                      }}
+                      className={`
+    w-full text-left px-3 py-2 rounded-lg font-medium transition-colors duration-300
+    ${
+      isDark
+        ? "text-gray-200 hover:bg-gray-700"
+        : "text-gray-800 hover:bg-gray-100"
+    }
+  `}
+                    >
+                      Profile
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </header>
@@ -313,23 +330,23 @@ useEffect(() => {
           <Outlet />
         </main>
       </div>
-        {showLogoutModal && (
-          <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm">
-            <div
-              className={`w-full max-w-sm rounded-2xl p-6 shadow-xl 
+      {showLogoutModal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm">
+          <div
+            className={`w-full max-w-sm rounded-2xl p-6 shadow-xl 
         ${isDark ? "bg-gray-800 text-white" : "bg-white text-gray-800"}`}
-            >
-              {/* Title */}
-              <h2 className="text-xl font-bold mb-2">Confirm Logout</h2>
-              <p className={`${isDark ? "text-gray-300" : "text-gray-600"}`}>
-                Are you sure you want to logout?
-              </p>
+          >
+            {/* Title */}
+            <h2 className="text-xl font-bold mb-2">Confirm Logout</h2>
+            <p className={`${isDark ? "text-gray-300" : "text-gray-600"}`}>
+              Are you sure you want to logout?
+            </p>
 
-              {/* Buttons */}
-              <div className="flex justify-end gap-3 mt-6">
-                <button
-                  onClick={() => setShowLogoutModal(false)}
-                  className={`
+            {/* Buttons */}
+            <div className="flex justify-end gap-3 mt-6">
+              <button
+                onClick={() => setShowLogoutModal(false)}
+                className={`
               px-4 py-2 rounded-lg font-medium
               ${
                 isDark
@@ -337,26 +354,26 @@ useEffect(() => {
                   : "bg-gray-200 hover:bg-gray-300"
               }
             `}
-                >
-                  Cancel
-                </button>
+              >
+                Cancel
+              </button>
 
-                <button
-                  onClick={() => {
-                    setShowLogoutModal(false);
-                    logout();
-                  }}
-                  className="
+              <button
+                onClick={() => {
+                  setShowLogoutModal(false);
+                  logout();
+                }}
+                className="
               px-4 py-2 rounded-lg font-medium text-white 
               bg-red-600 hover:bg-red-700
             "
-                >
-                  Logout
-                </button>
-              </div>
+              >
+                Logout
+              </button>
             </div>
           </div>
-        )}
+        </div>
+      )}
     </div>
   );
 }
