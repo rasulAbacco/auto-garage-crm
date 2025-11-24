@@ -112,7 +112,7 @@ function App() {
         <Route path="/wash-dashboard" element={<WashDashboard />} />
 
         {/* Fallback */}
-        <Route path="*" element={<Navigate to="/" replace />} />
+          <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </ThemeProvider>
   );
