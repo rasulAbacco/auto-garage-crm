@@ -8,6 +8,9 @@ import prisma from "../models/prismaClient.js";
  * @route GET /api/user/profile
  * @access Private
  */
+
+const API_URL = import.meta.env.VITE_API_BASE_URL;
+
 export const getProfile = async (req, res) => {
   try {
     const user = await prisma.user.findUnique({
@@ -115,7 +118,7 @@ export const uploadProfileImage = async (req, res) => {
     }
 
     // ALWAYS store full public URL
-    const fileUrl = `http://localhost:5000/uploads/${req.file.filename}`;
+    const fileUrl = `${API_URL}/uploads/${req.file.filename}`;
 
     const updatedUser = await prisma.user.update({
       where: { id: req.user.id },
