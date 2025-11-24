@@ -10,56 +10,59 @@ import { generateToken } from "../utils/generateToken.js";
  * @access Public 
  */
 export const registerUser = async (req, res) => {
-    try {
-        const { username, email, password } = req.body;
+  try {
+    const { username, email, password } = req.body;
 
-        // ✅ Basic validation
-        if (!username || !email || !password) {
-            return res.status(400).json({ message: "All fields are required" });
-        }
-
-        // ✅ Check if username or email already exists
-        const existingUser = await prisma.user.findFirst({
-            where: { OR: [{ username }, { email }] },
-        });
-
-        if (existingUser) {
-            return res
-                .status(400)
-                .json({ message: "Username or email already exists" });
-        }
-
-        // ✅ Hash password before saving
-        const hashedPassword = await bcrypt.hash(password, 10);
-
-        // ✅ Create user in DB
-        const user = await prisma.user.create({
-            data: {
-                username,
-                email,
-                password: hashedPassword,
-                role: "user", // default role
-            },
-        });
-
-        // ✅ Generate JWT
-        const token = generateToken(user);
-
-        return res.status(201).json({
-            message: "User registered successfully",
-            token,
-            user: {
-                id: user.id,
-                username: user.username,
-                email: user.email,
-                role: user.role,
-                createdAt: user.createdAt,
-            },
-        });
-    } catch (error) {
-        console.error("❌ Registration Error:", error);
-        res.status(500).json({ message: "Internal server error during registration" });
+    // Validate fields
+    if (!username || !email || !password) {
+      return res.status(400).json({ message: "All fields are required" });
     }
+
+    // Check duplicates
+    const existingUser = await prisma.user.findFirst({
+      where: { OR: [{ username }, { email }] },
+    });
+
+    if (existingUser) {
+      return res
+        .status(400)
+        .json({ message: "Username or email already exists" });
+    }
+
+    // Hash password
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    // Create user
+    const user = await prisma.user.create({
+      data: {
+        username,
+        email,
+        password: hashedPassword,
+        role: "user",
+        profileImage: null, // default null
+      },
+    });
+
+    // Generate token
+    const token = generateToken(user);
+
+    // Return user with profileImage included
+    return res.status(201).json({
+      message: "User registered successfully",
+      token,
+      user: {
+        id: user.id,
+        username: user.username,
+        email: user.email,
+        role: user.role,
+        profileImage: user.profileImage || null,
+        createdAt: user.createdAt,
+      },
+    });
+  } catch (error) {
+    console.error("❌ Registration Error:", error);
+    res.status(500).json({ message: "Internal server error during registration" });
+  }
 };
 
 /**
@@ -115,6 +118,26 @@ export const loginUser = async (req, res) => {
         console.error("❌ Login Error:", error);
         return res.status(500).json({ message: "Internal server error" });
     }
+
+    // Generate token
+    const token = generateToken(user);
+
+    // Return user including profileImage
+    return res.status(200).json({
+      message: "Login successful",
+      token,
+      user: {
+        id: user.id,
+        username: user.username,
+        email: user.email,
+        role: user.role,
+        profileImage: user.profileImage || null,
+      },
+    });
+  } catch (error) {
+    console.error("❌ Login Error:", error);
+    res.status(500).json({ message: "Internal server error during login" });
+  }
 };
 
 
@@ -133,6 +156,7 @@ export const getProfile = async (req, res) => {
                 username: true,
                 email: true,
                 role: true,
+                profileImage: true,
                 createdAt: true,
                 updatedAt: true,
             },

@@ -14,6 +14,7 @@ import reportRoutes from "./routes/reportRoutes.js";
 import reminderRoutes from "./routes/reminderRoutes.js";
 import ocrRoutes from "./routes/OCRRoutes.js";
 import paymentRoutes from "./routes/payments.js";
+import userRoutes from "./routes/userRoutes.js";
 
 import dashboardRoutes from './routes/dashboardRoutes.js';
 
@@ -78,10 +79,22 @@ app.get("/api/health", (req, res) =>
     timestamp: new Date().toISOString(),
   })
 );
+app.use(helmet());
+
+// 🔥 Add this fix
+app.use((req, res, next) => {
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
+  res.setHeader("Cross-Origin-Embedder-Policy", "unsafe-none");
+  next();
+});
+
+app.use("/uploads", express.static("uploads"));
 
 /* -----------------------------------------------------
    🚀 Mount API Routes
 ----------------------------------------------------- */
+app.use("/api/user", userRoutes);
 app.use("/api/auth", authRoutes); // 🔑 Auth routes (login/register/profile)
 app.use("/api/clients", clientRoutes); // 👥 Client routes
 app.use("/api/services", serviceRoutes); // 🧰 Service routes
