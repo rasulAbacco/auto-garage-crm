@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { Camera, Save, Mail, User, Lock, Eye, EyeOff, ArrowRight, Sparkles } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-
+ 
 const API_URL = import.meta.env.VITE_API_BASE_URL;
 
 export default function Profile() {
@@ -142,11 +142,8 @@ export default function Profile() {
 
 
   return (
-    <div className={`min-h-screen pt-20 pb-10 relative overflow-hidden transition-all duration-700 ${
-      isDark
-        ? 'bg-gradient-to-br from-slate-950 via-indigo-950 to-slate-950'
-        : 'bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50'
-    }`}>
+  
+     <div className={`min-h-screen pt-20 pb-10 relative overflow-hidden transition-all duration-700  `}>
       
       {/* Animated Background */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
@@ -220,7 +217,7 @@ export default function Profile() {
             
             {/* Header */}
             <div className="text-center space-y-2">
-              <h1 className={`text-3xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>
+              <h1 className={`text-lg ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
                 Profile Settings
               </h1>
               <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
@@ -444,5 +441,6 @@ export default function Profile() {
         }
       `}</style>
     </div>
+ 
   );
 }
