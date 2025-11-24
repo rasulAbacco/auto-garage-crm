@@ -9,7 +9,7 @@ import prisma from "../models/prismaClient.js";
  * @access Private
  */
 
-const API_URL = import.meta.env.VITE_API_BASE_URL;
+const API_URL = process.env.VITE_API_BASE_URL;
 
 export const getProfile = async (req, res) => {
   try {
