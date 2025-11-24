@@ -38,8 +38,11 @@ import ContactUs from "./pages/ContactUs.jsx";
 import ClientsLayout from "./components/ClientLayout.jsx";
 import Register from "./pages/Register.jsx";
 import TermsPage from "./pages/terms.jsx";
+import Profile from "./components/Profile.jsx";
+import Plans from "./pages/plans/Plans.jsx";
 import RefundPage from "./pages/RefundT&C.jsx";
 import ReferencePage from "./pages/ReferenceT&C.jsx";
+
 
 function App() {
   return (
@@ -64,6 +67,7 @@ function App() {
         {/* Login route (public) */}
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
+        <Route path="/profile" element={<Profile />} />
 
         {/* Protected routes */}
         <Route
@@ -93,7 +97,9 @@ function App() {
           <Route path="/billing/:id" element={<Invoice />} />
           <Route path="/reminders" element={<RemindersList />} />
           <Route path="/reports" element={<Reports />} />
-          <Route path="/details" element={<DetailsPage />} />
+          <Route path="/ocr-Scanner" element={<DetailsPage />} />
+          <Route path="/plan" element={<Plans />} />
+
         </Route>
 
         {/* Fallback */}
