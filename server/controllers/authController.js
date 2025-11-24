@@ -71,58 +71,39 @@ export const registerUser = async (req, res) => {
  * @access Public
  */
 export const loginUser = async (req, res) => {
-    try {
-        const { identifier, password, crmType } = req.body;
+  try {
+    const { identifier, password, crmType } = req.body;
 
-        if (!identifier || !password) {
-            return res.status(400).json({ message: "Email/Username and password are required" });
-        }
-
-        console.log("📩 Login payload:", req.body);
-
-        // Detect if identifier is email or username
-        const isEmail = identifier.includes("@");
-
-        const user = await prisma.user.findFirst({
-            where: isEmail
-                ? { email: identifier }
-                : { username: identifier }
-        });
-
-        console.log("🔍 USER FOUND:", user);
-
-        if (!user) {
-            return res.status(400).json({ message: "Invalid credentials" });
-        }
-
-        const isMatch = await bcrypt.compare(password, user.password);
-        if (!isMatch) {
-            return res.status(400).json({ message: "Invalid credentials" });
-        }
-
-        const token = generateToken(user);
-
-        return res.status(200).json({
-            message: "Login successful",
-            token,
-            user: {
-                id: user.id,
-                username: user.username,
-                email: user.email,
-                role: user.role,
-                crmType
-            }
-        });
-
-    } catch (error) {
-        console.error("❌ Login Error:", error);
-        return res.status(500).json({ message: "Internal server error" });
+    if (!identifier || !password) {
+      return res.status(400).json({
+        message: "Email/Username and password are required",
+      });
     }
 
-    // Generate token
+    console.log("📩 Login payload:", req.body);
+
+    // Detect if identifier is email or username
+    const isEmail = identifier.includes("@");
+
+    const user = await prisma.user.findFirst({
+      where: isEmail
+        ? { email: identifier }
+        : { username: identifier },
+    });
+
+    console.log("🔍 USER FOUND:", user);
+
+    if (!user) {
+      return res.status(400).json({ message: "Invalid credentials" });
+    }
+
+    const isMatch = await bcrypt.compare(password, user.password);
+    if (!isMatch) {
+      return res.status(400).json({ message: "Invalid credentials" });
+    }
+
     const token = generateToken(user);
 
-    // Return user including profileImage
     return res.status(200).json({
       message: "Login successful",
       token,
@@ -132,13 +113,17 @@ export const loginUser = async (req, res) => {
         email: user.email,
         role: user.role,
         profileImage: user.profileImage || null,
+        crmType,
       },
     });
   } catch (error) {
     console.error("❌ Login Error:", error);
-    res.status(500).json({ message: "Internal server error during login" });
+    return res.status(500).json({
+      message: "Internal server error during login",
+    });
   }
 };
+
 
 
 /**
