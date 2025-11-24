@@ -6,6 +6,7 @@ import {
 } from "lucide-react";
 import { useTheme } from "../../contexts/ThemeContext";
 import PublicLayout from "../../components/PublicLayout";
+import Footer from "../../components/Footer";
 
 export default function BikeSpareParts() {
     const { isDark } = useTheme();
@@ -257,6 +258,7 @@ export default function BikeSpareParts() {
                     }
                 `}</style>
             </div>
+            <Footer />
         </PublicLayout>
     );
 }
