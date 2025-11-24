@@ -253,9 +253,19 @@ export default function ClientForm() {
 
   // ========== UI ==========
   return (
-    <form onSubmit={handleSubmit} className="max-w-4xl mx-auto p-6">
-      <Toaster position="top-right" />
+  <div
+    className={`min-h-screen p-6 lg:ml-16 ${
+      isDark ? "bg-gray-900 text-gray-100" : "bg-gray-50 text-gray-900"
+    }`}
+  >
+    <Toaster position="top-right" />
 
+    <form
+      onSubmit={handleSubmit}
+      className={`max-w-5xl mx-auto space-y-8 ${
+        isDark ? "text-gray-100" : "text-gray-900"
+      }`}
+    >
       {/* Hidden Inputs */}
       <input
         ref={fileInputRef}
@@ -274,44 +284,63 @@ export default function ClientForm() {
         onChange={handleRCFile}
       />
 
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-semibold">
-          {id ? "Edit Client" : "New Client"}
-        </h1>
+      {/* Header */}
+      <div
+        className={`rounded-3xl p-8 shadow-lg flex items-center justify-between ${
+          isDark ? "bg-gray-800" : "bg-white"
+        }`}
+      >
+        <div>
+          <h1 className="text-3xl font-bold">
+            {id ? "Edit Client" : "New Client"}
+          </h1>
+          <p className={`${isDark ? "text-gray-400" : "text-gray-600"}`}>
+            Manage customer & vehicle details
+          </p>
+        </div>
 
         <button
           type="button"
           onClick={handleScanButtonClick}
           disabled={isProcessingRC}
-          className={`px-4 py-2 rounded-lg flex items-center gap-2 text-white ${isDark ? "bg-indigo-600" : "bg-indigo-500"
-            }`}
+          className={`px-5 py-3 rounded-xl flex items-center gap-2 text-white shadow-md ${
+            isDark
+              ? "bg-indigo-600 hover:bg-indigo-700"
+              : "bg-indigo-500 hover:bg-indigo-600"
+          }`}
         >
           <FiCamera />
-          {isProcessingRC ? "Scanning..." : "Scan RC & Auto-Fill"}
+          {isProcessingRC ? "Scanning..." : "Scan RC"}
         </button>
       </div>
 
-      {/* Personal Info */}
-      <div className={`rounded-2xl p-6 shadow ${isDark ? "bg-gray-800" : "bg-white"}`}>
-        <h2 className={`text-xl font-semibold mb-4 ${isDark ? "text-white" : "text-gray-800"}`}>
-          Personal Information
-        </h2>
-        <PersonalInfoSection form={form} setForm={setForm} />
+      {/* Personal Information */}
+      <div
+        className={`rounded-3xl p-8 shadow-lg ${
+          isDark ? "bg-gray-800" : "bg-white"
+        }`}
+      >
+        <h2 className="text-xl font-semibold mb-4">Personal Information</h2>
+        <PersonalInfoSection form={form} setForm={setForm} isDark={isDark} />
       </div>
 
-      {/* Vehicle Info */}
-      <div className={`rounded-2xl p-6 mt-6 shadow ${isDark ? "bg-gray-800" : "bg-white"}`}>
-        <h2 className={`text-xl font-semibold mb-4 ${isDark ? "text-white" : "text-gray-800"}`}>
-          Vehicle Information
-        </h2>
-        <VehicleInfoSection form={form} setForm={setForm} />
+      {/* Vehicle Information */}
+      <div
+        className={`rounded-3xl p-8 shadow-lg ${
+          isDark ? "bg-gray-800" : "bg-white"
+        }`}
+      >
+        <h2 className="text-xl font-semibold mb-4">Vehicle Information</h2>
+        <VehicleInfoSection form={form} setForm={setForm} isDark={isDark} />
       </div>
 
-      {/* Images */}
-      <div className={`rounded-2xl p-6 mt-6 shadow ${isDark ? "bg-gray-800" : "bg-white"}`}>
-        <h2 className={`text-xl font-semibold mb-4 ${isDark ? "text-white" : "text-gray-800"}`}>
-          Vehicle Images
-        </h2>
+      {/* Vehicle Images */}
+      <div
+        className={`rounded-3xl p-8 shadow-lg ${
+          isDark ? "bg-gray-800" : "bg-white"
+        }`}
+      >
+        <h2 className="text-xl font-semibold mb-4">Vehicle Images</h2>
         <ImageUploader
           form={form}
           setForm={setForm}
@@ -322,24 +351,37 @@ export default function ClientForm() {
       </div>
 
       {/* Buttons */}
-      <div className="flex justify-end gap-4 mt-6">
+      <div className="flex justify-end gap-4">
         <button
           type="button"
           onClick={handleCancel}
-          className="px-6 py-3 rounded-xl bg-gray-300 hover:bg-gray-400"
+          className={`px-6 py-3 rounded-xl font-medium shadow ${
+            isDark
+              ? "bg-gray-700 text-gray-200 hover:bg-gray-600"
+              : "bg-gray-200 text-gray-800 hover:bg-gray-300"
+          }`}
         >
-          <FiX /> Cancel
+          <FiX className="inline-block mr-1" />
+          Cancel
         </button>
 
         <button
           type="submit"
           disabled={loading}
-          className={`px-6 py-3 rounded-xl text-white ${loading ? "bg-gray-400" : "bg-green-600 hover:bg-green-700"
-            }`}
+          className={`px-6 py-3 rounded-xl flex items-center gap-2 text-white font-semibold shadow ${
+            loading
+              ? "bg-gray-400 cursor-not-allowed"
+              : isDark
+              ? "bg-green-600 hover:bg-green-700"
+              : "bg-green-500 hover:bg-green-600"
+          }`}
         >
-          <FiSave /> {loading ? "Saving..." : "Save Client"}
+          <FiSave />
+          {loading ? "Saving..." : "Save Client"}
         </button>
       </div>
     </form>
-  );
+  </div>
+);
+
 }

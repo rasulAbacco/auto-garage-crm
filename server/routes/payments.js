@@ -6,10 +6,12 @@ import prisma from "../models/prismaClient.js";
 const router = express.Router();
 
 // Razorpay Instance
+// Razorpay Instance
 const razorpay = new Razorpay({
-  key_id: process.env.RAZORPAY_KEY,
-  key_secret: process.env.RAZORPAY_SECRET,
+  key_id: process.env.RAZORPAY_KEY_ID,
+  key_secret: process.env.RAZORPAY_KEY_SECRET,
 });
+
 
 /*
 |--------------------------------------------------------------------------
@@ -80,47 +82,150 @@ router.post("/save-form", async (req, res) => {
 |--------------------------------------------------------------------------
 */
 router.post("/verify", async (req, res) => {
-  try {
-    const {
-      razorpay_payment_id,
-      razorpay_order_id,
-      razorpay_signature,
-    } = req.body;
+  console.log("🔍 Verify endpoint called");
+  console.log("📦 Request body:", req.body);
 
-    // Validate payload
+  try {
+    const { razorpay_payment_id, razorpay_order_id, razorpay_signature } = req.body;
+
+    // ⭐ Validation 1: Check if all required fields are present
     if (!razorpay_payment_id || !razorpay_order_id || !razorpay_signature) {
-      return res.status(400).json({ error: "Invalid payload" });
+      console.error("❌ Missing required fields");
+      return res.status(400).json({ 
+        success: false,
+        error: "Invalid payload - missing required fields" 
+      });
     }
 
-    // Verify signature
-    const secret = process.env.RAZORPAY_SECRET;
-    const body = razorpay_order_id + "|" + razorpay_payment_id;
+    console.log("✅ All required fields present");
+    console.log("Payment ID:", razorpay_payment_id);
+    console.log("Order ID:", razorpay_order_id);
 
+    // ⭐ Validation 2: Verify signature
+    const secret = process.env.RAZORPAY_KEY_SECRET;
+    
+    if (!secret) {
+      console.error("❌ RAZORPAY_SECRET not configured");
+      return res.status(500).json({ 
+        success: false,
+        error: "Server configuration error" 
+      });
+    }
+
+    const body = razorpay_order_id + "|" + razorpay_payment_id;
     const expectedSignature = crypto
       .createHmac("sha256", secret)
       .update(body)
       .digest("hex");
 
+    console.log("🔐 Expected signature:", expectedSignature);
+    console.log("🔐 Received signature:", razorpay_signature);
+
     if (expectedSignature !== razorpay_signature) {
-      return res.status(400).json({ error: "Invalid signature" });
+      console.error("❌ Signature mismatch!");
+      return res.status(400).json({ 
+        success: false,
+        error: "Invalid signature - payment verification failed" 
+      });
     }
 
-    // Update existing form entry using orderId
-    await prisma.payment.updateMany({
-      where: { orderId: razorpay_order_id },
+    console.log("✅ Signature verified successfully");
+
+    // ⭐ Find payment record using findFirst (since orderId is not unique in schema)
+    const payment = await prisma.payment.findFirst({
+      where: { orderId: razorpay_order_id }
+    });
+
+    if (!payment) {
+      console.error("❌ Payment record not found for orderId:", razorpay_order_id);
+      return res.status(404).json({ 
+        success: false,
+        error: "Payment record not found" 
+      });
+    }
+
+    console.log("✅ Payment record found:", payment.id);
+
+    // ⭐ Check if already verified
+    if (payment.status === "SUCCESS") {
+      console.log("⚠️ Payment already verified");
+      return res.json({ 
+        success: true, 
+        payment,
+        message: "Payment already verified" 
+      });
+    }
+
+    // ⭐ Calculate expiry date
+    const currentDate = new Date();
+    let expiryDate = new Date(currentDate);
+    
+    if (payment.billingPeriod === "monthly") {
+      expiryDate.setMonth(expiryDate.getMonth() + 1);
+      console.log("📅 Expiry date set to 1 month from now:", expiryDate);
+    } else if (payment.billingPeriod === "yearly") {
+      expiryDate.setFullYear(expiryDate.getFullYear() + 1);
+      console.log("📅 Expiry date set to 1 year from now:", expiryDate);
+    } else {
+      console.warn("⚠️ Unknown billing period:", payment.billingPeriod);
+    }
+
+    // ⭐ Update payment record using the id field
+    console.log("💾 Updating payment record...");
+    const updated = await prisma.payment.update({
+      where: { id: payment.id },  // Use id instead of orderId
       data: {
         paymentId: razorpay_payment_id,
         signature: razorpay_signature,
-        status: "SUCCESS"
+        status: "SUCCESS",
+        paidAt: currentDate,
+        expiryDate: expiryDate
       }
     });
 
-    // Redirect user to frontend after success
-    return res.redirect(302, "http://localhost:5173/register");
+    console.log("✅ Payment updated successfully:", {
+      id: updated.id,
+      paymentId: updated.paymentId,
+      status: updated.status,
+      paidAt: updated.paidAt,
+      expiryDate: updated.expiryDate
+    });
+
+    return res.json({ 
+      success: true, 
+      payment: updated,
+      message: "Payment verified successfully"
+    });
 
   } catch (err) {
-    console.error("Verification error:", err);
-    return res.status(500).json({ error: "Verification failed" });
+    console.error("❌ Verification error:", err);
+    console.error("Error stack:", err.stack);
+    
+    return res.status(500).json({ 
+      success: false,
+      error: "Verification failed",
+      details: process.env.NODE_ENV === 'development' ? err.message : undefined
+    });
+  }
+});
+
+// Fetch logged-in user's active plan
+router.get("/user-plan/:email", async (req, res) => {
+  try {
+    const { email } = req.params;
+
+    const payment = await prisma.payment.findFirst({
+      where: { email, status: "SUCCESS" },
+      orderBy: { paidAt: "desc" },
+    });
+
+    if (!payment) {
+      return res.json({ success: false, message: "No active plan found" });
+    }
+
+    return res.json({ success: true, payment });
+  } catch (err) {
+    res.status(500).json({ error: "Error fetching plan" });
   }
 });
 

@@ -18,8 +18,74 @@ import {
 } from 'react-icons/fa';
 
 const PaymentModal = ({
-    show,
+  show,
+  plan,
+  billingPeriod,
+  isDark,
+  onClose,
+  onComplete,
+}) => {
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [showSuccess, setShowSuccess] = useState(false);
+  const [paymentResponse, setPaymentResponse] = useState(null);
+  const [formData, setFormData] = useState({
+    name: "",
+    companyName: "",
+    email: "",
+    phone: "",
+  });
+  const [errors, setErrors] = useState({});
+  const [razorpayLoaded, setRazorpayLoaded] = useState(false);
+  const navigate = useNavigate();
+
+  // Load Razorpay script when component mounts
+  useEffect(() => {
+    const script = document.createElement("script");
+    script.src = "https://checkout.razorpay.com/v1/checkout.js";
+    script.async = true;
+    script.onload = () => setRazorpayLoaded(true);
+    document.body.appendChild(script);
+  }, []);
+
+  // Handle navigation when payment is successful
+  useEffect(() => {
+    if (showSuccess && paymentResponse) {
+      const timer = setTimeout(() => {
+        // First call onComplete to let parent know payment is complete
+        onComplete(plan, formData);
+
+        // Create a clean, serializable version of the plan object
+        const cleanPlan = {
+          name: plan.name,
+          numericPrice: plan.numericPrice,
+        };
+
+        // Then navigate to register page with only serializable data
+        navigate("/car-register", {
+          state: {
+            paymentData: {
+              plan: cleanPlan,
+              billingPeriod,
+              finalPrice:
+                billingPeriod === "yearly"
+                  ? Math.round(plan.numericPrice * 12 * 0.9)
+                  : plan.numericPrice,
+              formData,
+              paymentId: paymentResponse.razorpay_payment_id,
+            },
+          },
+        });
+
+        setIsProcessing(false);
+      }, 2000);
+
+      return () => clearTimeout(timer);
+    }
+  }, [
+    showSuccess,
+    paymentResponse,
     plan,
+    formData,
     billingPeriod,
     isDark,
     onClose,
@@ -476,6 +542,13 @@ const PaymentModal = ({
                         </div>
                     </div>
                 )}
+              </button>
+            </div>
+
+            {/* Security Badge */}
+            <div className="flex items-center justify-center gap-2 text-xs text-gray-500 pt-2">
+              <Lock className="w-3 h-3" />
+              <span>Secured by 256-bit encryption</span>
             </div>
 
             <style jsx>{`

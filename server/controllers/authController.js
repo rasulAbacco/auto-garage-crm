@@ -10,57 +10,64 @@ import { generateToken } from "../utils/generateToken.js";
  * @access Public 
  */
 export const registerUser = async (req, res) => {
-    try {
-        const { username, email, password } = req.body;
+  try {
+    const { username, email, password, crmType } = req.body;
 
-        // ✅ Basic validation
-        if (!username || !email || !password) {
-            return res.status(400).json({ message: "All fields are required" });
-        }
-
-        // ✅ Check if username or email already exists
-        const existingUser = await prisma.user.findFirst({
-            where: { OR: [{ username }, { email }] },
-        });
-
-        if (existingUser) {
-            return res
-                .status(400)
-                .json({ message: "Username or email already exists" });
-        }
-
-        // ✅ Hash password before saving
-        const hashedPassword = await bcrypt.hash(password, 10);
-
-        // ✅ Create user in DB
-        const user = await prisma.user.create({
-            data: {
-                username,
-                email,
-                password: hashedPassword,
-                role: "user", // default role
-            },
-        });
-
-        // ✅ Generate JWT
-        const token = generateToken(user);
-
-        return res.status(201).json({
-            message: "User registered successfully",
-            token,
-            user: {
-                id: user.id,
-                username: user.username,
-                email: user.email,
-                role: user.role,
-                createdAt: user.createdAt,
-            },
-        });
-    } catch (error) {
-        console.error("❌ Registration Error:", error);
-        res.status(500).json({ message: "Internal server error during registration" });
+    // Validate fields
+    if (!username || !email || !password || !crmType) {
+      return res.status(400).json({ message: "All fields are required" });
     }
+
+    // Check duplicates
+    const existingUser = await prisma.user.findFirst({
+      where: { OR: [{ username }, { email }] },
+    });
+
+    if (existingUser) {
+      return res
+        .status(400)
+        .json({ message: "Username or email already exists" });
+    }
+
+    // Hash password
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    // Create user with CRM access
+    const user = await prisma.user.create({
+      data: {
+        username,
+        email,
+        password: hashedPassword,
+        role: "user",
+        profileImage: null,
+        allowedCrms: [crmType.toUpperCase()], // 👈 CRM assignment
+      },
+    });
+
+    // Generate token
+    const token = generateToken(user);
+
+    return res.status(201).json({
+      message: "User registered successfully",
+      token,
+      user: {
+        id: user.id,
+        username: user.username,
+        email: user.email,
+        role: user.role,
+        profileImage: user.profileImage,
+        allowedCrms: user.allowedCrms, // return CRM permissions
+        createdAt: user.createdAt,
+      },
+    });
+  } catch (error) {
+    console.error("❌ Registration Error:", error);
+    res.status(500).json({
+      message: "Internal server error during registration",
+    });
+  }
 };
+
 
 /**
  * @desc Login a user
@@ -68,46 +75,66 @@ export const registerUser = async (req, res) => {
  * @access Public
  */
 export const loginUser = async (req, res) => {
-    try {
-        const { username, password } = req.body;
+  try {
+    const { identifier, password, crmType } = req.body;
 
-        // ✅ Validate inputs
-        if (!username || !password) {
-            return res
-                .status(400)
-                .json({ message: "Username and password are required" });
-        }
-
-        // ✅ Find user
-        const user = await prisma.user.findUnique({ where: { username } });
-        if (!user) {
-            return res.status(400).json({ message: "Invalid username or password" });
-        }
-
-        // ✅ Compare password
-        const isMatch = await bcrypt.compare(password, user.password);
-        if (!isMatch) {
-            return res.status(400).json({ message: "Invalid username or password" });
-        }
-
-        // ✅ Generate JWT
-        const token = generateToken(user);
-
-        return res.status(200).json({
-            message: "Login successful",
-            token,
-            user: {
-                id: user.id,
-                username: user.username,
-                email: user.email,
-                role: user.role,
-            },
-        });
-    } catch (error) {
-        console.error("❌ Login Error:", error);
-        res.status(500).json({ message: "Internal server error during login" });
+    if (!identifier || !password || !crmType) {
+      return res.status(400).json({
+        message: "Email/Username, password and CRM type are required",
+      });
     }
+
+    // Detect if identifier is email or username
+    const isEmail = identifier.includes("@");
+
+    const user = await prisma.user.findFirst({
+      where: isEmail
+        ? { email: identifier }
+        : { username: identifier },
+    });
+
+    if (!user) {
+      return res.status(400).json({ message: "Invalid credentials" });
+    }
+
+    // Check password
+    const isMatch = await bcrypt.compare(password, user.password);
+    if (!isMatch) {
+      return res.status(400).json({ message: "Invalid credentials" });
+    }
+
+    // 🚨 Check CRM access permission
+    if (!user.allowedCrms.includes(crmType.toUpperCase())) {
+      return res.status(403).json({
+        message: `You do not have access to the ${crmType} CRM`,
+      });
+    }
+
+    const token = generateToken(user);
+
+    return res.status(200).json({
+      message: "Login successful",
+      token,
+      user: {
+        id: user.id,
+        username: user.username,
+        email: user.email,
+        role: user.role,
+        profileImage: user.profileImage || null,
+        allowedCrms: user.allowedCrms,
+        crmType,
+      },
+    });
+  } catch (error) {
+    console.error("❌ Login Error:", error);
+    return res.status(500).json({
+      message: "Internal server error during login",
+    });
+  }
 };
+
+
+
 
 /**
  * @desc Get current user's profile
@@ -124,6 +151,7 @@ export const getProfile = async (req, res) => {
                 username: true,
                 email: true,
                 role: true,
+                profileImage: true,
                 createdAt: true,
                 updatedAt: true,
             },

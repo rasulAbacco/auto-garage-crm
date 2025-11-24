@@ -7,19 +7,26 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model User {
-  id        Int      @id @default(autoincrement())
-  email     String   @unique
-  username  String?  @unique
-  password  String
-  role      String   @default("user")
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+enum CrmType {
+  CAR
+  BIKE
+  WASH
+}
 
-  clients   Client[]
-  invoices  Invoice[]
-  reminders Reminder[]
-  ocrs      OcrRecord[] // <- linked OCR records
+model User {
+  id           Int         @id @default(autoincrement())
+  email        String      @unique
+  username     String?     @unique
+  password     String
+  role         String      @default("user")
+  allowedCrms  CrmType[]   @default([])
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+  profileImage String?
+  clients      Client[]
+  invoices     Invoice[]
+  reminders    Reminder[]
+  ocrs         OcrRecord[] // <- linked OCR records
 }
 
 model Client {
@@ -202,11 +209,12 @@ model Payment {
 
   // Razorpay details (saved after payment)
   paymentId String? @unique
-  orderId   String?
+  orderId   String  @unique // ⭐ Remove the ? to make it required
   signature String?
 
-  status String @default("PENDING")
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  status     String    @default("PENDING")
+  paidAt     DateTime?
+  expiryDate DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
 }
