@@ -101,7 +101,7 @@ function App() {
           <Route path="/ocr-Scanner" element={<DetailsPage />} />
           <Route path="/plan" element={<Plans />} />
 
-        </Route>
+        
 
 
           {/* Bike Garage CRM Routes */}
