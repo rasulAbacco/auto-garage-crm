@@ -1,0 +1,212 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        Int      @id @default(autoincrement())
+  email     String   @unique
+  username  String?  @unique
+  password  String
+  role      String   @default("user")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  clients   Client[]
+  invoices  Invoice[]
+  reminders Reminder[]
+  ocrs      OcrRecord[] // <- linked OCR records
+}
+
+model Client {
+  id           Int      @id @default(autoincrement())
+  fullName     String
+  phone        String
+  email        String?
+  address      String?
+  vehicleMake  String
+  vehicleModel String
+  vehicleYear  Int
+  regNumber    String
+  vin          String?
+  carImage     String? // main image URL/base64 (legacy)
+  adImage      String? // image used by 3D viewer / front-banner
+  staffPerson  String? // legacy
+  receiverName String? // NEW: person receiving vehicle
+  damageImages Json? // NEW: stores array of image URLs or base64
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  userId       Int?
+
+  user      User?       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  services  Service[]
+  invoices  Invoice[]
+  reminders Reminder[] // FIXED: field name should be plural and distinct
+  ocrs      OcrRecord[] // <- linked OCR records
+
+  @@unique([userId, regNumber])
+  @@index([userId])
+  @@index([regNumber])
+}
+
+model Service {
+  id           Int      @id @default(autoincrement())
+  date         DateTime
+  notes        String?
+  partsCost    Float?
+  partsGst     Float?
+  laborCost    Float?
+  laborGst     Float?
+  cost         Float?
+  status       String?
+  clientId     Int
+  categoryId   Int?
+  subServiceId Int?
+  invoiceId    Int?
+
+  // Relation: one Service -> many ServiceMedia
+  mediaFiles ServiceMedia[]
+
+  client     Client           @relation(fields: [clientId], references: [id])
+  invoice    Invoice?         @relation(fields: [invoiceId], references: [id])
+  category   ServiceCategory? @relation(fields: [categoryId], references: [id])
+  subService SubService?      @relation(fields: [subServiceId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model ServiceMedia {
+  id       Int    @id @default(autoincrement())
+  fileName String
+  mimeType String
+  data     Bytes
+
+  serviceId Int
+  service   Service @relation(fields: [serviceId], references: [id])
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime? @updatedAt
+}
+
+model Invoice {
+  id            Int    @id @default(autoincrement())
+  invoiceNumber String @unique
+
+  clientId Int
+  userId   Int?
+
+  totalAmount Float
+
+  partsCost Float?
+  partsGst  Float?
+  laborCost Float?
+  laborGst  Float?
+
+  tax        Float @default(0)
+  discount   Float @default(0)
+  grandTotal Float
+
+  paymentMode String?
+  status      String    @default("Pending")
+  paidAt      DateTime?
+  dueDate     DateTime?
+
+  notes String?
+
+  // ✅ Add missing service details
+  serviceCategory    String?
+  serviceSubCategory String?
+  serviceNotes       String?
+  mechanic           String?
+  vehicle            String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  client   Client    @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  user     User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+  services Service[]
+
+  @@index([status])
+  @@index([paymentMode])
+}
+
+model Reminder {
+  id        Int      @id @default(autoincrement())
+  clientId  Int
+  userId    Int?
+  message   String
+  remindAt  DateTime
+  sent      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  user   User?  @relation(fields: [userId], references: [id], onDelete: SetNull)
+}
+
+/**
+ * ServiceCategory and SubService unchanged
+ */
+model ServiceCategory {
+  id          Int          @id @default(autoincrement())
+  name        String       @unique
+  subServices SubService[]
+  services    Service[]
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+}
+
+model SubService {
+  id         Int              @id @default(autoincrement())
+  name       String
+  categoryId Int?
+  category   ServiceCategory? @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  services   Service[]
+  createdAt  DateTime         @default(now())
+  updatedAt  DateTime         @updatedAt
+}
+
+model OcrRecord {
+  id         Int      @id @default(autoincrement())
+  rawText    String
+  parsedData Json
+  confidence Float?
+  imageUrl   String?
+  createdAt  DateTime @default(now())
+  clientId   Int
+  userId     Int
+
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([clientId])
+  @@index([userId])
+}
+
+model Payment {
+  id String @id @default(cuid())
+
+  // Customer details (saved before payment)
+  customerName  String?
+  companyName   String?
+  email         String?
+  phone         String?
+  plan          String?
+  billingPeriod String?
+  amount        Float?
+
+  // Razorpay details (saved after payment)
+  paymentId String? @unique
+  orderId   String?
+  signature String?
+
+  status String @default("PENDING")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}

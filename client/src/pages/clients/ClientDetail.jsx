@@ -1,0 +1,848 @@
+import React, { useState, useEffect } from "react";
+import { useParams, Link, useNavigate } from "react-router-dom";
+import {
+  FiEdit,
+  FiPhone,
+  FiMail,
+  FiMapPin,
+  FiCreditCard,
+  FiHash,
+  FiCalendar,
+  FiTool,
+  FiDollarSign,
+  FiPlus,
+  FiArrowLeft,
+  FiX,
+  FiTrash2,
+  FiFileText,
+  FiCamera,
+  FiEye,
+} from "react-icons/fi";
+import { useTheme } from "../../contexts/ThemeContext";
+import OCRUploader from "../details/components/OCRUploader";
+import OCRResults from "../details/components/OCRResults";
+import { processImage } from "../details/utils/OCRProcessor.js";
+import { Toaster, toast } from "react-hot-toast";
+
+const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:5000";
+
+export default function ClientDetail() {
+  const { id } = useParams();
+  const navigate = useNavigate();
+  const { isDark } = useTheme();
+  const [client, setClient] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [activeTab, setActiveTab] = useState("overview");
+  const [selectedService, setSelectedService] = useState(null);
+  const [selectedInvoice, setSelectedInvoice] = useState(null);
+  const [serviceForm, setServiceForm] = useState({});
+  const [isSavingService, setIsSavingService] = useState(false);
+
+  // OCR states
+  const [ocrRecords, setOcrRecords] = useState([]);
+  const [isLoadingOCR, setIsLoadingOCR] = useState(false);
+  const [ocrImage, setOcrImage] = useState(null);
+  const [ocrParsed, setOcrParsed] = useState(null);
+  const [ocrRaw, setOcrRaw] = useState("");
+  const [selectedOCR, setSelectedOCR] = useState(null);
+
+  // fetch client by id
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        setLoading(true);
+        const token = localStorage.getItem("token");
+        if (!token) {
+          throw new Error("Authentication token not found. Please log in again.");
+        }
+
+        const res = await fetch(`${API_BASE}/api/clients/${id}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+
+        if (!res.ok) {
+          if (res.status === 401) {
+            localStorage.removeItem("token");
+            navigate("/login");
+            return;
+          }
+          throw new Error("Failed to fetch client data");
+        }
+
+        const data = await res.json();
+        setClient(data);
+      } catch (err) {
+        setError(err.message || "Unknown error");
+        if (err.message.includes("401") || err.message.includes("Unauthorized")) {
+          navigate("/login");
+        }
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchData();
+  }, [id, navigate]);
+
+  // fetch OCR records for this client
+  const fetchOCR = async () => {
+    try {
+      setIsLoadingOCR(true);
+      const token = localStorage.getItem("token");
+      if (!token) {
+        throw new Error("Authentication token not found. Please log in again.");
+      }
+
+      const res = await fetch(`${API_BASE}/api/ocr/history?clientId=${id}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      if (!res.ok) {
+        if (res.status === 401) {
+          localStorage.removeItem("token");
+          navigate("/login");
+          return;
+        }
+        throw new Error("Failed to fetch OCR records");
+      }
+
+      const data = await res.json();
+      setOcrRecords(data || []);
+    } catch (err) {
+      console.error("OCR fetch failed:", err);
+      if (err.message.includes("401") || err.message.includes("Unauthorized")) {
+        navigate("/login");
+      }
+    } finally {
+      setIsLoadingOCR(false);
+    }
+  };
+
+  useEffect(() => {
+    if (id) fetchOCR();
+  }, [id]);
+
+  // Delete OCR record
+  const handleDeleteOCR = async (recordId) => {
+    try {
+      const token = localStorage.getItem("token");
+      if (!token) {
+        throw new Error("Authentication token not found. Please log in again.");
+      }
+
+      const res = await fetch(`${API_BASE}/api/ocr/${recordId}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      if (!res.ok) {
+        if (res.status === 401) {
+          localStorage.removeItem("token");
+          navigate("/login");
+          return;
+        }
+        throw new Error("Failed to delete OCR record");
+      }
+
+      setOcrRecords((prev) => prev.filter((r) => r.id !== recordId));
+      toast.success("OCR record deleted successfully");
+    } catch (err) {
+      toast.error(err.message || "Delete failed");
+      if (err.message.includes("401") || err.message.includes("Unauthorized")) {
+        navigate("/login");
+      }
+    }
+  };
+
+  // Start OCR (camera/upload) directly from client detail
+  const handleStartOCR = async (image) => {
+    try {
+      setOcrImage(image);
+      const result = await processImage(image, (p) =>
+        console.log("OCR progress:", Math.round(p * 100), "%")
+      );
+      setOcrParsed(result.parsed);
+      setOcrRaw(result.text);
+      setActiveTab("ocr");
+    } catch (err) {
+      toast.error("OCR failed: " + err.message);
+    }
+  };
+
+  // Save OCR record to backend
+  const handleSaveOCR = async (data) => {
+    try {
+      const token = localStorage.getItem("token");
+      if (!token) {
+        throw new Error("Authentication token not found. Please log in again.");
+      }
+
+      const body = {
+        clientId: parseInt(id, 10),
+        rawText: ocrRaw,
+        parsedData: JSON.stringify(data),
+        confidence: data.ocrConfidence || 85,
+      };
+
+      const res = await fetch(`${API_BASE}/api/ocr/upload`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(body),
+      });
+
+      if (!res.ok) {
+        if (res.status === 401) {
+          localStorage.removeItem("token");
+          navigate("/login");
+          return;
+        }
+        const txt = await res.text();
+        throw new Error(txt || "Failed to save OCR record");
+      }
+
+      const responseData = await res.json();
+      setOcrRecords((prev) => [...prev, responseData.record]);
+      setOcrParsed(null);
+      setOcrRaw("");
+      setOcrImage(null);
+      toast.success("OCR data saved successfully!");
+    } catch (err) {
+      toast.error(err.message || "Failed to save OCR data");
+      if (err.message.includes("401") || err.message.includes("Unauthorized")) {
+        navigate("/login");
+      }
+    }
+  };
+
+  const saveServiceChanges = async () => {
+    try {
+      setIsSavingService(true);
+      const token = localStorage.getItem("token");
+      if (!token) {
+        throw new Error("Authentication token not found. Please log in again.");
+      }
+
+      const res = await fetch(`${API_BASE}/api/services/${serviceForm.id}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(serviceForm),
+      });
+
+      if (!res.ok) {
+        if (res.status === 401) {
+          localStorage.removeItem("token");
+          navigate("/login");
+          return;
+        }
+        throw new Error("Failed to update service");
+      }
+
+      const data = await res.json();
+      setClient((prev) => ({
+        ...prev,
+        services: prev.services.map((s) =>
+          s.id === data.service.id ? data.service : s
+        ),
+      }));
+      setSelectedService(null);
+      toast.success("Service updated successfully");
+    } catch (err) {
+      toast.error(err.message);
+      if (err.message.includes("401") || err.message.includes("Unauthorized")) {
+        navigate("/login");
+      }
+    } finally {
+      setIsSavingService(false);
+    }
+  };
+
+  const handleScanNavigate = () => {
+    const q = new URLSearchParams({
+      clientId: id,
+      clientName: client?.fullName || "",
+    }).toString();
+    navigate(`/details?${q}`);
+  };
+
+  if (loading)
+    return (
+      <div className={`min-h-screen flex items-center justify-center ${isDark ? 'bg-gray-900' : 'bg-gray-50'}`}>
+        <div className="relative">
+          <div className="w-16 h-16 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin" />
+          <div className={`mt-4 text-center font-medium ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>
+            Loading client...
+          </div>
+        </div>
+      </div>
+    );
+
+  if (error)
+    return (
+      <div className={`min-h-screen flex items-center justify-center p-4 ${isDark ? 'bg-gray-900' : 'bg-gray-50'}`}>
+        <div className={`max-w-md w-full p-6 rounded-2xl ${isDark ? 'bg-red-900/20 border-red-800' : 'bg-red-50 border-red-200'} border`}>
+          <div className="text-center">
+            <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center">
+              <FiX className="w-8 h-8 text-red-600" />
+            </div>
+            <h3 className={`text-lg font-semibold mb-2 ${isDark ? 'text-red-400' : 'text-red-700'}`}>
+              Error Loading Client
+            </h3>
+            <p className={isDark ? 'text-gray-300' : 'text-gray-600'}>{error}</p>
+            <button
+              onClick={() => navigate("/login")}
+              className="mt-4 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+            >
+              Go to Login
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+
+  if (!client) return null;
+
+  // derived summary
+  const services = client.services || [];
+  const invoices = client.invoices || [];
+  const lastService = services[0]?.date ? new Date(services[0].date).toLocaleDateString() : "N/A";
+  const totalServices = services.length;
+  const totalBilled = invoices.reduce((s, i) => s + (i.grandTotal || i.totalAmount || 0), 0);
+
+  return (
+    <div className={`min-h-screen ${isDark ? 'bg-gray-900' : 'bg-gray-50'} lg:ml-16 transition-colors duration-300`}>
+      <div className="max-w-7xl mx-auto p-4 sm:p-6 lg:p-8 space-y-6">
+        {/* Toast Notifications */}
+        <Toaster
+          position="top-right"
+          toastOptions={{
+            duration: 4000,
+            style: {
+              background: isDark ? '#374151' : '#ffffff',
+              color: isDark ? '#f3f4f6' : '#1f2937',
+              border: isDark ? '1px solid #4b5563' : '1px solid #e5e7eb',
+              borderRadius: '0.75rem',
+              boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)',
+            },
+            success: {
+              iconTheme: {
+                primary: '#10b981',
+                secondary: isDark ? '#111827' : '#f9fafb',
+              },
+            },
+            error: {
+              iconTheme: {
+                primary: '#ef4444',
+                secondary: isDark ? '#111827' : '#f9fafb',
+              },
+            },
+          }}
+        />
+
+        {/* Back Button */}
+        <Link
+          to="/clients"
+          className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl transition-all duration-300 ${isDark
+            ? "text-gray-300 hover:text-white hover:bg-gray-800"
+            : "text-gray-700 hover:text-gray-900 hover:bg-gray-100"
+            }`}
+        >
+          <FiArrowLeft className="w-4 h-4 transition-transform duration-300 group-hover:-translate-x-1" />
+          <span className="font-medium">Back to Clients</span>
+        </Link>
+
+        {/* Header Card */}
+        <div className={`rounded-2xl overflow-hidden shadow-xl ${isDark ? 'bg-gray-800' : 'bg-white'} transition-all duration-300 hover:shadow-2xl`}>
+          <div className={`p-6 sm:p-8 ${isDark ? 'bg-gradient-to-r from-blue-900/50 to-purple-900/50' : 'bg-gradient-to-r from-blue-500 to-purple-600'}`}>
+            <div className="flex flex-col lg:flex-row gap-6 items-start">
+              {/* Client Info */}
+              <div className="flex items-center gap-4 flex-1 min-w-0">
+                <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl bg-white/10 backdrop-blur-sm flex items-center justify-center text-white font-bold text-2xl sm:text-3xl shadow-lg flex-shrink-0 transition-transform duration-300 hover:scale-105">
+                  {client.fullName?.charAt(0)?.toUpperCase() || "C"}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-white truncate">
+                    {client.fullName}
+                  </h1>
+                  <p className="text-green-300 flex items-center gap-2 text-sm font-medium mt-1">
+                    <span className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></span>
+                    Active Client
+                  </p>
+                </div>
+              </div>
+
+              {/* Edit & Scan Buttons */}
+              <div className="flex gap-3 items-center">
+                <Link
+                  to={`/clients/${id}/edit`}
+                  state={{ clientData: client }} // Pass client data via state
+                  className="w-full sm:w-auto flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-white/10 hover:bg-white/20 backdrop-blur-sm text-white border border-white/20 transition-all duration-300 shadow-lg hover:shadow-xl hover:scale-105"
+                >
+                  <FiEdit className="w-5 h-5" />
+                  <span className="font-medium">Edit</span>
+                </Link>
+
+                <button
+                  onClick={handleScanNavigate}
+                  className="w-full sm:w-auto flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-gradient-to-r from-blue-600 to-purple-600 text-white hover:shadow-xl transition-all duration-300 hover:scale-105"
+                >
+                  <FiCamera className="w-5 h-5" />
+                  <span className="font-medium">Scan RC Document</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Vehicle Info */}
+          <div className={`p-6 sm:p-8 ${isDark ? 'bg-gray-800' : 'bg-gray-50'}`}>
+            <div className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium mb-6 ${isDark ? 'bg-gray-700 text-gray-200' : 'bg-white text-gray-700'} shadow-sm transition-all duration-300 hover:shadow-md`}>
+              <span>{client.vehicleMake} {client.vehicleModel}</span>
+              <span className="text-gray-400">•</span>
+              <span>{client.vehicleYear}</span>
+              <span className="text-gray-400">•</span>
+              <span className="font-mono">{client.regNumber}</span>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* Car Image */}
+              <div className="w-full overflow-hidden rounded-xl transition-all duration-300 hover:shadow-lg">
+                <img
+                  src={
+                    client.carImage ||
+                    `https://via.placeholder.com/600x400?text=${encodeURIComponent(
+                      client.vehicleMake
+                    )}+${encodeURIComponent(client.vehicleModel)}`
+                  }
+                  alt="vehicle"
+                  className="w-full h-64 object-contain rounded-xl transition-transform duration-500 hover:scale-105"
+                />
+              </div>
+
+              {/* Damage Images */}
+              {Array.isArray(client.damageImages) && client.damageImages.length > 0 && (
+                <div>
+                  <h3 className={`text-lg font-semibold mb-3 ${isDark ? 'text-gray-200' : 'text-gray-800'}`}>
+                    Additional Images
+                  </h3>
+                  <div className="grid grid-cols-2 gap-3">
+                    {client.damageImages.slice(0, 4).map((img, idx) => (
+                      <div key={idx} className="aspect-video rounded-xl overflow-hidden shadow transition-all duration-300 hover:shadow-lg hover:scale-105">
+                        <img
+                          src={img}
+                          alt={`damage-${idx}`}
+                          className="w-full h-full object-cover transition-transform duration-500 hover:scale-110"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Contact Information */}
+        <div className={`rounded-2xl p-6 sm:p-8 shadow-xl ${isDark ? 'bg-gray-800' : 'bg-white'} transition-all duration-300 hover:shadow-2xl`}>
+          <h2 className={`text-xl font-bold mb-6 ${isDark ? 'text-white' : 'text-gray-900'}`}>
+            Contact Information
+          </h2>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            <ContactCard icon={<FiPhone />} label="Phone" value={client.phone} isDark={isDark} />
+            <ContactCard icon={<FiMail />} label="Email" value={client.email} isDark={isDark} />
+            <ContactCard icon={<FiMapPin />} label="Address" value={client.address} isDark={isDark} />
+            <ContactCard icon={<FiCreditCard />} label="Registration No." value={client.regNumber} isDark={isDark} />
+            <ContactCard icon={<FiHash />} label="VIN / Chassis" value={client.vin} isDark={isDark} />
+            <ContactCard icon={<FiCalendar />} label="Last Service" value={lastService} isDark={isDark} />
+          </div>
+        </div>
+
+        {/* Tabs Section */}
+        <div className={`rounded-2xl shadow-xl overflow-hidden ${isDark ? 'bg-gray-800' : 'bg-white'} transition-all duration-300 hover:shadow-2xl`}>
+          {/* Tab Header */}
+          <div className={`p-4 sm:p-6 border-b ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+              {/* Tab Buttons */}
+              <div className="flex gap-2 overflow-x-auto pb-2 sm:pb-0 scrollbar-hide">
+                {["overview", "services", "invoices", "ocr"].map((tab) => (
+                  <button
+                    key={tab}
+                    onClick={() => setActiveTab(tab)}
+                    className={`px-4 py-2 rounded-xl font-medium transition-all duration-300 whitespace-nowrap ${activeTab === tab
+                      ? "bg-gradient-to-r from-blue-600 to-purple-600 text-white shadow-md transform scale-105"
+                      : isDark
+                        ? "text-gray-300 hover:bg-gray-700"
+                        : "text-gray-700 hover:bg-gray-100"
+                      }`}
+                  >
+                    {tab === "ocr" ? "OCR Records" : tab.charAt(0).toUpperCase() + tab.slice(1)}
+                  </button>
+                ))}
+              </div>
+
+              {/* Action Buttons (contextual) */}
+              {activeTab === "services" && (
+                <Link
+                  to="/services/new"
+                  state={{ customerId: client.id }}
+                  className="flex items-center justify-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-blue-600 to-purple-600 text-white hover:shadow-lg transition-all duration-300 hover:scale-105 whitespace-nowrap"
+                >
+                  <FiPlus className="w-4 h-4" />
+                  <span className="font-medium">Add Service</span>
+                </Link>
+              )}
+              {activeTab === "invoices" && (
+                <Link
+                  to="/invoices/new"
+                  state={{ customerId: client.id }}
+                  className="flex items-center justify-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-green-600 to-teal-500 text-white hover:shadow-lg transition-all duration-300 hover:scale-105 whitespace-nowrap"
+                >
+                  <FiPlus className="w-4 h-4" />
+                  <span className="font-medium">Create Invoice</span>
+                </Link>
+              )}
+            </div>
+          </div>
+
+          {/* Tab Content */}
+          <div className="p-6">
+            {/* Overview Tab */}
+            {activeTab === "overview" && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                <StatCard title="Last Service" value={lastService} icon={<FiCalendar />} isDark={isDark} />
+                <StatCard title="Total Services" value={totalServices} icon={<FiTool />} isDark={isDark} />
+                <StatCard title="Total Billed" value={`₹${totalBilled.toFixed(2)}`} icon={<FiDollarSign />} isDark={isDark} />
+              </div>
+            )}
+
+            {/* Services Tab */}
+            {activeTab === "services" && (
+              <div className="space-y-4">
+                {services.length ? (
+                  services.map((s) => (
+                    <div
+                      key={s.id}
+                      onClick={() => {
+                        setSelectedService(s);
+                        setServiceForm(s);
+                      }}
+                      className={`p-4 sm:p-5 rounded-xl cursor-pointer transition-all duration-300 hover:shadow-md transform hover:-translate-y-1 ${isDark ? "bg-gray-700 hover:bg-gray-650" : "bg-gray-50 hover:bg-gray-100"
+                        }`}
+                    >
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                        <div className="flex-1 min-w-0">
+                          <h3 className={`font-bold text-lg truncate ${isDark ? "text-white" : "text-gray-800"}`}>
+                            {s.type || "Service"}
+                          </h3>
+                          <p className={`text-sm mt-1 ${isDark ? "text-gray-300" : "text-gray-600"}`}>
+                            {new Date(s.date).toLocaleDateString()} • ₹{(s.cost || 0).toFixed(2)}
+                          </p>
+                          {s.notes && (
+                            <p className={`text-xs mt-2 ${isDark ? "text-gray-400" : "text-gray-500"}`}>
+                              {s.notes}
+                            </p>
+                          )}
+                        </div>
+                        <span
+                          className={`px-3 py-1 text-xs font-medium rounded-full whitespace-nowrap ${s.status === "Paid"
+                            ? "bg-green-500/20 text-green-400"
+                            : s.status === "In Progress"
+                              ? "bg-yellow-500/20 text-yellow-400"
+                              : "bg-red-500/20 text-red-400"
+                            }`}
+                        >
+                          {s.status}
+                        </span>
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <div className="text-center py-12">
+                    <FiTool className={`w-12 h-12 mx-auto mb-3 ${isDark ? 'text-gray-600' : 'text-gray-400'}`} />
+                    <p className={isDark ? 'text-gray-400' : 'text-gray-500'}>No service records yet.</p>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Invoices Tab */}
+            {activeTab === "invoices" && (
+              <div className="space-y-4">
+                {invoices.length ? (
+                  invoices.map((inv) => (
+                    <div
+                      key={inv.id}
+                      onClick={() => setSelectedInvoice(inv)}
+                      className={`p-4 sm:p-5 rounded-xl cursor-pointer transition-all duration-300 hover:shadow-md transform hover:-translate-y-1 ${isDark ? "bg-gray-700 hover:bg-gray-650" : "bg-gray-50 hover:bg-gray-100"
+                        }`}
+                    >
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                        <div className="flex-1 min-w-0">
+                          <h3 className={`font-bold text-lg ${isDark ? "text-white" : "text-gray-800"}`}>
+                            Invoice #{inv.id}
+                          </h3>
+                          <p className={`text-sm mt-1 ${isDark ? "text-gray-300" : "text-gray-600"}`}>
+                            {new Date(inv.createdAt).toLocaleDateString()} • ₹{((inv.grandTotal || inv.totalAmount) || 0).toFixed(2)}
+                          </p>
+                        </div>
+                        <span
+                          className={`px-3 py-1 text-xs font-medium rounded-full whitespace-nowrap ${inv.status === "Paid"
+                            ? "bg-green-500/20 text-green-400"
+                            : "bg-yellow-500/20 text-yellow-400"
+                            }`}
+                        >
+                          {inv.status}
+                        </span>
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <div className="text-center py-12">
+                    <FiDollarSign className={`w-12 h-12 mx-auto mb-3 ${isDark ? 'text-gray-600' : 'text-gray-400'}`} />
+                    <p className={isDark ? 'text-gray-400' : 'text-gray-500'}>No invoices found.</p>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* OCR Tab */}
+            {activeTab === "ocr" && (
+              <div className="space-y-4">
+                {/* If there's a parsed buffer (from local camera/upload), show results + save */}
+                {ocrParsed && (
+                  <div className={`p-4 rounded-xl ${isDark ? 'bg-gray-700/50' : 'bg-gray-50'} transition-all duration-300 hover:shadow-md`}>
+                    <OCRResults
+                      isDark={isDark}
+                      parsedData={ocrParsed}
+                      rawOcrText={ocrRaw}
+                      onSave={handleSaveOCR}
+                    />
+                  </div>
+                )}
+
+                {/* OCR history list */}
+                {isLoadingOCR ? (
+                  <p className="text-center text-gray-500">Loading OCR records...</p>
+                ) : ocrRecords.length ? (
+                  ocrRecords.map((r) => (
+                    <div
+                      key={r.id}
+                      className={`p-4 rounded-xl flex justify-between items-center border transition-all duration-300 hover:shadow-md transform hover:-translate-y-1 ${isDark ? "border-gray-700 bg-gray-700/50" : "border-gray-200 bg-gray-50"}`}
+                    >
+                      <div>
+                        <h4 className={`font-semibold ${isDark ? "text-white" : "text-gray-800"}`}>
+                          {r.parsedData?.ownerName || "Unknown Owner"}
+                        </h4>
+                        <p className={`text-sm ${isDark ? "text-gray-400" : "text-gray-600"}`}>
+                          Reg: {r.parsedData?.regNo || "N/A"}
+                        </p>
+                        <p className="text-xs text-gray-500">
+                          {new Date(r.createdAt).toLocaleString()}
+                        </p>
+                      </div>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => setSelectedOCR(r)}
+                          className="p-2 rounded-lg bg-blue-100 text-blue-600 hover:bg-blue-200 transition-colors duration-300"
+                          title="View Details"
+                        >
+                          <FiEye />
+                        </button>
+                        <button
+                          onClick={() => handleDeleteOCR(r.id)}
+                          className="p-2 rounded-lg bg-red-100 text-red-600 hover:bg-red-200 transition-colors duration-300"
+                          title="Delete"
+                        >
+                          <FiTrash2 />
+                        </button>
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <div className="text-center py-10 text-gray-500">
+                    <FiFileText className="mx-auto mb-2" size={32} />
+                    <p>No OCR records found for this client.</p>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* OCR Detail Modal – redesigned and grouped */}
+      {selectedOCR && (
+        <div className="fixed inset-0 bg-black/60 flex items-start justify-center z-50 p-6 overflow-y-auto backdrop-blur-sm">
+          <div className={`w-full max-w-6xl rounded-2xl overflow-hidden shadow-2xl ${isDark ? "bg-gray-800" : "bg-white"} transform transition-all duration-300 scale-95 animate-scaleIn`}>
+            <div className={`flex items-center justify-between p-4 ${isDark ? "bg-gradient-to-r from-blue-900/60 to-purple-900/60 text-white" : "bg-gradient-to-r from-blue-500 to-purple-600 text-white"}`}>
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-lg bg-white/20 flex items-center justify-center text-white">
+                  <FiFileText />
+                </div>
+                <h3 className="text-lg font-semibold">OCR Record Details</h3>
+              </div>
+              <div className="flex items-center gap-3">
+                <div className="text-sm text-white/80 mr-4">Created: {new Date(selectedOCR.createdAt).toLocaleString()}</div>
+                <button
+                  onClick={() => setSelectedOCR(null)}
+                  className="text-white hover:opacity-90 transition-opacity duration-300"
+                >
+                  <FiX size={20} />
+                </button>
+              </div>
+            </div>
+
+            <div className="p-6 space-y-6">
+              {/* Group: Vehicle Identification */}
+              <Section title="🚗 Vehicle Identification">
+                <TwoCol label="Registration Number" value={selectedOCR.parsedData?.regNo} isDark={isDark} />
+                <TwoCol label="Registration Date" value={selectedOCR.parsedData?.regDate} isDark={isDark} />
+                <TwoCol label="Chassis Number" value={selectedOCR.parsedData?.chassisNo} isDark={isDark} />
+                <TwoCol label="Engine Number" value={selectedOCR.parsedData?.engineNo} isDark={isDark} />
+                <TwoCol label="Maker (Manufacturer)" value={selectedOCR.parsedData?.maker || selectedOCR.parsedData?.mfr} isDark={isDark} />
+                <TwoCol label="Model / Variant" value={(selectedOCR.parsedData?.model || "") + (selectedOCR.parsedData?.variant ? ` / ${selectedOCR.parsedData.variant}` : "")} isDark={isDark} />
+              </Section>
+
+              {/* Group: Vehicle Specifications */}
+              <Section title="⚙️ Vehicle Specifications">
+                <TwoCol label="Vehicle Class" value={selectedOCR.parsedData?.vehicleClass} isDark={isDark} />
+                <TwoCol label="Body Type" value={selectedOCR.parsedData?.body || selectedOCR.parsedData?.bodyType} isDark={isDark} />
+                <TwoCol label="Colour" value={selectedOCR.parsedData?.colour || selectedOCR.parsedData?.color} isDark={isDark} />
+                <TwoCol label="Fuel Type" value={selectedOCR.parsedData?.fuel || selectedOCR.parsedData?.fuelType} isDark={isDark} />
+                <TwoCol label="Wheel Base" value={selectedOCR.parsedData?.wheelBase} isDark={isDark} />
+                <TwoCol label="MFG Date" value={selectedOCR.parsedData?.mfgDate} isDark={isDark} />
+                <TwoCol label="Seating Capacity" value={selectedOCR.parsedData?.seating || selectedOCR.parsedData?.seatingCapacity} isDark={isDark} />
+                <TwoCol label="No. of Cylinders" value={selectedOCR.parsedData?.noOfCyl} isDark={isDark} />
+                <TwoCol label="Unladen Weight" value={selectedOCR.parsedData?.unladenWt} isDark={isDark} />
+                <TwoCol label="CC" value={selectedOCR.parsedData?.cc} isDark={isDark} />
+              </Section>
+
+              {/* Group: Registration / Validity */}
+              <Section title="🧾 Registration / Validity">
+                <TwoCol label="Reg/FC Valid Upto" value={selectedOCR.parsedData?.regFcUpto} isDark={isDark} />
+                <TwoCol label="Fitness Valid Upto" value={selectedOCR.parsedData?.fitUpto || selectedOCR.parsedData?.fitnessUpto} isDark={isDark} />
+                <TwoCol label="Insurance Valid Upto" value={selectedOCR.parsedData?.insuranceUpto} isDark={isDark} />
+                <TwoCol label="Tax Valid Upto" value={selectedOCR.parsedData?.taxUpto} isDark={isDark} />
+              </Section>
+
+              {/* Group: Ownership */}
+              <Section title="👤 Ownership">
+                <TwoCol label="Owner Name" value={selectedOCR.parsedData?.ownerName} isDark={isDark} />
+                <TwoCol label="S/W/D Of" value={selectedOCR.parsedData?.swdOf} isDark={isDark} />
+                <div className="col-span-full">
+                  <div className="text-xs font-semibold text-gray-400 mb-2">Address</div>
+                  <div className={`p-4 rounded-xl border transition-all duration-300 hover:shadow-md ${isDark ? "bg-gray-700/40 border-gray-600 text-white" : "bg-gray-50 border-gray-200 text-gray-900"}`}>
+                    {selectedOCR.parsedData?.address || "—"}
+                  </div>
+                </div>
+              </Section>
+
+              {/* Raw OCR text (collapsed style) */}
+              {selectedOCR.rawText && (
+                <div>
+                  <h4 className="text-sm font-semibold text-gray-500 mb-2">Raw OCR Text</h4>
+                  <pre className={`p-4 rounded-xl text-sm transition-all duration-300 hover:shadow-md ${isDark ? "bg-gray-700/40 text-white" : "bg-gray-50 text-gray-800"}`}>
+                    {selectedOCR.rawText}
+                  </pre>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      <style jsx>{`
+        .scrollbar-hide::-webkit-scrollbar {
+          display: none;
+        }
+        .scrollbar-hide {
+          -ms-overflow-style: none;
+          scrollbar-width: none;
+        }
+        
+        @keyframes scaleIn {
+          from {
+            transform: scale(0.95);
+            opacity: 0;
+          }
+          to {
+            transform: scale(1);
+            opacity: 1;
+          }
+        }
+        
+        .animate-scaleIn {
+          animation: scaleIn 0.3s ease-out forwards;
+        }
+      `}</style>
+    </div>
+  );
+}
+
+/* ----------------------
+  Small helper components
+   - ContactCard
+   - StatCard
+   - Section, TwoCol (used in modal)
+---------------------- */
+
+function ContactCard({ icon, label, value, isDark }) {
+  return (
+    <div className={`p-4 rounded-xl flex items-center gap-3 transition-all duration-300 hover:shadow-md ${isDark ? "bg-gray-700" : "bg-gray-50"}`}>
+      <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white flex-shrink-0 transition-transform duration-300 hover:scale-110">
+        {icon}
+      </div>
+      <div className="min-w-0 flex-1">
+        <p className={`text-xs font-medium uppercase mb-1 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+          {label}
+        </p>
+        <p className={`font-semibold truncate ${isDark ? 'text-white' : 'text-gray-900'}`}>
+          {value || "—"}
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function StatCard({ title, value, icon, isDark }) {
+  return (
+    <div className={`p-5 rounded-xl flex items-center justify-between transition-all duration-300 hover:shadow-md ${isDark ? "bg-gray-700" : "bg-gray-50"}`}>
+      <div>
+        <p className={`text-sm font-medium mb-1 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>{title}</p>
+        <p className={`text-2xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>{value}</p>
+      </div>
+      <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white transition-transform duration-300 hover:scale-110">
+        {icon}
+      </div>
+    </div>
+  );
+}
+
+/* Section wrapper for modal groups */
+function Section({ title, children, isDark }) {
+  return (
+    <div className="mb-4">
+      <div className="flex items-center gap-2 mb-3">
+        <div className="w-2 h-2 rounded-full bg-gradient-to-r from-blue-500 to-purple-600"></div>
+        <h4 className={`font-semibold ${isDark ? 'text-gray-200' : 'text-gray-700'}`}>{title}</h4>
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {children}
+      </div>
+    </div>
+  );
+}
+
+/* Two-column label/value box used inside modal */
+function TwoCol({ label, value, isDark }) {
+  return (
+    <div className={`p-4 rounded-xl border transition-all duration-300 hover:shadow-md ${isDark ? "bg-gray-700/40 border-gray-600" : "bg-gray-50 border-gray-200"}`}>
+      <div className="text-xs text-gray-400 mb-2">{label}</div>
+      <div className={`font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>{value || "—"}</div>
+    </div>
+  );
+}
