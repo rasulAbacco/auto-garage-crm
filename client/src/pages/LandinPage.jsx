@@ -107,7 +107,7 @@ export default function LandingPage() {
 
                         <h1 className="text-5xl lg:text-7xl font-bold leading-tight">
                             <span className="block">The Future of</span>
-                            <span className="block bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 bg-clip-text text-transparent">
+                            <span className="block py-4 bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 bg-clip-text text-transparent">
                                 Garage Management
                             </span>
                         </h1>
@@ -136,7 +136,7 @@ export default function LandingPage() {
                             </button>
                         </div>
 
-                        <div className="flex items-center gap-8 pt-4">
+                        <div className="flex items-center gap-8 ">
                             <div className="flex items-center gap-2">
                                 <Shield className="w-5 h-5 text-green-500" />
                                 <span className={`text-sm ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>Bank-level Security</span>
