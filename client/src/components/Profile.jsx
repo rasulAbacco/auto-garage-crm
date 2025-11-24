@@ -137,7 +137,7 @@ export default function Profile() {
     alert("Profile Updated Successfully!");
 
     // 5️⃣ Navigate to dashboard
-    navigate("/dashboard");
+    navigate("/car-dashboard");
     };
 
 
