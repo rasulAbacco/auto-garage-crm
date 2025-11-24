@@ -36,7 +36,7 @@ import BikeSpareParts from "./pages/spareparts/BikeSpareParts.jsx";
 import CarSpareParts from "./pages/spareparts/CarSpareParts.jsx";
 import ContactUs from "./pages/ContactUs.jsx";
 import ClientsLayout from "./components/ClientLayout.jsx";
-import Register from "./pages/Register.jsx";
+import CarRegister from "./pages/CarRegister.jsx";
 import TermsPage from "./pages/terms.jsx";
 import Profile from "./components/Profile.jsx";
 import Plans from "./pages/plans/Plans.jsx";
@@ -68,7 +68,8 @@ function App() {
 
         {/* Login route (public) */}
         <Route path="/login" element={<Login />} />
-        <Route path="/register" element={<Register />} />
+        <Route path="/car-register" element={<CarRegister />} />
+     
 
         {/* Protected routes */}
         <Route
@@ -101,7 +102,7 @@ function App() {
           <Route path="/plan" element={<Plans />} />
           <Route path="/profile" element={<Profile />} />
 
-        </Route>
+        
 
 
           {/* Bike Garage CRM Routes */}

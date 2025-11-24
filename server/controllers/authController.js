@@ -11,10 +11,10 @@ import { generateToken } from "../utils/generateToken.js";
  */
 export const registerUser = async (req, res) => {
   try {
-    const { username, email, password } = req.body;
+    const { username, email, password, crmType } = req.body;
 
     // Validate fields
-    if (!username || !email || !password) {
+    if (!username || !email || !password || !crmType) {
       return res.status(400).json({ message: "All fields are required" });
     }
 
@@ -32,21 +32,21 @@ export const registerUser = async (req, res) => {
     // Hash password
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    // Create user
+    // Create user with CRM access
     const user = await prisma.user.create({
       data: {
         username,
         email,
         password: hashedPassword,
         role: "user",
-        profileImage: null, // default null
+        profileImage: null,
+        allowedCrms: [crmType.toUpperCase()], // 👈 CRM assignment
       },
     });
 
     // Generate token
     const token = generateToken(user);
 
-    // Return user with profileImage included
     return res.status(201).json({
       message: "User registered successfully",
       token,
@@ -55,15 +55,19 @@ export const registerUser = async (req, res) => {
         username: user.username,
         email: user.email,
         role: user.role,
-        profileImage: user.profileImage || null,
+        profileImage: user.profileImage,
+        allowedCrms: user.allowedCrms, // return CRM permissions
         createdAt: user.createdAt,
       },
     });
   } catch (error) {
     console.error("❌ Registration Error:", error);
-    res.status(500).json({ message: "Internal server error during registration" });
+    res.status(500).json({
+      message: "Internal server error during registration",
+    });
   }
 };
+
 
 /**
  * @desc Login a user
@@ -74,27 +78,36 @@ export const loginUser = async (req, res) => {
   try {
     const { identifier, password, crmType } = req.body;
 
-    if (!identifier || !password) {
-      return res.status(400).json({ message: "Email/Username and password are required" });
+    if (!identifier || !password || !crmType) {
+      return res.status(400).json({
+        message: "Email/Username, password and CRM type are required",
+      });
     }
 
-    console.log("📩 Login payload:", req.body);
-
+    // Detect if identifier is email or username
     const isEmail = identifier.includes("@");
 
     const user = await prisma.user.findFirst({
-      where: isEmail ? { email: identifier } : { username: identifier },
+      where: isEmail
+        ? { email: identifier }
+        : { username: identifier },
     });
-
-    console.log("🔍 USER FOUND:", user);
 
     if (!user) {
       return res.status(400).json({ message: "Invalid credentials" });
     }
 
+    // Check password
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) {
       return res.status(400).json({ message: "Invalid credentials" });
+    }
+
+    // 🚨 Check CRM access permission
+    if (!user.allowedCrms.includes(crmType.toUpperCase())) {
+      return res.status(403).json({
+        message: `You do not have access to the ${crmType} CRM`,
+      });
     }
 
     const token = generateToken(user);
@@ -108,14 +121,18 @@ export const loginUser = async (req, res) => {
         email: user.email,
         role: user.role,
         profileImage: user.profileImage || null,
+        allowedCrms: user.allowedCrms,
         crmType,
       },
     });
   } catch (error) {
     console.error("❌ Login Error:", error);
-    return res.status(500).json({ message: "Internal server error during login" });
+    return res.status(500).json({
+      message: "Internal server error during login",
+    });
   }
 };
+
 
 
 

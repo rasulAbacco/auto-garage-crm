@@ -12,11 +12,14 @@ import {
 // import PublicLayout from "../components/PublicLayout";
 // import { useTheme } from "../contexts/ThemeContext";
 
+const API_URL = import.meta.env.VITE_API_BASE_URL;
+
+
 // Temporary mock for demo purposes
 const PublicLayout = ({ children }) => children;
 const useTheme = () => ({ isDark: true });
 
-const Register = () => {
+const CarRegister = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const { isDark } = useTheme();
@@ -66,6 +69,7 @@ const Register = () => {
     phone: paymentData?.formData.phone || "",
     password: "",
     role: "user",
+    crmType: "CAR"   // ⭐ IMPORTANT
   });
 
   const [loading, setLoading] = useState(false);
@@ -90,9 +94,10 @@ const Register = () => {
 
     try {
       const res = await axios.post(
-        "http://localhost:5000/api/auth/register",
+        `${API_URL}/api/auth/register`,
         formData
       );
+
 
       setMessage("Registration successful!");
       
@@ -621,4 +626,4 @@ const Register = () => {
   );
 };
 
-export default Register;
+export default CarRegister;
