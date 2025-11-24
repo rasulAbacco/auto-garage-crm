@@ -98,7 +98,7 @@ const PaymentModal = ({
     if (!validateForm()) return;
 
     setIsProcessing(true);
-    const API = "http://localhost:5000";
+    const API = import.meta.env.VITE_API_BASE_URL;
 
     try {
       // 1️⃣ Create Order
