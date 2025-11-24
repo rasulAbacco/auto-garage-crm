@@ -138,11 +138,8 @@ export default function Profile() {
 
     // 5️⃣ Navigate to dashboard
     navigate("/car-dashboard");
-<<<<<<< HEAD
     };
-=======
   };
->>>>>>> main
 
 
   return (
