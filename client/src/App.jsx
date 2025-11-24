@@ -45,6 +45,7 @@ import ReferencePage from "./pages/ReferenceT&C.jsx";
 
 import BikeDashboard from "./bikePages/BikeDashboard.jsx";
 import WashDashboard from "./washPages/WashDashboard.jsx";
+import Reference from "./pages/Reference.jsx";
 
 function App() {
   return (
@@ -101,6 +102,7 @@ function App() {
           <Route path="/ocr-Scanner" element={<DetailsPage />} />
           <Route path="/plan" element={<Plans />} />
           <Route path="/profile" element={<Profile />} />
+          <Route path="/reference" element={<Reference />} />
 
         </Route>
 

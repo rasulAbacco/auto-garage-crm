@@ -14,19 +14,28 @@ enum CrmType {
 }
 
 model User {
-  id           Int         @id @default(autoincrement())
-  email        String      @unique
-  username     String?     @unique
+  id           Int       @id @default(autoincrement())
+  email        String    @unique
+  username     String?   @unique
   password     String
-  role         String      @default("user")
-  allowedCrms  CrmType[]   @default([])
-  createdAt    DateTime    @default(now())
-  updatedAt    DateTime    @updatedAt
+  role         String    @default("user")
+  allowedCrms  CrmType[] @default([])
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
   profileImage String?
-  clients      Client[]
-  invoices     Invoice[]
-  reminders    Reminder[]
-  ocrs         OcrRecord[] // <- linked OCR records
+
+  // ⭐ REFERRAL FIELDS
+  myReferralCode   String  @unique
+  referredByCode   String?
+  referredByUserId Int?
+
+  referredByUser User?  @relation("UserReferrals", fields: [referredByUserId], references: [id])
+  referrals      User[] @relation("UserReferrals")
+
+  clients   Client[]
+  invoices  Invoice[]
+  reminders Reminder[]
+  ocrs      OcrRecord[]
 }
 
 model Client {
@@ -207,9 +216,12 @@ model Payment {
   billingPeriod String?
   amount        Float?
 
+  referralCode String? // <-- ADD THIS (from formData.referenceCode)
+  gstNumber    String? // <-- ADD THIS
+
   // Razorpay details (saved after payment)
   paymentId String? @unique
-  orderId   String  @unique // ⭐ Remove the ? to make it required
+  orderId   String  @unique
   signature String?
 
   status     String    @default("PENDING")

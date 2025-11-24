@@ -13,60 +13,74 @@ export const registerUser = async (req, res) => {
   try {
     const { username, email, password, crmType } = req.body;
 
-    // Validate fields
+    // Validate
     if (!username || !email || !password || !crmType) {
       return res.status(400).json({ message: "All fields are required" });
     }
 
-    // Check duplicates
-    const existingUser = await prisma.user.findFirst({
-      where: { OR: [{ username }, { email }] },
+    // Check if user already exists (TEMP USER created after payment)
+    let existingUser = await prisma.user.findUnique({
+      where: { email }
     });
 
+    // === CASE 1: USER EXISTS → UPDATE IT ===
     if (existingUser) {
-      return res
-        .status(400)
-        .json({ message: "Username or email already exists" });
+      const hashedPassword = await bcrypt.hash(password, 10);
+
+      const updatedUser = await prisma.user.update({
+        where: { email },
+        data: {
+          username,
+          password: hashedPassword,
+          allowedCrms: [crmType.toUpperCase()],
+        }
+      });
+
+      const token = generateToken(updatedUser);
+
+      return res.status(200).json({
+        message: "Registration completed successfully",
+        token,
+        user: updatedUser
+      });
     }
 
-    // Hash password
+    // === CASE 2: NEW USER (no payment) ===
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    // Create user with CRM access
-    const user = await prisma.user.create({
+    const myReferralCode =
+      "ATREF-" + Math.random().toString(36).substring(2, 8).toUpperCase();
+
+    const newUser = await prisma.user.create({
       data: {
         username,
         email,
         password: hashedPassword,
         role: "user",
         profileImage: null,
-        allowedCrms: [crmType.toUpperCase()], // 👈 CRM assignment
+        allowedCrms: [crmType.toUpperCase()],
+        myReferralCode,
+        referredByCode: null,
+        referredByUserId: null,
       },
     });
 
-    // Generate token
-    const token = generateToken(user);
+    const token = generateToken(newUser);
 
     return res.status(201).json({
       message: "User registered successfully",
       token,
-      user: {
-        id: user.id,
-        username: user.username,
-        email: user.email,
-        role: user.role,
-        profileImage: user.profileImage,
-        allowedCrms: user.allowedCrms, // return CRM permissions
-        createdAt: user.createdAt,
-      },
+      user: newUser
     });
+
   } catch (error) {
     console.error("❌ Registration Error:", error);
-    res.status(500).json({
-      message: "Internal server error during registration",
-    });
+    return res.status(500).json({ message: "Internal server error" });
   }
 };
+
+
+
 
 
 /**
@@ -142,30 +156,30 @@ export const loginUser = async (req, res) => {
  * @access Private
  */
 export const getProfile = async (req, res) => {
-    try {
-        // ✅ Fetch user from DB
-        const user = await prisma.user.findUnique({
-            where: { id: req.user.id },
-            select: {
-                id: true,
-                username: true,
-                email: true,
-                role: true,
-                profileImage: true,
-                createdAt: true,
-                updatedAt: true,
-            },
-        });
+  try {
+    // ✅ Fetch user from DB
+    const user = await prisma.user.findUnique({
+      where: { id: req.user.id },
+      select: {
+        id: true,
+        username: true,
+        email: true,
+        role: true,
+        profileImage: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
 
-        if (!user) {
-            return res.status(404).json({ message: "User not found" });
-        }
-
-        res.status(200).json(user);
-    } catch (error) {
-        console.error("❌ Profile Fetch Error:", error);
-        res.status(500).json({ message: "Error fetching profile" });
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
     }
+
+    res.status(200).json(user);
+  } catch (error) {
+    console.error("❌ Profile Fetch Error:", error);
+    res.status(500).json({ message: "Error fetching profile" });
+  }
 };
 
 /**
@@ -174,43 +188,43 @@ export const getProfile = async (req, res) => {
  * @access Public (self-check)
  */
 export const verifyToken = async (req, res) => {
-    try {
-        const authHeader = req.headers.authorization;
+  try {
+    const authHeader = req.headers.authorization;
 
-        if (!authHeader?.startsWith("Bearer ")) {
-            return res.status(401).json({
-                valid: false,
-                message: "No token provided",
-            });
-        }
-
-        const token = authHeader.split(" ")[1];
-
-        // ✅ Verify token
-        const decoded = jwt.verify(token, process.env.JWT_SECRET);
-
-        // ✅ Confirm user exists
-        const user = await prisma.user.findUnique({
-            where: { id: decoded.id },
-            select: { id: true, username: true, email: true, role: true },
-        });
-
-        if (!user) {
-            return res.status(404).json({
-                valid: false,
-                message: "User not found for this token",
-            });
-        }
-
-        return res.status(200).json({
-            valid: true,
-            user,
-        });
-    } catch (error) {
-        console.error("❌ Token Verification Error:", error);
-        return res.status(401).json({
-            valid: false,
-            message: "Invalid or expired token",
-        });
+    if (!authHeader?.startsWith("Bearer ")) {
+      return res.status(401).json({
+        valid: false,
+        message: "No token provided",
+      });
     }
+
+    const token = authHeader.split(" ")[1];
+
+    // ✅ Verify token
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+
+    // ✅ Confirm user exists
+    const user = await prisma.user.findUnique({
+      where: { id: decoded.id },
+      select: { id: true, username: true, email: true, role: true },
+    });
+
+    if (!user) {
+      return res.status(404).json({
+        valid: false,
+        message: "User not found for this token",
+      });
+    }
+
+    return res.status(200).json({
+      valid: true,
+      user,
+    });
+  } catch (error) {
+    console.error("❌ Token Verification Error:", error);
+    return res.status(401).json({
+      valid: false,
+      message: "Invalid or expired token",
+    });
+  }
 };

@@ -1,3 +1,5 @@
+// server/routes/payments.js
+
 import express from "express";
 import Razorpay from "razorpay";
 import crypto from "crypto";
@@ -51,7 +53,9 @@ router.post("/save-form", async (req, res) => {
       plan,
       billingPeriod,
       amount,
-      orderId
+      orderId,
+      referenceCode,  // NEW
+      gstNumber       // NEW
     } = req.body;
 
     await prisma.payment.create({
@@ -64,6 +68,8 @@ router.post("/save-form", async (req, res) => {
         billingPeriod,
         amount,
         orderId,
+        referralCode: referenceCode || null,  // NEW
+        gstNumber: gstNumber || null,         // NEW
         status: "PENDING"
       }
     });
@@ -75,6 +81,7 @@ router.post("/save-form", async (req, res) => {
     return res.status(500).json({ error: "Form save failed" });
   }
 });
+
 
 /*
 |--------------------------------------------------------------------------
@@ -191,11 +198,54 @@ router.post("/verify", async (req, res) => {
       expiryDate: updated.expiryDate
     });
 
-    return res.json({ 
-      success: true, 
-      payment: updated,
-      message: "Payment verified successfully"
+    // ⭐ After updating payment status to SUCCESS
+    let referrer = null;
+
+    // If referral code exists, find the user who referred
+    if (payment.referralCode) {
+      referrer = await prisma.user.findUnique({
+        where: { myReferralCode: payment.referralCode }
+      });
+    }
+
+    // ⭐ Check if user already exists
+    let existingUser = await prisma.user.findUnique({
+      where: { email: payment.email }
     });
+
+    if (existingUser) {
+      return res.json({
+        success: true,
+        payment: updated,
+        userId: existingUser.id,
+        message: "Payment verified successfully (existing user)"
+      });
+    }
+
+    // ⭐ Generate referral code for new user
+    const myReferralCode =
+      "ATREF-" + Math.random().toString(36).substring(2, 8).toUpperCase();
+
+    // ⭐ Create new user with temporary password
+    const newUser = await prisma.user.create({
+      data: {
+        email: payment.email,
+        password: "TEMP_PASSWORD",
+        myReferralCode,
+        referredByCode: payment.referralCode,
+        referredByUserId: referrer?.id || null,
+        allowedCrms: [],
+      }
+    });
+
+    // ⭐ Return success + userId
+    return res.json({
+      success: true,
+      payment: updated,
+      userId: newUser.id,
+      message: "Payment verified successfully & new user created"
+    });
+
 
   } catch (err) {
     console.error("❌ Verification error:", err);
