@@ -46,7 +46,7 @@ const PaymentModal = ({
         };
 
         // Then navigate to register page with only serializable data
-        navigate("/register", {
+        navigate("/car-register", {
           state: {
             paymentData: {
               plan: cleanPlan,
@@ -207,9 +207,8 @@ const PaymentModal = ({
   return (
     <div className="fixed inset-0 bg-black/70 backdrop-blur-md flex items-center justify-center z-50 p-4 animate-fadeIn">
       <div
-        className={`relative rounded-3xl shadow-2xl p-4 sm:p-6 w-full max-w-[70%] ${
-          isDark ? "bg-gray-800 border border-gray-700" : "bg-white"
-        }`}
+        className={`relative rounded-3xl shadow-2xl p-4 sm:p-6 w-full max-w-[70%] ${isDark ? "bg-gray-800 border border-gray-700" : "bg-white"
+          }`}
       >
         {showSuccess ? (
           <div className="text-center space-y-6 py-8">
@@ -234,9 +233,8 @@ const PaymentModal = ({
                 Complete Your Order
               </h2>
               <p
-                className={`text-sm ${
-                  isDark ? "text-gray-400" : "text-gray-600"
-                }`}
+                className={`text-sm ${isDark ? "text-gray-400" : "text-gray-600"
+                  }`}
               >
                 Subscribe to{" "}
                 <span className="font-semibold text-violet-500">
@@ -271,9 +269,8 @@ const PaymentModal = ({
               ].map((field) => (
                 <div key={field.key}>
                   <label
-                    className={`block text-sm font-medium mb-2 ${
-                      isDark ? "text-gray-300" : "text-gray-700"
-                    }`}
+                    className={`block text-sm font-medium mb-2 ${isDark ? "text-gray-300" : "text-gray-700"
+                      }`}
                   >
                     {field.label}
                   </label>
@@ -291,13 +288,12 @@ const PaymentModal = ({
                         });
                         setErrors({ ...errors, [field.key]: "" });
                       }}
-                      className={`w-full pl-10 pr-3 py-2.5 rounded-lg border-2 transition-all ${
-                        errors[field.key]
+                      className={`w-full pl-10 pr-3 py-2.5 rounded-lg border-2 transition-all ${errors[field.key]
                           ? "border-red-500 focus:border-red-500"
                           : isDark
-                          ? "bg-gray-700/50 border-gray-600 focus:border-violet-500"
-                          : "bg-gray-50 border-gray-200 focus:border-violet-500"
-                      } focus:outline-none text-sm`}
+                            ? "bg-gray-700/50 border-gray-600 focus:border-violet-500"
+                            : "bg-gray-50 border-gray-200 focus:border-violet-500"
+                        } focus:outline-none text-sm`}
                       placeholder={field.label}
                     />
                     {errors[field.key] && (
@@ -312,9 +308,8 @@ const PaymentModal = ({
 
             {/* Payment Summary */}
             <div
-              className={`p-4 rounded-xl ${
-                isDark ? "bg-gray-700/50" : "bg-gray-50"
-              }`}
+              className={`p-4 rounded-xl ${isDark ? "bg-gray-700/50" : "bg-gray-50"
+                }`}
             >
               <div className="flex justify-between items-center mb-2">
                 <span className={isDark ? "text-gray-300" : "text-gray-700"}>
@@ -353,11 +348,10 @@ const PaymentModal = ({
             <div className="flex flex-col sm:flex-row gap-3 pt-2">
               <button
                 onClick={onClose}
-                className={`flex-1 px-4 py-2.5 rounded-lg font-medium transition-all ${
-                  isDark
+                className={`flex-1 px-4 py-2.5 rounded-lg font-medium transition-all ${isDark
                     ? "bg-gray-700 hover:bg-gray-600"
                     : "bg-gray-100 hover:bg-gray-200"
-                } text-sm`}
+                  } text-sm`}
               >
                 Cancel
               </button>
