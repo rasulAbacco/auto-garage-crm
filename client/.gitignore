@@ -62,3 +62,4 @@ node_modules/
 # React Native / Flutter / others (if applicable)
 *.keystore
 .gradle/
+*.env.production

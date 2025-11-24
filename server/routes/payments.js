@@ -6,10 +6,12 @@ import prisma from "../models/prismaClient.js";
 const router = express.Router();
 
 // Razorpay Instance
+// Razorpay Instance
 const razorpay = new Razorpay({
-  key_id: process.env.RAZORPAY_KEY,
-  key_secret: process.env.RAZORPAY_SECRET,
+  key_id: process.env.RAZORPAY_KEY_ID,
+  key_secret: process.env.RAZORPAY_KEY_SECRET,
 });
+
 
 /*
 |--------------------------------------------------------------------------
@@ -100,7 +102,7 @@ router.post("/verify", async (req, res) => {
     console.log("Order ID:", razorpay_order_id);
 
     // ⭐ Validation 2: Verify signature
-    const secret = process.env.RAZORPAY_SECRET;
+    const secret = process.env.RAZORPAY_KEY_SECRET;
     
     if (!secret) {
       console.error("❌ RAZORPAY_SECRET not configured");

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { Camera, Save, Mail, User, Lock, Eye, EyeOff, ArrowRight, Sparkles } from "lucide-react";
 import { useNavigate } from "react-router-dom";
- 
+
 const API_URL = import.meta.env.VITE_API_BASE_URL;
 
 export default function Profile() {
@@ -17,7 +17,7 @@ export default function Profile() {
     password: "",
     newPassword: "",
   });
-    const navigate = useNavigate();
+  const navigate = useNavigate();
 
   useEffect(() => {
     const storedUser = JSON.parse(localStorage.getItem("user") || "{}");
@@ -84,49 +84,49 @@ export default function Profile() {
     }
   };
 
-    const handleSave = async () => {
+  const handleSave = async () => {
     const token = localStorage.getItem("token");
 
     // 1️⃣ Update username & email
     const updateProfile = await fetch(`${API_URL}/api/user/update`, {
-        method: "PUT",
-        headers: {
+      method: "PUT",
+      headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
+      },
+      body: JSON.stringify({
         username: formData.username,
         email: formData.email,
-        }),
+      }),
     });
 
     const profileResponse = await updateProfile.json();
 
     if (!updateProfile.ok) {
-        alert(profileResponse.message || "Failed to update profile");
-        return;
+      alert(profileResponse.message || "Failed to update profile");
+      return;
     }
 
     // 2️⃣ Change password (optional)
     if (formData.password && formData.newPassword) {
-        const changePass = await fetch(`${API_URL}/api/user/change-password`, {
+      const changePass = await fetch(`${API_URL}/api/user/change-password`, {
         method: "PUT",
         headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
-            currentPassword: formData.password,
-            newPassword: formData.newPassword,
+          currentPassword: formData.password,
+          newPassword: formData.newPassword,
         }),
-        });
+      });
 
-        const passResponse = await changePass.json();
+      const passResponse = await changePass.json();
 
-        if (!changePass.ok) {
+      if (!changePass.ok) {
         alert(passResponse.message || "Password update failed");
         return;
-        }
+      }
     }
 
     // 3️⃣ Update local storage
@@ -138,24 +138,25 @@ export default function Profile() {
 
     // 5️⃣ Navigate to dashboard
     navigate("/car-dashboard");
+<<<<<<< HEAD
     };
+=======
+  };
+>>>>>>> main
 
 
   return (
-  
-     <div className={`min-h-screen pt-20 pb-10 relative overflow-hidden transition-all duration-700  `}>
-      
+
+    <div className={`min-h-screen pt-20 pb-10 relative overflow-hidden transition-all duration-700  `}>
+
       {/* Animated Background */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className={`absolute top-1/4 -left-48 w-96 h-96 rounded-full blur-3xl opacity-30 animate-pulse ${
-          isDark ? 'bg-indigo-600' : 'bg-indigo-400'
-        }`} style={{ animationDuration: '8s' }}></div>
-        <div className={`absolute bottom-1/4 -right-48 w-96 h-96 rounded-full blur-3xl opacity-30 animate-pulse ${
-          isDark ? 'bg-purple-600' : 'bg-purple-400'
-        }`} style={{ animationDuration: '10s', animationDelay: '1s' }}></div>
-        <div className={`absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 rounded-full blur-3xl opacity-20 animate-pulse ${
-          isDark ? 'bg-pink-600' : 'bg-pink-400'
-        }`} style={{ animationDuration: '12s', animationDelay: '2s' }}></div>
+        <div className={`absolute top-1/4 -left-48 w-96 h-96 rounded-full blur-3xl opacity-30 animate-pulse ${isDark ? 'bg-indigo-600' : 'bg-indigo-400'
+          }`} style={{ animationDuration: '8s' }}></div>
+        <div className={`absolute bottom-1/4 -right-48 w-96 h-96 rounded-full blur-3xl opacity-30 animate-pulse ${isDark ? 'bg-purple-600' : 'bg-purple-400'
+          }`} style={{ animationDuration: '10s', animationDelay: '1s' }}></div>
+        <div className={`absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 rounded-full blur-3xl opacity-20 animate-pulse ${isDark ? 'bg-pink-600' : 'bg-pink-400'
+          }`} style={{ animationDuration: '12s', animationDelay: '2s' }}></div>
 
         {/* Floating Particles */}
         {[...Array(15)].map((_, i) => (
@@ -193,28 +194,26 @@ export default function Profile() {
 
       {/* Main Content */}
       <div className="relative z-10 max-w-2xl mx-auto px-4 sm:px-6">
-        <div className={`rounded-3xl backdrop-blur-2xl border shadow-2xl transition-all duration-500 ${
-          isDark
+        <div className={`rounded-3xl backdrop-blur-2xl border shadow-2xl transition-all duration-500 ${isDark
             ? 'bg-white/10 border-white/20'
             : 'bg-white/80 border-white/40'
-        }`}>
-          
+          }`}>
+
           {/* Decorative Top Element */}
           <div className="absolute -top-8 left-1/2 -translate-x-1/2">
             <div className="relative">
               <div className="absolute inset-0 bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 rounded-full blur-2xl opacity-60 animate-pulse"></div>
-              <div className={`relative w-24 h-24 rounded-full flex items-center justify-center backdrop-blur-xl border-4 shadow-2xl ${
-                isDark
+              <div className={`relative w-24 h-24 rounded-full flex items-center justify-center backdrop-blur-xl border-4 shadow-2xl ${isDark
                   ? 'bg-slate-100 border-white/20'
                   : 'bg-white border-white/60'
-              }`}>
+                }`}>
                 <User className="w-10 h-10 bg-gradient-to-r from-indigo-500 to-purple-500 bg-clip-text" strokeWidth={2.5} />
               </div>
             </div>
           </div>
 
           <div className="p-8 sm:p-10 mt-12 space-y-8">
-            
+
             {/* Header */}
             <div className="text-center space-y-2">
               <h1 className={`text-lg ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
@@ -246,18 +245,17 @@ export default function Profile() {
 
             {/* Form */}
             <form onSubmit={(e) => { e.preventDefault(); handleSave(); }} className="space-y-5">
-              
+
               {/* Username */}
               <div className="space-y-2">
                 <label className={`text-sm font-semibold ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
                   Username
                 </label>
                 <div className="relative group">
-                  <User className={`absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 transition-all duration-300 ${
-                    focusedInput === 'username'
+                  <User className={`absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 transition-all duration-300 ${focusedInput === 'username'
                       ? 'text-indigo-500 scale-110'
                       : isDark ? 'text-gray-400' : 'text-gray-400'
-                  }`} />
+                    }`} />
                   <input
                     type="text"
                     name="username"
@@ -265,13 +263,12 @@ export default function Profile() {
                     onChange={handleInputChange}
                     onFocus={() => setFocusedInput('username')}
                     onBlur={() => setFocusedInput('')}
-                    className={`w-full pl-12 pr-4 py-4 rounded-xl border-2 transition-all duration-300 ${
-                      focusedInput === 'username'
+                    className={`w-full pl-12 pr-4 py-4 rounded-xl border-2 transition-all duration-300 ${focusedInput === 'username'
                         ? 'bg-white/10 border-indigo-500 shadow-lg shadow-indigo-500/20 scale-[1.01]'
                         : isDark
                           ? 'bg-white/5 border-white/10 focus:border-indigo-500'
                           : 'bg-white/50 border-gray-200 focus:border-indigo-500'
-                    } focus:outline-none ${isDark ? 'text-white' : 'text-gray-900'}`}
+                      } focus:outline-none ${isDark ? 'text-white' : 'text-gray-900'}`}
                   />
                 </div>
               </div>
@@ -282,11 +279,10 @@ export default function Profile() {
                   Email Address
                 </label>
                 <div className="relative group">
-                  <Mail className={`absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 transition-all duration-300 ${
-                    focusedInput === 'email'
+                  <Mail className={`absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 transition-all duration-300 ${focusedInput === 'email'
                       ? 'text-indigo-500 scale-110'
                       : isDark ? 'text-gray-400' : 'text-gray-400'
-                  }`} />
+                    }`} />
                   <input
                     type="email"
                     name="email"
@@ -294,13 +290,12 @@ export default function Profile() {
                     onChange={handleInputChange}
                     onFocus={() => setFocusedInput('email')}
                     onBlur={() => setFocusedInput('')}
-                    className={`w-full pl-12 pr-4 py-4 rounded-xl border-2 transition-all duration-300 ${
-                      focusedInput === 'email'
+                    className={`w-full pl-12 pr-4 py-4 rounded-xl border-2 transition-all duration-300 ${focusedInput === 'email'
                         ? 'bg-white/10 border-indigo-500 shadow-lg shadow-indigo-500/20 scale-[1.01]'
                         : isDark
                           ? 'bg-white/5 border-white/10 focus:border-indigo-500'
                           : 'bg-white/50 border-gray-200 focus:border-indigo-500'
-                    } focus:outline-none ${isDark ? 'text-white' : 'text-gray-900'}`}
+                      } focus:outline-none ${isDark ? 'text-white' : 'text-gray-900'}`}
                   />
                 </div>
               </div>
@@ -311,11 +306,10 @@ export default function Profile() {
                   Current Password
                 </label>
                 <div className="relative group">
-                  <Lock className={`absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 transition-all duration-300 ${
-                    focusedInput === 'password'
+                  <Lock className={`absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 transition-all duration-300 ${focusedInput === 'password'
                       ? 'text-indigo-500 scale-110'
                       : isDark ? 'text-gray-400' : 'text-gray-400'
-                  }`} />
+                    }`} />
                   <input
                     type={showPassword ? "text" : "password"}
                     name="password"
@@ -324,22 +318,20 @@ export default function Profile() {
                     onChange={handleInputChange}
                     onFocus={() => setFocusedInput('password')}
                     onBlur={() => setFocusedInput('')}
-                    className={`w-full pl-12 pr-12 py-4 rounded-xl border-2 transition-all duration-300 ${
-                      focusedInput === 'password'
+                    className={`w-full pl-12 pr-12 py-4 rounded-xl border-2 transition-all duration-300 ${focusedInput === 'password'
                         ? 'bg-white/10 border-indigo-500 shadow-lg shadow-indigo-500/20 scale-[1.01]'
                         : isDark
                           ? 'bg-white/5 border-white/10 focus:border-indigo-500'
                           : 'bg-white/50 border-gray-200 focus:border-indigo-500'
-                    } focus:outline-none ${isDark ? 'text-white placeholder-gray-500' : 'text-gray-900 placeholder-gray-400'}`}
+                      } focus:outline-none ${isDark ? 'text-white placeholder-gray-500' : 'text-gray-900 placeholder-gray-400'}`}
                   />
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
-                    className={`absolute right-4 top-1/2 -translate-y-1/2 p-1.5 rounded-lg transition-all ${
-                      isDark
+                    className={`absolute right-4 top-1/2 -translate-y-1/2 p-1.5 rounded-lg transition-all ${isDark
                         ? 'hover:bg-white/10 text-gray-400 hover:text-gray-200'
                         : 'hover:bg-gray-100 text-gray-500 hover:text-gray-700'
-                    }`}
+                      }`}
                   >
                     {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
                   </button>
@@ -352,11 +344,10 @@ export default function Profile() {
                   New Password
                 </label>
                 <div className="relative group">
-                  <Lock className={`absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 transition-all duration-300 ${
-                    focusedInput === 'newPassword'
+                  <Lock className={`absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 transition-all duration-300 ${focusedInput === 'newPassword'
                       ? 'text-indigo-500 scale-110'
                       : isDark ? 'text-gray-400' : 'text-gray-400'
-                  }`} />
+                    }`} />
                   <input
                     type={showPassword ? "text" : "password"}
                     name="newPassword"
@@ -365,22 +356,20 @@ export default function Profile() {
                     onChange={handleInputChange}
                     onFocus={() => setFocusedInput('newPassword')}
                     onBlur={() => setFocusedInput('')}
-                    className={`w-full pl-12 pr-4 py-4 rounded-xl border-2 transition-all duration-300 ${
-                      focusedInput === 'newPassword'
+                    className={`w-full pl-12 pr-4 py-4 rounded-xl border-2 transition-all duration-300 ${focusedInput === 'newPassword'
                         ? 'bg-white/10 border-indigo-500 shadow-lg shadow-indigo-500/20 scale-[1.01]'
                         : isDark
                           ? 'bg-white/5 border-white/10 focus:border-indigo-500'
                           : 'bg-white/50 border-gray-200 focus:border-indigo-500'
-                    } focus:outline-none ${isDark ? 'text-white placeholder-gray-500' : 'text-gray-900 placeholder-gray-400'}`}
+                      } focus:outline-none ${isDark ? 'text-white placeholder-gray-500' : 'text-gray-900 placeholder-gray-400'}`}
                   />
-                   <button
+                  <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
-                    className={`absolute right-4 top-1/2 -translate-y-1/2 p-1.5 rounded-lg transition-all ${
-                      isDark
+                    className={`absolute right-4 top-1/2 -translate-y-1/2 p-1.5 rounded-lg transition-all ${isDark
                         ? 'hover:bg-white/10 text-gray-400 hover:text-gray-200'
                         : 'hover:bg-gray-100 text-gray-500 hover:text-gray-700'
-                    }`}
+                      }`}
                   >
                     {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
                   </button>
@@ -403,11 +392,10 @@ export default function Profile() {
             </form>
 
             {/* Info Box */}
-            <div className={`p-4 rounded-xl border-2 ${
-              isDark
+            <div className={`p-4 rounded-xl border-2 ${isDark
                 ? 'bg-indigo-500/10 border-indigo-500/30'
                 : 'bg-indigo-50 border-indigo-200'
-            }`}>
+              }`}>
               <div className="flex items-start gap-2">
                 <Sparkles className="w-5 h-5 text-indigo-500 flex-shrink-0 mt-0.5" />
                 <div>
@@ -441,6 +429,6 @@ export default function Profile() {
         }
       `}</style>
     </div>
- 
+
   );
 }
