@@ -69,7 +69,7 @@ function App() {
         {/* Login route (public) */}
         <Route path="/login" element={<Login />} />
         <Route path="/car-register" element={<CarRegister />} />
-     
+
 
         {/* Protected routes */}
         <Route
@@ -102,15 +102,15 @@ function App() {
           <Route path="/plan" element={<Plans />} />
           <Route path="/profile" element={<Profile />} />
 
-        
+        </Route>
 
 
-          {/* Bike Garage CRM Routes */}
-          <Route path="/bike-dashboard" element={<BikeDashboard />} />
+        {/* Bike Garage CRM Routes */}
+        <Route path="/bike-dashboard" element={<BikeDashboard />} />
 
-          {/* Washing CRM Routes */}
-          <Route path="/wash-dashboard" element={<WashDashboard />} />
- 
+        {/* Washing CRM Routes */}
+        <Route path="/wash-dashboard" element={<WashDashboard />} />
+
         {/* Fallback */}
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
