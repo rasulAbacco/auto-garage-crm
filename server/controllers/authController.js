@@ -69,28 +69,34 @@ export const registerUser = async (req, res) => {
  */
 export const loginUser = async (req, res) => {
     try {
-        const { username, password } = req.body;
+        const { identifier, password, crmType } = req.body;
 
-        // ✅ Validate inputs
-        if (!username || !password) {
-            return res
-                .status(400)
-                .json({ message: "Username and password are required" });
+        if (!identifier || !password) {
+            return res.status(400).json({ message: "Email/Username and password are required" });
         }
 
-        // ✅ Find user
-        const user = await prisma.user.findUnique({ where: { username } });
+        console.log("📩 Login payload:", req.body);
+
+        // Detect if identifier is email or username
+        const isEmail = identifier.includes("@");
+
+        const user = await prisma.user.findFirst({
+            where: isEmail
+                ? { email: identifier }
+                : { username: identifier }
+        });
+
+        console.log("🔍 USER FOUND:", user);
+
         if (!user) {
-            return res.status(400).json({ message: "Invalid username or password" });
+            return res.status(400).json({ message: "Invalid credentials" });
         }
 
-        // ✅ Compare password
         const isMatch = await bcrypt.compare(password, user.password);
         if (!isMatch) {
-            return res.status(400).json({ message: "Invalid username or password" });
+            return res.status(400).json({ message: "Invalid credentials" });
         }
 
-        // ✅ Generate JWT
         const token = generateToken(user);
 
         return res.status(200).json({
@@ -101,13 +107,16 @@ export const loginUser = async (req, res) => {
                 username: user.username,
                 email: user.email,
                 role: user.role,
-            },
+                crmType
+            }
         });
+
     } catch (error) {
         console.error("❌ Login Error:", error);
-        res.status(500).json({ message: "Internal server error during login" });
+        return res.status(500).json({ message: "Internal server error" });
     }
 };
+
 
 /**
  * @desc Get current user's profile

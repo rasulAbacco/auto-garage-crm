@@ -1,579 +1,600 @@
-import React, { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
-
+import React, { useState, useEffect, useRef } from "react";
 import {
-    Car, User, Lock, Eye, EyeOff, ArrowRight,
-    Sparkles, Shield, Zap, ChevronRight,
-    Mail, Phone, Globe, AlertCircle,
-    KeyRound, Fingerprint, Loader2, Star, TrendingUp,
-    Award, Users, Clock
+    Car,
+    Bike,
+    Droplets,
+    Mail,
+    Lock,
+    Eye,
+    EyeOff,
+    ArrowRight,
+    Shield,
+    Users,
+    Star,
+    Server,
+    TrendingUp,
+    Settings,
+    Calendar,
+    Wrench,
+    Zap,
+    Sparkles
 } from "lucide-react";
-
 import PublicLayout from "../components/PublicLayout";
-import { useTheme } from "../contexts/ThemeContext";
 
-const API_URL = import.meta.env.VITE_API_BASE_URL;
-export default function Login() {
-
-    const [formData, setFormData] = useState({
-        username: "",
-        password: ""
-    });
-    const navigate = useNavigate();
-
-    const { isDark } = useTheme();
-    const [showPassword, setShowPassword] = useState(false);
-    const [rememberMe, setRememberMe] = useState(false);
+export default function ModernLogin() {
+    const [formData, setFormData] = useState({ identifier: "", password: "" });
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState("");
-    const [focusedInput, setFocusedInput] = useState("");
-    const [loginMethod, setLoginMethod] = useState("credentials");
+    const [showPassword, setShowPassword] = useState(false);
+    const [crmType, setCrmType] = useState("car");
     const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
+    const [transitioning, setTransitioning] = useState(false);
+    const [floatingElements, setFloatingElements] = useState([]);
+    const [particles, setParticles] = useState([]);
+    const [ripples, setRipples] = useState([]);
+    const containerRef = useRef(null);
 
+    const CRM_CONFIG = {
+        car: {
+            label: "Car Garage",
+            icon: Car,
+            gradient: "from-blue-600 via-cyan-500 to-blue-400",
+            bgGradient: "from-slate-950 via-blue-950 to-indigo-950",
+            accentColor: "#3b82f6",
+            lightAccent: "rgba(59, 130, 246, 0.3)",
+            particleColor: "#60a5fa",
+            title: "Drive Your Business Forward",
+            subtitle: "Professional automotive service management",
+            features: [
+                { icon: Wrench, text: "Service Management", color: "text-blue-400" },
+                { icon: Users, text: "Customer Database", color: "text-cyan-400" },
+                { icon: Calendar, text: "Smart Scheduling", color: "text-blue-300" },
+                { icon: Settings, text: "Inventory Control", color: "text-cyan-300" }
+            ],
+            stats: [
+                { icon: Users, value: "50K+", label: "Active Users" },
+                { icon: Star, value: "4.9", label: "Rating" },
+                { icon: Server, value: "99.9%", label: "Uptime" },
+                { icon: TrendingUp, value: "2x", label: "Growth" }
+            ]
+        },
+        bike: {
+            label: "Bike Workshop",
+            icon: Bike,
+            gradient: "from-emerald-600 via-teal-500 to-green-400",
+            bgGradient: "from-slate-950 via-emerald-950 to-teal-950",
+            accentColor: "#10b981",
+            lightAccent: "rgba(16, 185, 129, 0.3)",
+            particleColor: "#34d399",
+            title: "Rev Up Your Workshop",
+            subtitle: "Specialized two-wheeler service solutions",
+            features: [
+                { icon: Wrench, text: "Repair Tracking", color: "text-emerald-400" },
+                { icon: Users, text: "Customer Profiles", color: "text-teal-400" },
+                { icon: Calendar, text: "Service Reminders", color: "text-green-300" },
+                { icon: Settings, text: "Parts Management", color: "text-emerald-300" }
+            ],
+            stats: [
+                { icon: Users, value: "30K+", label: "Active Users" },
+                { icon: Star, value: "4.8", label: "Rating" },
+                { icon: Server, value: "99.8%", label: "Uptime" },
+                { icon: TrendingUp, value: "2.5x", label: "Growth" }
+            ]
+        },
+        wash: {
+            label: "Car Wash",
+            icon: Droplets,
+            gradient: "from-violet-600 via-purple-500 to-fuchsia-400",
+            bgGradient: "from-slate-950 via-purple-950 to-fuchsia-950",
+            accentColor: "#8b5cf6",
+            lightAccent: "rgba(139, 92, 246, 0.3)",
+            particleColor: "#a78bfa",
+            title: "Shine Bright Every Day",
+            subtitle: "Complete car wash business management",
+            features: [
+                { icon: Droplets, text: "Service Packages", color: "text-violet-400" },
+                { icon: Users, text: "Loyalty Programs", color: "text-purple-400" },
+                { icon: Calendar, text: "Booking System", color: "text-fuchsia-300" },
+                { icon: Zap, text: "Quick Checkout", color: "text-violet-300" }
+            ],
+            stats: [
+                { icon: Users, value: "20K+", label: "Active Users" },
+                { icon: Star, value: "4.7", label: "Rating" },
+                { icon: Server, value: "99.7%", label: "Uptime" },
+                { icon: TrendingUp, value: "3x", label: "Growth" }
+            ]
+        }
+    };
+
+    const currentConfig = CRM_CONFIG[crmType];
+
+    // Initialize floating elements and particles
+    useEffect(() => {
+        const elements = Array(25).fill().map((_, i) => ({
+            id: i,
+            x: Math.random() * 100,
+            y: Math.random() * 100,
+            size: Math.random() * 80 + 30,
+            duration: Math.random() * 25 + 20,
+            delay: Math.random() * -20
+        }));
+        setFloatingElements(elements);
+
+        const particleElements = Array(50).fill().map((_, i) => ({
+            id: i,
+            x: Math.random() * 100,
+            y: Math.random() * 100,
+            size: Math.random() * 4 + 2,
+            duration: Math.random() * 30 + 20,
+            delay: Math.random() * -10
+        }));
+        setParticles(particleElements);
+    }, []);
+
+    // Mouse tracking
     useEffect(() => {
         const handleMouseMove = (e) => {
-            setMousePosition({ x: e.clientX, y: e.clientY });
+            if (containerRef.current) {
+                const rect = containerRef.current.getBoundingClientRect();
+                setMousePosition({
+                    x: ((e.clientX - rect.left) / rect.width) * 100,
+                    y: ((e.clientY - rect.top) / rect.height) * 100
+                });
+            }
         };
+
         window.addEventListener('mousemove', handleMouseMove);
         return () => window.removeEventListener('mousemove', handleMouseMove);
     }, []);
 
+    const handleCrmChange = (type) => {
+        if (type === crmType) return;
+
+        // Create ripple effect from button
+        const newRipple = {
+            id: Date.now(),
+            x: 50,
+            y: 50
+        };
+        setRipples(prev => [...prev, newRipple]);
+
+        setTransitioning(true);
+        setTimeout(() => {
+            setCrmType(type);
+            // Re-generate particles with new colors
+            const particleElements = Array(50).fill().map((_, i) => ({
+                id: i,
+                x: Math.random() * 100,
+                y: Math.random() * 100,
+                size: Math.random() * 4 + 2,
+                duration: Math.random() * 30 + 20,
+                delay: Math.random() * -10
+            }));
+            setParticles(particleElements);
+
+            setTimeout(() => setTransitioning(false), 50);
+        }, 400);
+
+        // Remove ripple after animation
+        setTimeout(() => {
+            setRipples(prev => prev.filter(r => r.id !== newRipple.id));
+        }, 2000);
+    };
+
     const handleInputChange = (e) => {
         const { name, value } = e.target;
-        setFormData(prev => ({ ...prev, [name]: value }));
+        setFormData((prev) => ({ ...prev, [name]: value }));
         if (error) setError("");
     };
 
     const handleSubmit = async (e) => {
         e.preventDefault();
-        setError("");
         setIsLoading(true);
+        setError("");
+
+        if (!formData.identifier || !formData.password) {
+            setError("Please fill in all fields");
+            setIsLoading(false);
+            return;
+        }
 
         try {
-            const response = await fetch(`${API_URL}/api/auth/login`, {
+            const response = await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/auth/login`, {
                 method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(formData),
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                    identifier: formData.identifier, // email or username
+                    password: formData.password,
+                    crmType: crmType
+                }),
             });
 
             const data = await response.json();
-            setIsLoading(false);
 
-            if (response.ok) {
-                localStorage.setItem("token", data.token);
-                localStorage.setItem("user", JSON.stringify(data.user));
-                alert(`Welcome ${data.user.username}!`);
-                navigate("/dashboard"); // 🚀 navigate instead of reload
-            } else {
-                setError(data.message || "Invalid credentials");
+            if (!response.ok) {
+                setError(data.message || "Invalid login");
+                setIsLoading(false);
+                return;
             }
+
+            // SAVE TOKEN + USER
+            localStorage.setItem("token", data.token);
+            localStorage.setItem("user", JSON.stringify(data.user));
+            localStorage.setItem("crmType", crmType);
+
+            // REDIRECT TO DASHBOARD
+            window.location.href = `/${crmType}-dashboard`;
+
         } catch (err) {
-            setIsLoading(false);
-            setError("Server error. Please try again later.");
+            console.error(err);
+            setError("Server error. Try again later.");
         }
+
+        setIsLoading(false);
     };
 
-    const socialLogins = [
-        { name: "Google", gradient: "from-red-500 to-yellow-500" },
-        { name: "GitHub", gradient: "from-gray-700 to-gray-900" },
-        { name: "Apple", gradient: "from-gray-600 to-black" }
-    ];
 
-    const features = [
-        { icon: Shield, text: "Enterprise Security", color: "blue" },
-        { icon: Zap, text: "Lightning Fast", color: "purple" },
-        { icon: Globe, text: "Global Access", color: "blue" },
-        { icon: Award, text: "Industry Leading", color: "purple" }
-    ];
-
-    const stats = [
-        { icon: Users, value: "50K+", label: "Active Users" },
-        { icon: Star, value: "4.9", label: "Rating" },
-        { icon: Clock, value: "99.9%", label: "Uptime" },
-        { icon: TrendingUp, value: "2x", label: "Growth" }
-    ];
+    const IconComponent = currentConfig.icon;
 
     return (
-        <PublicLayout>
-            <div className={` mt-[8%] pt-[5%] min-h-screen relative overflow-hidden transition-all duration-700 ${isDark
-                ? 'bg-gradient-to-br from-slate-950 via-indigo-950 to-slate-950'
-                : 'bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50'
-                }`}>
-
-                {/* Animated Background */}
-                <div className="absolute inset-0 overflow-hidden pointer-events-none">
-                    {/* Gradient Orbs */}
-                    <div className={`absolute top-1/4 -left-48 w-96 h-96 rounded-full blur-3xl opacity-30 animate-pulse ${isDark ? 'bg-indigo-600' : 'bg-indigo-400'
-                        }`} style={{ animationDuration: '8s' }}></div>
-                    <div className={`absolute bottom-1/4 -right-48 w-96 h-96 rounded-full blur-3xl opacity-30 animate-pulse ${isDark ? 'bg-purple-600' : 'bg-purple-400'
-                        }`} style={{ animationDuration: '10s', animationDelay: '1s' }}></div>
-                    <div className={`absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 rounded-full blur-3xl opacity-20 animate-pulse ${isDark ? 'bg-pink-600' : 'bg-pink-400'
-                        }`} style={{ animationDuration: '12s', animationDelay: '2s' }}></div>
-
-                    {/* Floating Particles */}
-                    {[...Array(20)].map((_, i) => (
+      <PublicLayout>
+            <div
+                ref={containerRef}
+                className={`min-h-screen pt-[12%] relative overflow-hidden transition-all duration-1000 bg-gradient-to-br ${currentConfig.bgGradient}`}
+            >
+                {/* Animated Background Orbs */}
+                <div className="absolute inset-0 overflow-hidden">
+                    {floatingElements.map((elem) => (
                         <div
-                            key={i}
-                            className={`absolute w-1 h-1 rounded-full ${isDark ? 'bg-white' : 'bg-indigo-500'}`}
+                            key={elem.id}
+                            className="absolute rounded-full blur-3xl opacity-20"
                             style={{
-                                left: `${Math.random() * 100}%`,
-                                top: `${Math.random() * 100}%`,
-                                opacity: Math.random() * 0.5,
-                                animation: `float ${5 + Math.random() * 10}s infinite ease-in-out`,
-                                animationDelay: `${Math.random() * 5}s`
+                                left: `${elem.x}%`,
+                                top: `${elem.y}%`,
+                                width: `${elem.size}px`,
+                                height: `${elem.size}px`,
+                                background: `radial-gradient(circle, ${currentConfig.accentColor}, transparent)`,
+                                animation: `float ${elem.duration}s infinite ease-in-out ${elem.delay}s`,
                             }}
-                        ></div>
+                        />
                     ))}
-
-                    {/* Grid Pattern */}
-                    <div className={`absolute inset-0 ${isDark ? 'opacity-10' : 'opacity-5'}`}
-                        style={{
-                            backgroundImage: `radial-gradient(circle at 1px 1px, ${isDark ? 'rgba(255,255,255,0.15)' : 'rgba(99,102,241,0.15)'} 1px, transparent 0)`,
-                            backgroundSize: '40px 40px'
-                        }}
-                    ></div>
                 </div>
 
-                {/* Mouse Follow Gradient */}
+                {/* Animated Particles */}
+                <div className="absolute inset-0 overflow-hidden">
+                    {particles.map((particle) => (
+                        <div
+                            key={particle.id}
+                            className="absolute rounded-full opacity-40"
+                            style={{
+                                left: `${particle.x}%`,
+                                top: `${particle.y}%`,
+                                width: `${particle.size}px`,
+                                height: `${particle.size}px`,
+                                background: currentConfig.particleColor,
+                                animation: `particleFloat ${particle.duration}s infinite ease-in-out ${particle.delay}s`,
+                                boxShadow: `0 0 10px ${currentConfig.particleColor}`
+                            }}
+                        />
+                    ))}
+                </div>
+
+                {/* Transition Ripples */}
+                {ripples.map((ripple) => (
+                    <div
+                        key={ripple.id}
+                        className="absolute rounded-full opacity-30 pointer-events-none"
+                        style={{
+                            left: `${ripple.x}%`,
+                            top: `${ripple.y}%`,
+                            width: '20px',
+                            height: '20px',
+                            background: `radial-gradient(circle, ${currentConfig.accentColor}, transparent)`,
+                            animation: 'ripple 2s ease-out forwards',
+                            transform: 'translate(-50%, -50%)'
+                        }}
+                    />
+                ))}
+
+                {/* Mouse Tracking Gradient */}
                 <div
-                    className="fixed inset-0 pointer-events-none transition-opacity duration-300 z-0"
+                    className="absolute inset-0 opacity-40 transition-all duration-500"
                     style={{
-                        background: `radial-gradient(800px circle at ${mousePosition.x}px ${mousePosition.y}px, 
-                    ${isDark ? 'rgba(99, 102, 241, 0.15)' : 'rgba(99, 102, 241, 0.1)'}, 
-                    transparent 50%)`
+                        background: `radial-gradient(circle 800px at ${mousePosition.x}% ${mousePosition.y}%, ${currentConfig.lightAccent}, transparent 70%)`
                     }}
                 />
 
-                {/* Main Content */}
-                <div className="relative z-10 min-h-screen flex items-center justify-center p-4 sm:p-6 lg:p-8">
-                    <div className="w-full max-w-7xl grid lg:grid-cols-2 gap-8 lg:gap-12 items-center">
+                {/* Animated Grid Pattern */}
+                <div
+                    className="absolute inset-0 opacity-10"
+                    style={{
+                        backgroundImage: `linear-gradient(${currentConfig.accentColor} 1.5px, transparent 1.5px), linear-gradient(90deg, ${currentConfig.accentColor} 1.5px, transparent 1.5px)`,
+                        backgroundSize: '60px 60px',
+                        animation: 'gridMove 20s linear infinite'
+                    }}
+                />
 
-                        {/* Left Side - Hero Section */}
-                        <div className="hidden lg:block space-y-8">
-                            {/* Logo & Brand */}
-                            <div className="space-y-6">
-                                <div className="inline-flex items-center gap-4 group cursor-pointer">
-                                    <div className="relative">
-                                        <div className="absolute inset-0 bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 rounded-2xl blur-xl opacity-75 group-hover:opacity-100 transition-all duration-300"></div>
-                                        <div className={`relative p-4 rounded-2xl backdrop-blur-xl border ${isDark
-                                            ? 'bg-white/10 border-white/20'
-                                            : 'bg-white/80 border-white/40'
-                                            } shadow-2xl transform group-hover:scale-110 transition-all duration-300`}>
-                                            <Car className={`w-10 h-10 ${isDark ? 'text-white' : 'text-[#5247e6]'}`} strokeWidth={2.5} />
+                <div className="relative z-10 min-h-screen flex items-center justify-center p-4">
+                    <div className="w-full max-w-6xl grid lg:grid-cols-2 gap-8 lg:gap-16">
+
+                        {/* Left Panel - Information */}
+                        <div className={`hidden lg:flex flex-col justify-center transition-all duration-700 ${transitioning ? 'opacity-0 -translate-x-20 scale-95' : 'opacity-100 translate-x-0 scale-100'}`}>
+                            {/* Logo and Title */}
+                            <div className="mb-10 space-y-1">
+                                <div className="flex items-center mb-6 group">
+                                    <div
+                                        className={`relative p-5 rounded-2xl bg-gradient-to-br ${currentConfig.gradient} shadow-2xl transform hover:scale-110 hover:rotate-6 transition-all duration-500`}
+                                        style={{
+                                            boxShadow: `0 25px 70px ${currentConfig.lightAccent}`
+                                        }}
+                                    >
+                                        <IconComponent className="w-12 h-12 text-white" />
+                                        <div className="absolute inset-0 rounded-2xl bg-white opacity-0 group-hover:opacity-20 transition-opacity duration-300" />
+                                    </div>
+                                    <div className="ml-5">
+                                        <div className="flex items-center space-x-3">
+                                            <h1 className="text-5xl font-black text-white tracking-tight">
+                                                {currentConfig.label}
+                                            </h1>
+                                            <Sparkles className="w-7 h-7 text-yellow-400 animate-pulse" style={{
+                                                animation: 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite'
+                                            }} />
                                         </div>
-                                    </div>
-                                    <div>
-                                        <h1 className={`text-4xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                                            Motor<span className="bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 bg-clip-text text-transparent">Desk</span>
-                                        </h1>
-                                        <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
-                                            Next-Gen Garage Management
-                                        </p>
+                                        <p className="text-gray-400 text-sm mt-2 font-medium tracking-wide">CRM Platform</p>
                                     </div>
                                 </div>
 
-                                {/* Hero Text */}
-                                <div className="space-y-4">
-                                    <h2 className={`text-5xl font-bold leading-tight ${isDark ? 'text-white' : 'text-gray-900'
-                                        }`}>
-                                        Transform Your
-                                        <span className="block mt-2 bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 bg-clip-text text-transparent">
-                                            Garage Operations
-                                        </span>
-                                    </h2>
-                                    <p className={`text-lg leading-relaxed ${isDark ? 'text-gray-400' : 'text-gray-600'
-                                        }`}>
-                                        Experience the future of automotive management with our cutting-edge platform designed for modern garages.
-                                    </p>
-                                </div>
+                                <h2 className="text-6xl font-black text-white mb-5 leading-tight bg-clip-text text-transparent bg-gradient-to-r from-white to-gray-300">
+                                    {currentConfig.title}
+                                </h2>
+                                <p className="text-xl text-gray-300 font-light">
+                                    {currentConfig.subtitle}
+                                </p>
+                            </div>
 
-                                {/* Stats Grid */}
-                                <div className="grid grid-cols-2 gap-4">
-                                    {stats.map((stat, index) => {
-                                        const Icon = stat.icon;
-                                        return (
-                                            <div
-                                                key={index}
-                                                className={`group p-6 rounded-2xl backdrop-blur-xl border transition-all duration-300 hover:scale-105 cursor-pointer ${isDark
-                                                    ? 'bg-white/5 border-white/10 hover:bg-white/10'
-                                                    : 'bg-white/60 border-white/60 hover:bg-white/80'
-                                                    }`}
-                                            >
-                                                <Icon className={`w-6 h-6 mb-3 ${isDark ? 'text-indigo-400' : 'text-indigo-600'
-                                                    } group-hover:scale-110 transition-transform`} />
-                                                <div className="text-3xl font-bold bg-gradient-to-r from-indigo-500 to-purple-500 bg-clip-text text-transparent">
+                            {/* Features Grid */}
+                            <div className="grid grid-cols-2 gap-5 mb-12">
+                                {currentConfig.features.map((feature, index) => {
+                                    const FeatureIcon = feature.icon;
+                                    return (
+                                        <div
+                                            key={index}
+                                            className="group relative bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl p-6 hover:bg-white/10 transition-all duration-500 hover:scale-105 hover:-translate-y-1"
+                                            style={{
+                                                animation: `fadeInUp 0.6s ease-out ${index * 100}ms backwards`,
+                                                boxShadow: '0 10px 40px rgba(0,0,0,0.2)'
+                                            }}
+                                        >
+                                            <div className="absolute inset-0 rounded-2xl bg-gradient-to-br opacity-0 group-hover:opacity-10 transition-opacity duration-500"
+                                                style={{
+                                                    background: `linear-gradient(to bottom right, ${currentConfig.accentColor}, transparent)`
+                                                }}
+                                            />
+                                            <div className="flex items-start space-x-4 relative z-10">
+                                                <div className={`p-3 rounded-xl bg-gradient-to-br ${currentConfig.gradient} opacity-80 group-hover:opacity-100 transition-all duration-500 group-hover:rotate-6 group-hover:scale-110`}
+                                                    style={{
+                                                        boxShadow: `0 10px 30px ${currentConfig.lightAccent}`
+                                                    }}>
+                                                    <FeatureIcon className="w-6 h-6 text-white" />
+                                                </div>
+                                                <div>
+                                                    <p className={`font-bold text-base ${feature.color} group-hover:text-white transition-colors duration-300`}>
+                                                        {feature.text}
+                                                    </p>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+
+                            {/* Stats */}
+                            <div className="grid grid-cols-4 gap-5">
+                                {currentConfig.stats.map((stat, index) => {
+                                    const StatIcon = stat.icon;
+                                    return (
+                                        <div
+                                            key={index}
+                                            className="relative group bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl p-5 text-center hover:bg-white/10 transition-all duration-500 hover:scale-110 hover:-translate-y-2"
+                                            style={{
+                                                animation: `fadeInUp 0.6s ease-out ${(index + 4) * 100}ms backwards`,
+                                                boxShadow: '0 10px 40px rgba(0,0,0,0.2)'
+                                            }}
+                                        >
+                                            <div className="absolute inset-0 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-500"
+                                                style={{
+                                                    background: `linear-gradient(to bottom, ${currentConfig.lightAccent}, transparent)`,
+                                                }}
+                                            />
+                                            <div className="relative z-10">
+                                                <StatIcon className="w-7 h-7 text-white mx-auto mb-3 opacity-80 group-hover:opacity-100 transition-all duration-300 group-hover:scale-110" />
+                                                <div className="text-3xl font-black text-white mb-1 group-hover:scale-110 transition-transform duration-300">
                                                     {stat.value}
                                                 </div>
-                                                <div className={`text-sm mt-1 ${isDark ? 'text-gray-400' : 'text-gray-600'
-                                                    }`}>
+                                                <div className="text-xs text-gray-400 uppercase tracking-wider font-medium">
                                                     {stat.label}
                                                 </div>
                                             </div>
-                                        );
-                                    })}
-                                </div>
-
-                                {/* Features List */}
-                                <div className="space-y-3">
-                                    {features.map((feature, index) => {
-                                        const Icon = feature.icon;
-                                        return (
-                                            <div
-                                                key={index}
-                                                className={`flex items-center gap-4 p-4 rounded-xl backdrop-blur-sm border transition-all duration-300 hover:scale-105 cursor-pointer ${isDark
-                                                    ? 'bg-white/5 border-white/10 hover:bg-white/10'
-                                                    : 'bg-white/40 border-white/60 hover:bg-white/70'
-                                                    }`}
-                                            >
-                                                <div className={`p-2 rounded-lg bg-gradient-to-br from-${feature.color}-500 to-${feature.color}-600`}>
-                                                    <Icon className="w-5 h-5 text-white" />
-                                                </div>
-                                                <span className={`font-medium ${isDark ? 'text-gray-200' : 'text-gray-800'
-                                                    }`}>
-                                                    {feature.text}
-                                                </span>
-                                            </div>
-                                        );
-                                    })}
-                                </div>
+                                        </div>
+                                    );
+                                })}
                             </div>
                         </div>
 
-                        {/* Right Side - Login Card */}
-                        <div className="w-full max-w-md mx-auto lg:mx-0">
-                            <div className={`relative rounded-3xl backdrop-blur-2xl border shadow-2xl transition-all duration-500 ${isDark
-                                ? 'bg-white/10 border-white/20'
-                                : 'bg-white/80 border-white/40'
-                                }`}>
-                                {/* Decorative Top Element */}
-                                <div className="absolute -top-6 left-1/2 -translate-x-1/2">
+                        {/* Right Panel - Login Form */}
+                        <div className={`flex items-center justify-center transition-all duration-700 ${transitioning ? 'opacity-0 translate-x-20 scale-95 rotate-3' : 'opacity-100 translate-x-0 scale-100 rotate-0'}`}>
+                            <div className="w-full max-w-md">
+                                {/* Glass Card */}
+                                <div className="relative bg-white/10 backdrop-blur-2xl border border-white/20 rounded-3xl shadow-2xl p-8 hover:border-white/30 transition-all duration-500">
+                                    {/* Glowing Border Effect */}
+                                    <div
+                                        className="absolute -inset-0.5 rounded-3xl opacity-30 blur-xl transition-opacity duration-500 group-hover:opacity-50"
+                                        style={{
+                                            background: `linear-gradient(45deg, ${currentConfig.accentColor}, transparent, ${currentConfig.accentColor})`
+                                        }}
+                                    />
+
                                     <div className="relative">
-                                        <div className="absolute inset-0 bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 rounded-full blur-2xl opacity-60 animate-pulse"></div>
-                                        <div className={`relative w-20 h-20 rounded-full flex items-center justify-center backdrop-blur-xl border-4 shadow-2xl ${isDark
-                                            ? 'bg-slate-300 border-white/20'
-                                            : 'bg-white border-white/60'
-                                            }`}>
-                                            <Fingerprint className={`w-8 h-8 bg-gradient-to-r from-indigo-500 to-purple-500 bg-clip-text`} strokeWidth={2.5} />
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <div className="p-8 sm:p-10 mt-8 space-y-8">
-                                    {/* Header */}
-                                    <div className="text-center space-y-2">
-                                        <h3 className={`text-3xl font-bold ${isDark ? 'text-white' : 'text-gray-900'
-                                            }`}>
-                                            Welcome Back
-                                        </h3>
-                                        <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'
-                                            }`}>
-                                            Sign in to access your dashboard
-                                        </p>
-                                    </div>
-
-                                    {/* Login Method Selector */}
-                                    <div className={`flex gap-2 p-2 rounded-2xl ${isDark ? 'bg-white/5' : 'bg-gray-100'
-                                        }`}>
-                                        {[
-                                            { id: 'credentials', icon: KeyRound, label: 'Password' },
-                                            { id: 'phone', icon: Phone, label: 'Phone' },
-                                            { id: 'email', icon: Mail, label: 'Email' }
-                                        ].map((method) => {
-                                            const Icon = method.icon;
-                                            return (
-                                                <button
-                                                    key={method.id}
-                                                    onClick={() => setLoginMethod(method.id)}
-                                                    className={`flex-1 flex items-center justify-center gap-2 py-3 px-4 rounded-xl font-medium text-sm transition-all duration-300 ${loginMethod === method.id
-                                                        ? isDark
-                                                            ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-lg'
-                                                            : 'bg-white text-gray-900 shadow-md'
-                                                        : isDark
-                                                            ? 'text-gray-400 hover:text-gray-200 hover:bg-white/5'
-                                                            : 'text-gray-600 hover:text-gray-900 hover:bg-white/50'
-                                                        }`}
-                                                >
-                                                    <Icon className="w-4 h-4" />
-                                                    <span className="hidden sm:inline">{method.label}</span>
-                                                </button>
-                                            );
-                                        })}
-                                    </div>
-
-                                    {/* Form */}
-                                    <form onSubmit={handleSubmit} className="space-y-5">
-                                        {loginMethod === 'credentials' && (
-                                            <>
-                                                {/* Username */}
-                                                <div className="space-y-2">
-                                                    <label className={`text-sm font-semibold ${isDark ? 'text-gray-300' : 'text-gray-700'
-                                                        }`}>
-                                                        Username
-                                                    </label>
-                                                    <div className="relative group">
-                                                        <User className={`absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 transition-all duration-300 ${focusedInput === 'username'
-                                                            ? 'text-indigo-500 scale-110'
-                                                            : isDark ? 'text-gray-100' : 'text-gray-400'
-                                                            }`} />
-                                                        <input
-                                                            type="text"
-                                                            name="username"
-                                                            value={formData.username}
-                                                            onChange={handleInputChange}
-                                                            onFocus={() => setFocusedInput('username')}
-                                                            onBlur={() => setFocusedInput('')}
-                                                            placeholder="Enter your username"
-                                                            required
-                                                            className={`w-full pl-12 pr-4 py-4 rounded-xl border-2 transition-all duration-300 ${focusedInput === 'username'
-                                                                ? 'border-indigo-500 shadow-lg shadow-indigo-500/20 scale-[1.01]'
-                                                                : error
-                                                                    ? 'border-red-400'
-                                                                    : isDark
-                                                                        ? 'bg-white/5 border-white/10 focus:border-indigo-500 focus:bg-white/5'
-                                                                        : 'bg-white/50 border-gray-200 focus:border-indigo-500 focus:bg-white/50'
-                                                                } focus:outline-none ${isDark ? 'text-white placeholder-gray-100' : 'text-gray-900 placeholder-gray-400'
-                                                                }`}
-                                                        />
-                                                    </div>
+                                        {/* Mobile Header */}
+                                        <div className="lg:hidden mb-8 text-center">
+                                            <div className="inline-flex items-center space-x-3 mb-4">
+                                                <div className={`p-3 rounded-xl bg-gradient-to-br ${currentConfig.gradient} animate-pulse`}
+                                                    style={{
+                                                        animation: 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite'
+                                                    }}>
+                                                    <IconComponent className="w-8 h-8 text-white" />
                                                 </div>
+                                                <h2 className="text-3xl font-black text-white">
+                                                    {currentConfig.label}
+                                                </h2>
+                                            </div>
+                                        </div>
 
-                                                {/* Password */}
-                                                <div className="space-y-2">
-                                                    <div className="flex justify-between items-center">
-                                                        <label className={`text-sm font-semibold ${isDark ? 'text-gray-300' : 'text-gray-700'
-                                                            }`}>
-                                                            Password
-                                                        </label>
+                                        {/* Welcome Text */}
+                                        <div className="text-center mb-8">
+                                            <h3 className="text-3xl font-black text-white mb-2 bg-clip-text text-transparent bg-gradient-to-r from-white via-gray-100 to-gray-300">
+                                                Welcome Back
+                                            </h3>
+                                            <p className="text-gray-300 font-light">
+                                                Sign in to continue to your dashboard
+                                            </p>
+                                        </div>
+
+                                        {/* CRM Type Selector */}
+                                        <div className="mb-8 relative">
+                                            <div className="bg-black/30 backdrop-blur-sm rounded-2xl p-1.5 grid grid-cols-3 gap-1.5 shadow-xl">
+                                                {Object.entries(CRM_CONFIG).map(([key, config]) => {
+                                                    const TabIcon = config.icon;
+                                                    return (
                                                         <button
-                                                            type="button"
-                                                            className="text-sm font-medium text-indigo-500 hover:text-indigo-400 transition-colors"
-                                                        >
-                                                            Forgot?
-                                                        </button>
-                                                    </div>
-                                                    <div className="relative group">
-                                                        <Lock className={`absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 transition-all duration-300 ${focusedInput === 'password'
-                                                            ? 'text-indigo-500 scale-110'
-                                                            : isDark ? 'text-gray-100' : 'text-gray-400'
-                                                            }`} />
-                                                        <input
-                                                            type={showPassword ? "text" : "password"}
-                                                            name="password"
-                                                            value={formData.password}
-                                                            onChange={handleInputChange}
-                                                            onFocus={() => setFocusedInput('password')}
-                                                            onBlur={() => setFocusedInput('')}
-                                                            placeholder="Enter your password"
-                                                            required
-                                                            className={`w-full pl-12 pr-12 py-4 rounded-xl border-2 transition-all duration-300 ${focusedInput === 'password'
-                                                                ? 'border-indigo-500 shadow-lg shadow-indigo-500/20 scale-[1.01]'
-                                                                : error
-                                                                    ? 'border-red-400'
-                                                                    : isDark
-                                                                        ? 'bg-white/5 border-white/10 focus:border-indigo-500'
-                                                                        : 'bg-white/50 border-gray-200 focus:border-indigo-500'
-                                                                } focus:outline-none ${isDark ? 'text-white placeholder-gray-100' : 'text-gray-900 placeholder-gray-400'
-                                                                }`}
-                                                        />
-                                                        <button
-                                                            type="button"
-                                                            onClick={() => setShowPassword(!showPassword)}
-                                                            className={`absolute right-4 top-1/2 -translate-y-1/2 p-1.5 rounded-lg transition-all ${isDark
-                                                                ? 'hover:bg-white/10 text-gray-400 hover:text-gray-200'
-                                                                : 'hover:bg-gray-100 text-gray-500 hover:text-gray-700'
+                                                            key={key}
+                                                            onClick={() => handleCrmChange(key)}
+                                                            className={`relative py-3 px-4 rounded-xl font-semibold transition-all duration-500 flex flex-col items-center justify-center space-y-1.5 ${crmType === key
+                                                                ? 'text-white scale-105'
+                                                                : 'text-gray-400 hover:text-gray-200 hover:scale-105'
                                                                 }`}
                                                         >
-                                                            {showPassword ? (
-                                                                <EyeOff className="w-5 h-5" />
-                                                            ) : (
-                                                                <Eye className="w-5 h-5" />
+                                                            {crmType === key && (
+                                                                <>
+                                                                    <div
+                                                                        className={`absolute inset-0 rounded-xl bg-gradient-to-br ${config.gradient} transition-all duration-500`}
+                                                                        style={{
+                                                                            boxShadow: `0 15px 40px ${config.lightAccent}`
+                                                                        }}
+                                                                    />
+                                                                    <div className="absolute inset-0 rounded-xl bg-white opacity-0 animate-pulse"
+                                                                        style={{
+                                                                            animation: 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite'
+                                                                        }}
+                                                                    />
+                                                                </>
                                                             )}
+                                                            <TabIcon className={`w-5 h-5 relative z-10 transition-transform duration-300 ${crmType === key ? 'scale-110' : ''}`} />
+                                                            <span className="text-xs relative z-10 font-bold">{config.label}</span>
                                                         </button>
-                                                    </div>
-                                                </div>
+                                                    );
+                                                })}
+                                            </div>
+                                        </div>
 
-                                                {/* Remember Me */}
-                                                <div className="flex items-center justify-between">
-                                                    <label className="flex items-center gap-2 cursor-pointer group">
-                                                        <input
-                                                            type="checkbox"
-                                                            checked={rememberMe}
-                                                            onChange={(e) => setRememberMe(e.target.checked)}
-                                                            className="w-5 h-5 rounded-lg border-2 text-indigo-600 focus:ring-2 focus:ring-indigo-500 focus:ring-offset-0 transition-all"
-                                                        />
-                                                        <span className={`text-sm font-medium ${isDark ? 'text-gray-300 group-hover:text-white' : 'text-gray-700 group-hover:text-gray-900'
-                                                            } transition-colors`}>
-                                                            Remember me
-                                                        </span>
-                                                    </label>
-                                                </div>
-
-                                                {/* Error Message */}
-                                                {error && (
-                                                    <div className={`flex items-start gap-3 p-4 rounded-xl border-2 ${isDark
-                                                        ? 'bg-red-500/10 border-red-500/30'
-                                                        : 'bg-red-50 border-red-200'
-                                                        }`}>
-                                                        <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
-                                                        <p className={`text-sm font-medium ${isDark ? 'text-red-400' : 'text-red-600'
-                                                            }`}>
-                                                            {error}
-                                                        </p>
-                                                    </div>
-                                                )}
-                                            </>
-                                        )}
-
-                                        {loginMethod === 'phone' && (
-                                            <div className="space-y-2">
-                                                <label className={`text-sm font-semibold ${isDark ? 'text-gray-300' : 'text-gray-700'
-                                                    }`}>
-                                                    Phone Number
+                                        {/* Login Form */}
+                                        <form onSubmit={handleSubmit} className="space-y-6">
+                                            {/* Email Field */}
+                                            <div className="group">
+                                                <label className="block text-sm font-semibold text-gray-300 mb-2">
+                                                    Email or Username
                                                 </label>
                                                 <div className="relative">
-                                                    <Phone className={`absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 ${isDark ? 'text-gray-500' : 'text-gray-400'
-                                                        }`} />
+                                                    <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400 transition-all duration-300 group-focus-within:text-white group-focus-within:scale-110" />
                                                     <input
-                                                        type="tel"
-                                                        placeholder="+91 98765 43210"
-                                                        className={`w-full pl-12 pr-4 py-4 rounded-xl border-2 transition-all ${isDark
-                                                            ? 'bg-white/5 border-white/10 focus:border-indigo-500 text-white placeholder-gray-500'
-                                                            : 'bg-white/50 border-gray-200 focus:border-indigo-500 text-gray-900 placeholder-gray-400'
-                                                            } focus:outline-none`}
+                                                        type="text"
+                                                        name="identifier"
+                                                        value={formData.identifier}
+                                                        onChange={handleInputChange}
+                                                        placeholder="Enter your email"
+                                                        className="w-full pl-12 pr-4 py-4 bg-white/5 border-2 border-white/10 rounded-xl text-white placeholder-gray-500 outline-none transition-all duration-300 focus:bg-white/10 focus:border-white/30 focus:scale-[1.02]"
+                                                        style={{
+                                                            boxShadow: formData.identifier ? `0 0 30px ${currentConfig.lightAccent}` : 'none'
+                                                        }}
                                                     />
                                                 </div>
-                                                <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
-                                                    We'll send you a verification code
-                                                </p>
                                             </div>
-                                        )}
 
-                                        {loginMethod === 'email' && (
-                                            <div className="space-y-2">
-                                                <label className={`text-sm font-semibold ${isDark ? 'text-gray-300' : 'text-gray-700'
-                                                    }`}>
-                                                    Email Address
+                                            {/* Password Field */}
+                                            <div className="group">
+                                                <label className="block text-sm font-semibold text-gray-300 mb-2">
+                                                    Password
                                                 </label>
                                                 <div className="relative">
-                                                    <Mail className={`absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 ${isDark ? 'text-gray-500' : 'text-gray-400'
-                                                        }`} />
+                                                    <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400 transition-all duration-300 group-focus-within:text-white group-focus-within:scale-110" />
                                                     <input
-                                                        type="email"
-                                                        placeholder="your@email.com"
-                                                        className={`w-full pl-12 pr-4 py-4 rounded-xl border-2 transition-all ${isDark
-                                                            ? 'bg-white/5 border-white/10 focus:border-indigo-500 text-white placeholder-gray-500'
-                                                            : 'bg-white/50 border-gray-200 focus:border-indigo-500 text-gray-900 placeholder-gray-400'
-                                                            } focus:outline-none`}
+                                                        type={showPassword ? "text" : "password"}
+                                                        name="password"
+                                                        value={formData.password}
+                                                        onChange={handleInputChange}
+                                                        placeholder="Enter your password"
+                                                        className="w-full pl-12 pr-12 py-4 bg-white/5 border-2 border-white/10 rounded-xl text-white placeholder-gray-500 outline-none transition-all duration-300 focus:bg-white/10 focus:border-white/30 focus:scale-[1.02]"
+                                                        style={{
+                                                            boxShadow: formData.password ? `0 0 30px ${currentConfig.lightAccent}` : 'none'
+                                                        }}
                                                     />
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setShowPassword(!showPassword)}
+                                                        className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white transition-all duration-300 hover:scale-110"
+                                                    >
+                                                        {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                                                    </button>
                                                 </div>
-                                                <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
-                                                    We'll send you a magic link
-                                                </p>
                                             </div>
-                                        )}
 
-                                        {/* Submit Button */}
-                                        <button
-                                            type="submit"
-                                            disabled={isLoading}
-                                            className="group relative w-full py-4 rounded-xl font-bold text-white shadow-2xl transform transition-all duration-300 hover:scale-[1.02] disabled:opacity-50 disabled:cursor-not-allowed overflow-hidden"
-                                        >
-                                            <div className="absolute inset-0 bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 transition-transform duration-300 group-hover:scale-110"></div>
-                                            <div className="absolute inset-0 bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 opacity-0 group-hover:opacity-100 blur-xl transition-opacity duration-300"></div>
-                                            <div className="relative flex items-center justify-center gap-2">
-                                                {isLoading ? (
-                                                    <>
-                                                        <Loader2 className="w-5 h-5 animate-spin" />
-                                                        <span>Signing in...</span>
-                                                    </>
-                                                ) : (
-                                                    <>
-                                                        <span>
-                                                            {loginMethod === 'credentials'
-                                                                ? 'Sign In'
-                                                                : loginMethod === 'phone'
-                                                                    ? 'Send Code'
-                                                                    : 'Send Magic Link'}
-                                                        </span>
-                                                        <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
-                                                    </>
-                                                )}
-                                            </div>
-                                        </button>
-                                    </form>
+                                            {/* Error Message */}
+                                            {error && (
+                                                <div className="bg-red-500/20 border border-red-500/50 rounded-xl p-4 text-red-200 text-sm animate-shake">
+                                                    {error}
+                                                </div>
+                                            )}
 
-                                    {/* Divider */}
-                                    <div className="relative">
-                                        <div className="absolute inset-0 flex items-center">
-                                            <div className={`w-full border-t ${isDark ? 'border-white/10' : 'border-gray-200'
-                                                }`}></div>
-                                        </div>
-                                        <div className="relative flex justify-center text-sm">
-                                            <span className={`px-4 ${isDark ? 'bg-slate-900/50 text-gray-400' : 'bg-white/80 text-gray-600'
-                                                }`}>
-                                                Or continue with
-                                            </span>
-                                        </div>
-                                    </div>
-
-                                    {/* Social Login */}
-                                    <div className="grid grid-cols-3 gap-3">
-                                        {socialLogins.map((social, index) => (
+                                            {/* Submit Button */}
                                             <button
-                                                key={index}
-                                                type="button"
-                                                className={`relative p-4 rounded-xl border-2 transition-all duration-300 hover:scale-105 overflow-hidden group ${isDark
-                                                    ? 'border-white/10 hover:border-white/20'
-                                                    : 'border-gray-200 hover:border-gray-300'
-                                                    }`}
+                                                type="submit"
+                                                disabled={isLoading}
+                                                className={`group w-full py-4 rounded-xl font-bold text-white bg-gradient-to-r ${currentConfig.gradient} shadow-xl transition-all duration-500 hover:scale-[1.03] active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center space-x-2 relative overflow-hidden`}
+                                                style={{
+                                                    boxShadow: `0 20px 60px ${currentConfig.lightAccent}`
+                                                }}
                                             >
-                                                <div className={`absolute inset-0 bg-gradient-to-r ${social.gradient} opacity-0 group-hover:opacity-10 transition-opacity duration-300`}></div>
-                                                <span className="relative text-2xl">{social.name[0]}</span>
+                                                <span className="relative z-10 flex items-center space-x-2">
+                                                    {isLoading ? (
+                                                        <>
+                                                            <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                                                            <span>Logging in...</span>
+                                                        </>
+                                                    ) : (
+                                                        <>
+                                                            <span>Login to Dashboard</span>
+                                                            <ArrowRight className="w-5 h-5 group-hover:translate-x-2 transition-transform duration-300" />
+                                                        </>
+                                                    )}
+                                                </span>
+                                                <div className="absolute inset-0 bg-gradient-to-r from-white/0 via-white/20 to-white/0 -translate-x-full group-hover:translate-x-full transition-transform duration-1000" />
                                             </button>
-                                        ))}
-                                    </div>
+                                        </form>
 
-                                    
-
-                                    {/* Demo Credentials */}
-                                    <div className={`p-4 rounded-xl border-2 ${isDark
-                                        ? 'bg-indigo-500/10 border-indigo-500/30'
-                                        : 'bg-indigo-50 border-indigo-200'
-                                        }`}>
-                                        <div className="flex items-start gap-2">
-                                            <Sparkles className="w-5 h-5 text-indigo-500 flex-shrink-0 mt-0.5" />
-                                            <div>
-                                                <p className={`text-xs font-semibold mb-1 ${isDark ? 'text-indigo-400' : 'text-indigo-600'
-                                                    }`}>
-                                                    Demo Credentials
-                                                </p>
-                                                <p className={`text-xs ${isDark ? 'text-indigo-300' : 'text-indigo-700'
-                                                    }`}>
-                                                    Username: <code className="font-mono font-bold">admin</code> • Password: <code className="font-mono font-bold">admin</code>
-                                                </p>
+                                        {/* Footer */}
+                                        <div className="mt-8 text-center space-y-3">
+                                            <div className="flex items-center justify-center space-x-2 text-gray-400 text-sm">
+                                                <Shield className="w-4 h-4 animate-pulse" style={{
+                                                    animation: 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite'
+                                                }} />
+                                                <span>Secured with 256-bit encryption</span>
                                             </div>
+                                            <p className="text-gray-500 text-xs">
+                                                © 2024 {currentConfig.label} CRM. All rights reserved.
+                                            </p>
                                         </div>
-                                    </div>
-                                </div>
-                            </div>
-
-                            {/* Mobile Logo - Shown only on mobile */}
-                            <div className="lg:hidden mt-8 text-center">
-                                <div className="inline-flex items-center gap-3">
-                                    <div className="relative">
-                                        <div className="absolute inset-0 bg-gradient-to-r from-indigo-500 to-purple-500 rounded-xl blur-lg opacity-60"></div>
-                                        <div className={`relative p-3 rounded-xl backdrop-blur-xl border ${isDark ? 'bg-white/10 border-white/20' : 'bg-white/80 border-white/40'
-                                            }`}>
-                                            <Car className="w-6 h-6 text-indigo-500" />
-                                        </div>
-                                    </div>
-                                    <div className="text-left">
-                                        <h1 className={`text-xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                                            Motor<span className="bg-gradient-to-r from-indigo-500 to-purple-500 bg-clip-text text-transparent">Desk</span>
-                                        </h1>
-                                        <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
-                                            Garage Management System
-                                        </p>
                                     </div>
                                 </div>
                             </div>
@@ -583,21 +604,53 @@ export default function Login() {
 
                 <style jsx>{`
                 @keyframes float {
-                    0%, 100% {
-                        transform: translateY(0) translateX(0);
+                    0%, 100% { transform: translate(0, 0) scale(1); }
+                    25% { transform: translate(30px, -30px) scale(1.1); }
+                    50% { transform: translate(-20px, 20px) scale(0.9); }
+                    75% { transform: translate(20px, 10px) scale(1.05); }
+                }
+
+                @keyframes particleFloat {
+                    0%, 100% { transform: translate(0, 0) rotate(0deg); opacity: 0.4; }
+                    25% { transform: translate(40px, -40px) rotate(90deg); opacity: 0.6; }
+                    50% { transform: translate(-30px, 30px) rotate(180deg); opacity: 0.3; }
+                    75% { transform: translate(30px, -20px) rotate(270deg); opacity: 0.5; }
+                }
+
+                @keyframes ripple {
+                    0% {
+                        transform: translate(-50%, -50%) scale(0);
+                        opacity: 0.6;
                     }
-                    25% {
-                        transform: translateY(-20px) translateX(10px);
+                    100% {
+                        transform: translate(-50%, -50%) scale(100);
+                        opacity: 0;
                     }
-                    50% {
-                        transform: translateY(-10px) translateX(-10px);
+                }
+
+                @keyframes gridMove {
+                    0% { background-position: 0 0; }
+                    100% { background-position: 60px 60px; }
+                }
+
+                @keyframes fadeInUp {
+                    from {
+                        opacity: 0;
+                        transform: translateY(30px);
                     }
-                    75% {
-                        transform: translateY(-30px) translateX(5px);
+                    to {
+                        opacity: 1;
+                        transform: translateY(0);
                     }
+                }
+
+                @keyframes shake {
+                    0%, 100% { transform: translateX(0); }
+                    10%, 30%, 50%, 70%, 90% { transform: translateX(-5px); }
+                    20%, 40%, 60%, 80% { transform: translateX(5px); }
                 }
             `}</style>
             </div>
-        </PublicLayout>
+      </PublicLayout> 
     );
 }
