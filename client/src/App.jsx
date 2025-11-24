@@ -43,6 +43,8 @@ import Plans from "./pages/plans/Plans.jsx";
 import RefundPage from "./pages/RefundT&C.jsx";
 import ReferencePage from "./pages/ReferenceT&C.jsx";
 
+import BikeDashboard from "./bikePages/BikeDashboard.jsx";
+import WashDashboard from "./washPages/WashDashboard.jsx";
 
 function App() {
   return (
@@ -77,16 +79,14 @@ function App() {
             </ProtectedRoute>
           }
         >
-          <Route index element={<Navigate to="/dashboard" />} />
-          <Route path="/dashboard" element={<Dashboard />} />
+          <Route index element={<Navigate to="/car-dashboard" />} />
+          <Route path="/car-dashboard" element={<Dashboard />} />
           {/* More specific routes first */}
           <Route path="/clients/new" element={<ClientForm />} />
           <Route path="/clients/:id/edit" element={<ClientForm />} />
           <Route path="/clients/:id" element={<ClientDetail />} />
-
           {/* Less specific routes last */}
           <Route path="/clients" element={<ClientsList />} />
-
           <Route path="/services" element={<ServicesList />} />
           <Route path="/services/new" element={<ServiceForm />} />
           <Route path="/services/:id" element={<ServiceDetail />} />
@@ -97,11 +97,20 @@ function App() {
           <Route path="/billing/:id" element={<Invoice />} />
           <Route path="/reminders" element={<RemindersList />} />
           <Route path="/reports" element={<Reports />} />
+          <Route path="/details" element={<DetailsPage />} />
           <Route path="/ocr-Scanner" element={<DetailsPage />} />
           <Route path="/plan" element={<Plans />} />
 
         </Route>
 
+
+          {/* Bike Garage CRM Routes */}
+          <Route path="/bike-dashboard" element={<BikeDashboard />} />
+
+          {/* Washing CRM Routes */}
+          <Route path="/wash-dashboard" element={<WashDashboard />} />
+
+        </Route>
         {/* Fallback */}
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

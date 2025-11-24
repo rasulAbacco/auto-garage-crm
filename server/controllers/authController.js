@@ -71,26 +71,52 @@ export const registerUser = async (req, res) => {
  * @access Public
  */
 export const loginUser = async (req, res) => {
-  try {
-    const { username, password } = req.body;
+    try {
+        const { identifier, password, crmType } = req.body;
 
-    // Validate inputs
-    if (!username || !password) {
-      return res
-        .status(400)
-        .json({ message: "Username and password are required" });
-    }
+        if (!identifier || !password) {
+            return res.status(400).json({ message: "Email/Username and password are required" });
+        }
 
-    // Find user
-    const user = await prisma.user.findUnique({ where: { username } });
-    if (!user) {
-      return res.status(400).json({ message: "Invalid username or password" });
-    }
+        console.log("📩 Login payload:", req.body);
 
-    // Compare password
-    const isMatch = await bcrypt.compare(password, user.password);
-    if (!isMatch) {
-      return res.status(400).json({ message: "Invalid username or password" });
+        // Detect if identifier is email or username
+        const isEmail = identifier.includes("@");
+
+        const user = await prisma.user.findFirst({
+            where: isEmail
+                ? { email: identifier }
+                : { username: identifier }
+        });
+
+        console.log("🔍 USER FOUND:", user);
+
+        if (!user) {
+            return res.status(400).json({ message: "Invalid credentials" });
+        }
+
+        const isMatch = await bcrypt.compare(password, user.password);
+        if (!isMatch) {
+            return res.status(400).json({ message: "Invalid credentials" });
+        }
+
+        const token = generateToken(user);
+
+        return res.status(200).json({
+            message: "Login successful",
+            token,
+            user: {
+                id: user.id,
+                username: user.username,
+                email: user.email,
+                role: user.role,
+                crmType
+            }
+        });
+
+    } catch (error) {
+        console.error("❌ Login Error:", error);
+        return res.status(500).json({ message: "Internal server error" });
     }
 
     // Generate token
