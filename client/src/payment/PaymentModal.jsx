@@ -14,7 +14,8 @@ import {
     FaTag,
     FaBolt,
     FaStar,
-    FaCreditCard
+    FaCreditCard,
+    FaIdCard
 } from 'react-icons/fa';
 
 const PaymentModal = ({
@@ -33,7 +34,8 @@ const PaymentModal = ({
         companyName: '',
         email: '',
         phone: '',
-        referenceCode: ''
+        referenceCode: '',
+        gstNumber: '' // Added GST number field
     });
     const [errors, setErrors] = useState({});
     const [razorpayLoaded, setRazorpayLoaded] = useState(false);
@@ -93,6 +95,10 @@ const PaymentModal = ({
         if (!formData.companyName.trim()) newErrors.companyName = 'Required';
         if (!formData.email.match(/^[^\s@]+@[^\s@]+\.[^\s@]+$/)) newErrors.email = 'Invalid email';
         if (!formData.phone.match(/^[0-9]{10}$/)) newErrors.phone = 'Invalid phone';
+        // GST validation (optional but if provided should be valid)
+        if (formData.gstNumber && !formData.gstNumber.match(/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/)) {
+            newErrors.gstNumber = 'Invalid GST number';
+        }
         setErrors(newErrors);
         return Object.keys(newErrors).length === 0;
     };
@@ -127,6 +133,7 @@ const PaymentModal = ({
                 email: formData.email,
                 phone: formData.phone,
                 referenceCode: formData.referenceCode,
+                gstNumber: formData.gstNumber, // Added GST number
                 plan: plan.name,
                 billingPeriod,
                 amount: finalPrice,
@@ -154,6 +161,7 @@ const PaymentModal = ({
                 plan: plan.name,
                 billingPeriod,
                 referenceCode: formData.referenceCode,
+                gstNumber: formData.gstNumber, // Added GST number
             },
 
             // ⭐ FIXED — MUST CALL VERIFY API HERE
@@ -190,7 +198,6 @@ const PaymentModal = ({
         rzp.open();
     };
 
-
     const formFields = [
         {
             key: 'name',
@@ -219,6 +226,14 @@ const PaymentModal = ({
             type: 'tel',
             icon: FaPhone,
             placeholder: '9876543210'
+        },
+        {
+            key: 'gstNumber',
+            label: 'GST Number',
+            type: 'text',
+            icon: FaIdCard,
+            placeholder: '22AAAAA0000A1Z5',
+            optional: true
         }
     ];
 
@@ -314,7 +329,7 @@ const PaymentModal = ({
                                     return (
                                         <div key={field.key} className="space-y-2">
                                             <label className={`block text-sm font-semibold ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-                                                {field.label}
+                                                {field.label} {field.optional && <span className="text-xs font-normal text-gray-500">(Optional)</span>}
                                             </label>
                                             <div className="relative group">
                                                 <div className={`absolute inset-y-0 left-0 flex items-center pl-4 pointer-events-none transition-all duration-200 z-10 ${focusedField === field.key

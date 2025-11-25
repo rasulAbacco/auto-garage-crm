@@ -16,6 +16,7 @@ import {
   Sun,
   Moon,
   IndianRupee,
+  Network,
 } from "lucide-react";
 import { useTheme } from "../contexts/ThemeContext";
 
@@ -34,6 +35,7 @@ export default function Layout() {
     { to: "/reports", label: "Reports", icon: BarChart2 },
     { to: "/ocr-scanner", label: "OCR Scanner", icon: FileText },
     { to: "/plan", label: "Your Plan", icon: IndianRupee },
+    { to: "/reference", label: "Reference", icon: Network },
   ];
   const [openProfileMenu, setOpenProfileMenu] = useState(false);
   const [showLogoutModal, setShowLogoutModal] = useState(false);
