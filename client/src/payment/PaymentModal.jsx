@@ -97,98 +97,98 @@ const PaymentModal = ({
         return Object.keys(newErrors).length === 0;
     };
 
-const handlePayment = async () => {
-    if (!validateForm()) return;
+    const handlePayment = async () => {
+        if (!validateForm()) return;
 
-    setIsProcessing(true);
-    const API = "http://localhost:5000";
+        setIsProcessing(true);
+        const API = "http://localhost:5000";
 
-    // 1️⃣ Create Order
-    const orderRes = await fetch(`${API}/api/payments/create-order`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ amount: finalPrice }),
-    });
+        // 1️⃣ Create Order
+        const orderRes = await fetch(`${API}/api/payments/create-order`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ amount: finalPrice }),
+        });
 
-    const orderData = await orderRes.json();
-    if (!orderData.success) {
-        alert("Failed to create order");
-        setIsProcessing(false);
-        return;
-    }
+        const orderData = await orderRes.json();
+        if (!orderData.success) {
+            alert("Failed to create order");
+            setIsProcessing(false);
+            return;
+        }
 
-    // 2️⃣ Save form BEFORE payment
-    await fetch(`${API}/api/payments/save-form`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-            customerName: formData.name,
-            companyName: formData.companyName,
-            email: formData.email,
-            phone: formData.phone,
-            referenceCode: formData.referenceCode,
-            plan: plan.name,
-            billingPeriod,
-            amount: finalPrice,
-            orderId: orderData.order.id,
-        }),
-    });
+        // 2️⃣ Save form BEFORE payment
+        await fetch(`${API}/api/payments/save-form`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                customerName: formData.name,
+                companyName: formData.companyName,
+                email: formData.email,
+                phone: formData.phone,
+                referenceCode: formData.referenceCode,
+                plan: plan.name,
+                billingPeriod,
+                amount: finalPrice,
+                orderId: orderData.order.id,
+            }),
+        });
 
-    // 3️⃣ Razorpay Options
-    const options = {
-        key: "rzp_test_ReqQSmLnQ60S7l",
-        order_id: orderData.order.id,
-        amount: finalPrice * 100,
-        currency: "INR",
-        name: "Abacco Technology",
-        description: `${plan.name} Plan Subscription`,
+        // 3️⃣ Razorpay Options
+        const options = {
+            key: "rzp_test_ReqQSmLnQ60S7l",
+            order_id: orderData.order.id,
+            amount: finalPrice * 100,
+            currency: "INR",
+            name: "Abacco Technology",
+            description: `${plan.name} Plan Subscription`,
 
-        prefill: {
-            name: formData.name,
-            email: formData.email,
-            contact: formData.phone,
-        },
+            prefill: {
+                name: formData.name,
+                email: formData.email,
+                contact: formData.phone,
+            },
 
-        notes: {
-            companyName: formData.companyName,
-            plan: plan.name,
-            billingPeriod,
-            referenceCode: formData.referenceCode,
-        },
+            notes: {
+                companyName: formData.companyName,
+                plan: plan.name,
+                billingPeriod,
+                referenceCode: formData.referenceCode,
+            },
 
-        // ⭐ FIXED — MUST CALL VERIFY API HERE
-        handler: async function (response) {
-            console.log("Payment Success, verifying...");
+            // ⭐ FIXED — MUST CALL VERIFY API HERE
+            handler: async function (response) {
+                console.log("Payment Success, verifying...");
 
-            const verifyRes = await fetch(`${API}/api/payments/verify`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    razorpay_payment_id: response.razorpay_payment_id,
-                    razorpay_order_id: response.razorpay_order_id,
-                    razorpay_signature: response.razorpay_signature,
-                }),
-            });
+                const verifyRes = await fetch(`${API}/api/payments/verify`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        razorpay_payment_id: response.razorpay_payment_id,
+                        razorpay_order_id: response.razorpay_order_id,
+                        razorpay_signature: response.razorpay_signature,
+                    }),
+                });
 
-            const verifyData = await verifyRes.json();
-            console.log("VERIFY RESULT:", verifyData);
+                const verifyData = await verifyRes.json();
+                console.log("VERIFY RESULT:", verifyData);
 
-            if (verifyData.success) {
-                setPaymentResponse(response);
-                setShowSuccess(true);
-            } else {
-                alert("Payment verification failed!");
-                setIsProcessing(false);
-            }
-        },
+                if (verifyData.success) {
+                    setPaymentResponse(response);
+                    setShowSuccess(true);
+                } else {
+                    alert("Payment verification failed!");
+                    setIsProcessing(false);
+                }
+            },
 
-        theme: { color: isDark ? "#8B5CF6" : "#7C3AED" },
+            theme: { color: isDark ? "#8B5CF6" : "#7C3AED" },
+        };
+
+        // 4️⃣ Open Razorpay Checkout
+        const rzp = new window.Razorpay(options);
+        rzp.open();
     };
-
-    // 4️⃣ Open Razorpay Checkout
-    const rzp = new window.Razorpay(options);
-    rzp.open();
-};
 
 
     const formFields = [
