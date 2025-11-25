@@ -64,13 +64,15 @@ const CarRegister = () => {
   }, []);
 
   const [formData, setFormData] = useState({
+    userId: paymentData?.userId,   // ⭐ REQUIRED
     username: paymentData?.formData.name || "",
     email: paymentData?.formData.email || "",
     phone: paymentData?.formData.phone || "",
     password: "",
     role: "user",
-    crmType: "CAR"   // ⭐ IMPORTANT
+    crmType: "CAR"
   });
+
 
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
