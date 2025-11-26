@@ -108,6 +108,9 @@ app.use("/api/reminders", reminderRoutes);
 app.use("/api/ocr", ocrRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use("/api/referral", referralRoutes);
+
+app.use('/api/payments/razorpay-webhook', express.raw({ type: 'application/json' }));
+
 /* -----------------------------------------------------
    ⚠️ 404 Handler (For undefined routes)
 ----------------------------------------------------- */
