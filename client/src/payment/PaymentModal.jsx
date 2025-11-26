@@ -145,7 +145,7 @@ const PaymentModal = ({
         const API =
             window.location.hostname === "localhost"
                 ? "http://localhost:5000"
-                : "https://themotordesk.com";
+                : "https://auto-garage-crm-zrxc.onrender.com";
 
         // 1️⃣ Create subscription on backend
         const subRes = await fetch(`${API}/api/payments/create-subscription`, {
