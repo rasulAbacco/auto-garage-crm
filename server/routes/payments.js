@@ -372,13 +372,65 @@ router.post("/razorpay-webhook", async (req, res) => {
 router.get("/user-plan/:email", async (req, res) => {
   try {
     const { email } = req.params;
+    console.log("Searching for plan with email:", email);
 
-    const payment = await prisma.payment.findFirst({
-      where: { email, status: "ACTIVE" },
-      orderBy: { paidAt: "desc" },
+    // Normalize email (trim and lowercase) to ensure consistent matching
+    const normalizedEmail = email.trim().toLowerCase();
+
+    // First, let's check if any payment exists for this email at all
+    const anyPayment = await prisma.payment.findFirst({
+      where: {
+        email: {
+          equals: normalizedEmail,
+          mode: 'insensitive' // Case-insensitive comparison
+        }
+      }
     });
 
-    if (!payment) return res.json({ success: false, message: "No plan found for this user" });
+    console.log("Any payment found:", anyPayment);
+
+    if (!anyPayment) {
+      return res.json({ success: false, message: "No payment records found for this user" });
+    }
+
+    // Now get the most recent payment with ACTIVE or TRIAL status
+    const payment = await prisma.payment.findFirst({
+      where: {
+        email: {
+          equals: normalizedEmail,
+          mode: 'insensitive' // Case-insensitive comparison
+        },
+        status: { in: ["ACTIVE", "TRIAL"] }
+      },
+      orderBy: { createdAt: "desc" },
+    });
+
+    console.log("Active/Trial payment found:", payment);
+
+    if (!payment) {
+      // If no active/trial plan, check if there's any payment with different status
+      const allPayments = await prisma.payment.findMany({
+        where: {
+          email: {
+            equals: normalizedEmail,
+            mode: 'insensitive'
+          }
+        },
+        orderBy: { createdAt: "desc" },
+      });
+
+      console.log("All payments for user:", allPayments);
+
+      return res.json({
+        success: false,
+        message: "No active plan found for this user",
+        debug: {
+          email: normalizedEmail,
+          paymentCount: allPayments.length,
+          lastStatus: allPayments.length > 0 ? allPayments[0].status : null
+        }
+      });
+    }
 
     return res.json({ success: true, payment });
   } catch (err) {
