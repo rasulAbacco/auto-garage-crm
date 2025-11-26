@@ -95,14 +95,10 @@ router.post("/create-subscription", async (req, res) => {
     };
 
     // Apply trial window
-    if (useTrial) {
-      if (isProduction) {
-        subscriptionPayload.start_at = Math.floor((Date.now() + 7 * 24 * 60 * 60 * 1000) / 1000);
-      } else {
-        subscriptionPayload.start_at = Math.floor((Date.now() + 60 * 1000) / 1000); // 60s in dev
-      }
-      subscriptionPayload.customer_notify = 1;
+    if (useTrial && isProduction) {
+      subscriptionPayload.start_at = Math.floor((Date.now() + 7 * 24 * 60 * 60 * 1000) / 1000);
     }
+
 
     // Create subscription with Razorpay
     let subscription;
