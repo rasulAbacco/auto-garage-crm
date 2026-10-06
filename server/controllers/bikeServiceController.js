@@ -7,8 +7,12 @@ import { sendWhatsAppTemplate } from "../services/whatsappService.js"; // ✅ Ad
 ===================================================== */
 export const getBikeServiceTypes = async (req, res) => {
   try {
+    // public route: only the shared default list (garage-added ones stay private)
     const data = await prisma.bikeServiceCategory.findMany({
-      include: { subServices: true },
+      where: { ownerUserId: null },
+      include: {
+        subServices: { where: { ownerUserId: null }, orderBy: { id: "asc" } },
+      },
       orderBy: { id: "asc" },
     });
 
@@ -20,6 +24,127 @@ export const getBikeServiceTypes = async (req, res) => {
     });
   }
 };
+
+/* =====================================================
+   PAYMENT HELPERS
+   A service's payment state comes from its linked invoice.
+   If the invoice is Paid -> balance due is 0.
+===================================================== */
+const INVOICE_SELECT = {
+  id: true,
+  invoiceNumber: true,
+  bikeId: true,
+  serviceCategory: true,
+  serviceSubCategory: true,
+  grandTotal: true,
+  advancePaid: true,
+  balanceDue: true,
+  status: true,
+  paymentMode: true,
+  paidAt: true,
+  createdAt: true,
+};
+
+const norm = (v) => String(v || "").trim().toLowerCase();
+
+const serviceKeys = (s) =>
+  [s.category?.name || s.categoryText, s.subService?.name || s.subServiceText]
+    .map(norm)
+    .filter(Boolean);
+
+/*
+  Older invoices were created without being linked to their service.
+  This finds the matching invoice (same bike, same category/sub-service,
+  created after the service) and links it once, so old records fix
+  themselves the next time the Services page loads.
+*/
+async function autoLinkServicesToInvoices(services, ownerUserId) {
+  const unlinked = services.filter((s) => !s.bikeInvoiceId);
+  if (!unlinked.length) return;
+
+  const bikeIds = [...new Set(unlinked.map((s) => s.clientId))];
+
+  const invoices = await prisma.bikeInvoice.findMany({
+    where: { ownerUserId, bikeId: { in: bikeIds } },
+    select: { ...INVOICE_SELECT, bikeServices: { select: { id: true } } },
+    orderBy: { createdAt: "asc" },
+  });
+
+  // invoices already attached to a service can't be reused
+  const used = new Set(
+    invoices.filter((i) => i.bikeServices.length > 0).map((i) => i.id),
+  );
+
+  const oldestFirst = [...unlinked].sort(
+    (a, b) => new Date(a.createdAt) - new Date(b.createdAt),
+  );
+
+  for (const s of oldestFirst) {
+    const keys = serviceKeys(s);
+
+    const match = invoices.find((inv) => {
+      if (used.has(inv.id) || inv.bikeId !== s.clientId) return false;
+      if (new Date(inv.createdAt) < new Date(s.createdAt)) return false;
+      if (!keys.length) return true;
+      const invKeys = [inv.serviceCategory, inv.serviceSubCategory]
+        .map(norm)
+        .filter(Boolean);
+      return invKeys.some((k) => keys.includes(k));
+    });
+
+    if (!match) continue;
+    used.add(match.id);
+
+    await prisma.bikeService.update({
+      where: { id: s.id },
+      data: {
+        bikeInvoiceId: match.id,
+        invoiceStatus: match.status === "Paid" ? "paid" : "generated",
+        ...(match.status === "Paid" ? { balanceDue: 0 } : {}),
+      },
+    });
+
+    const { bikeServices, ...invoiceOnly } = match;
+    s.bikeInvoiceId = match.id;
+    s.bikeInvoice = invoiceOnly;
+  }
+}
+
+/* Returns { balanceDue, amountPaid, paymentStatus } for a service */
+function getPaymentInfo(service, grandTotal, computedBalanceDue) {
+  const inv = service.bikeInvoice;
+
+  if (inv && inv.status === "Paid") {
+    return {
+      balanceDue: 0,
+      amountPaid: Number(inv.grandTotal || grandTotal),
+      paymentStatus: "Paid",
+    };
+  }
+
+  if (inv) {
+    const invTotal = Number(inv.grandTotal || 0);
+    const invAdvance = Number(inv.advancePaid || 0);
+    return {
+      balanceDue: Math.max(invTotal - invAdvance, 0),
+      amountPaid: invAdvance,
+      paymentStatus: invAdvance > 0 ? "Partially Paid" : "Unpaid",
+    };
+  }
+
+  const advance = Number(service.advancePaid || 0);
+  const due = Math.max(computedBalanceDue, 0);
+  return {
+    balanceDue: due,
+    amountPaid: advance,
+    paymentStatus:
+      due <= 0 && grandTotal > 0
+        ? "Paid"
+        : advance > 0
+          ? "Partially Paid"
+          : "Unpaid",
+  };
+}
 
 /* =====================================================
    GET ALL BIKE SERVICES
@@ -43,9 +168,17 @@ export const getBikeServices = async (req, res) => {
         subService: true,
         serviceItems: true,
         serviceMedia: true,
+        bikeInvoice: { select: INVOICE_SELECT },
       },
       orderBy: { createdAt: "desc" },
     });
+
+    // 🔗 link old services to their invoices (one-time self-heal)
+    try {
+      await autoLinkServicesToInvoices(services, ownerUserId);
+    } catch (linkErr) {
+      console.error("autoLinkServicesToInvoices error:", linkErr);
+    }
 
     // ✅ FIX: Calculate totals with discount and advance paid, or use stored values
     const fixedServices = services.map((s) => {
@@ -118,6 +251,8 @@ export const getBikeServices = async (req, res) => {
         balanceDue = Number(s.balanceDue) || 0;
       }
 
+      const payment = getPaymentInfo(s, grandTotal, balanceDue);
+
       return {
         ...s,
         partsSubtotal: Number(partsSubtotal.toFixed(2)),
@@ -125,7 +260,9 @@ export const getBikeServices = async (req, res) => {
         cgstTotal: Number(cgstTotal.toFixed(2)),
         sgstTotal: Number(sgstTotal.toFixed(2)),
         grandTotal: Number(grandTotal.toFixed(2)),
-        balanceDue: Number(balanceDue.toFixed(2)),
+        balanceDue: Number(payment.balanceDue.toFixed(2)),
+        amountPaid: Number(payment.amountPaid.toFixed(2)),
+        paymentStatus: payment.paymentStatus,
       };
     });
 
@@ -192,11 +329,18 @@ export const getBikeServiceById = async (req, res) => {
         subService: true,
         serviceItems: true,
         serviceMedia: true,
+        bikeInvoice: { select: INVOICE_SELECT },
       },
     });
 
     if (!service) {
       return res.status(404).json({ message: "Service not found" });
+    }
+
+    try {
+      await autoLinkServicesToInvoices([service], ownerUserId);
+    } catch (linkErr) {
+      console.error("autoLinkServicesToInvoices error:", linkErr);
     }
 
     // ✅ FIX: Check if serviceItems exist and have data
@@ -267,6 +411,8 @@ export const getBikeServiceById = async (req, res) => {
       balanceDue = Number(service.balanceDue) || 0;
     }
 
+    const payment = getPaymentInfo(service, grandTotal, balanceDue);
+
     res.json({
       ...service,
       partsSubtotal: Number(partsSubtotal.toFixed(2)),
@@ -274,7 +420,9 @@ export const getBikeServiceById = async (req, res) => {
       cgstTotal: Number(cgstTotal.toFixed(2)),
       sgstTotal: Number(sgstTotal.toFixed(2)),
       grandTotal: Number(grandTotal.toFixed(2)),
-      balanceDue: Number(balanceDue.toFixed(2)),
+      balanceDue: Number(payment.balanceDue.toFixed(2)),
+      amountPaid: Number(payment.amountPaid.toFixed(2)),
+      paymentStatus: payment.paymentStatus,
     });
   } catch (err) {
     console.error("getBikeServiceById error:", err);
@@ -354,8 +502,15 @@ export const createBikeService = async (req, res) => {
        FINAL CATEGORY / SUB-SERVICE VALUES
        (NO CREATION IN MASTER TABLES)
     ===================================================== */
-    const finalCategoryId = normalizedCategoryId;
-    const finalSubServiceId = normalizedSubServiceId;
+    const resolved = await resolveTypedTypes(
+      ownerUserId,
+      normalizedCategoryId,
+      normalizedSubServiceId,
+      categoryText,
+      subServiceText,
+    );
+    const finalCategoryId = resolved.categoryId;
+    const finalSubServiceId = resolved.subServiceId;
 
     const finalCategoryText = !finalCategoryId
       ? categoryText?.trim() || null
@@ -567,11 +722,15 @@ export const updateBikeService = async (req, res) => {
     /* =====================================================
        NORMALIZE CATEGORY / SUB-SERVICE
     ===================================================== */
-    const normalizedCategoryId =
-      categoryId && Number(categoryId) > 0 ? Number(categoryId) : null;
-
-    const normalizedSubServiceId =
-      subServiceId && Number(subServiceId) > 0 ? Number(subServiceId) : null;
+    const resolvedTypes = await resolveTypedTypes(
+      ownerUserId,
+      categoryId && Number(categoryId) > 0 ? Number(categoryId) : null,
+      subServiceId && Number(subServiceId) > 0 ? Number(subServiceId) : null,
+      categoryText,
+      subServiceText,
+    );
+    const normalizedCategoryId = resolvedTypes.categoryId;
+    const normalizedSubServiceId = resolvedTypes.subServiceId;
 
     const finalCategoryText = !normalizedCategoryId
       ? categoryText?.trim() || null
@@ -835,6 +994,172 @@ export const deleteBikeService = async (req, res) => {
 };
 
 /* =====================================================
+   ADD NEW CATEGORY / SUB-SERVICE (with duplicate check)
+===================================================== */
+
+// shared defaults (ownerUserId null) + this garage's own entries
+const visibleTo = (ownerUserId) => ({
+  OR: [{ ownerUserId: null }, { ownerUserId }],
+});
+
+const brandFilter = (brand) => [
+  { bikeBrand: null },
+  { bikeBrand: "" },
+  { bikeBrand: { equals: "All", mode: "insensitive" } },
+  ...(brand ? [{ bikeBrand: { equals: brand, mode: "insensitive" } }] : []),
+];
+
+// "  oil   CHANGE " -> "Oil Change" for saving, "oil change" for comparing
+const cleanName = (v) => String(v || "").trim().replace(/\s+/g, " ");
+const compareKey = (v) => cleanName(v).toLowerCase();
+const titleCase = (v) =>
+  cleanName(v).replace(/\b\w/g, (c) => c.toUpperCase());
+
+/*
+  Safety net for saving a service: if the user typed a name that already
+  exists (any case / spacing), use the existing category / sub-service id
+  instead of saving a duplicate free-text value.
+*/
+async function resolveTypedTypes(
+  ownerUserId,
+  categoryId,
+  subServiceId,
+  categoryText,
+  subServiceText,
+) {
+  let catId = categoryId;
+  let subId = subServiceId;
+
+  if (!catId && cleanName(categoryText)) {
+    const cats = await prisma.bikeServiceCategory.findMany({
+      where: visibleTo(ownerUserId),
+      select: { id: true, name: true },
+    });
+    catId =
+      cats.find((c) => compareKey(c.name) === compareKey(categoryText))?.id ||
+      null;
+  }
+
+  if (!subId && catId && cleanName(subServiceText)) {
+    const subs = await prisma.bikeSubService.findMany({
+      where: { categoryId: catId, ...visibleTo(ownerUserId) },
+      select: { id: true, name: true },
+    });
+    subId =
+      subs.find((x) => compareKey(x.name) === compareKey(subServiceText))
+        ?.id || null;
+  }
+
+  return { categoryId: catId, subServiceId: subId };
+}
+
+/* POST /api/bike-services/types/categories
+   body: { name, bikeId? } */
+export const createBikeServiceCategory = async (req, res) => {
+  try {
+    const ownerUserId = getOwnerUserId(req.user);
+    const name = cleanName(req.body.name);
+
+    if (name.length < 2) {
+      return res
+        .status(400)
+        .json({ message: "Category name must be at least 2 characters" });
+    }
+    if (name.length > 60) {
+      return res
+        .status(400)
+        .json({ message: "Category name is too long (max 60)" });
+    }
+
+    let brand = "";
+    if (req.body.bikeId) {
+      const bike = await prisma.bike.findFirst({
+        where: { id: Number(req.body.bikeId), ownerUserId },
+        select: { bikeBrand: true },
+      });
+      brand = String(bike?.bikeBrand || "").trim();
+    }
+
+    // duplicate check against everything this garage can see
+    const visible = await prisma.bikeServiceCategory.findMany({
+      where: { AND: [{ OR: brandFilter(brand) }, visibleTo(ownerUserId)] },
+      include: {
+        subServices: { where: visibleTo(ownerUserId), orderBy: { id: "asc" } },
+      },
+    });
+
+    const existing = visible.find((c) => compareKey(c.name) === compareKey(name));
+    if (existing) {
+      return res.status(409).json({
+        message: `"${existing.name}" already exists. Please select it from the list.`,
+        existing,
+      });
+    }
+
+    const category = await prisma.bikeServiceCategory.create({
+      data: { name: titleCase(name), bikeBrand: "All", ownerUserId },
+      include: { subServices: true },
+    });
+
+    return res.status(201).json({ message: "Category added", category });
+  } catch (err) {
+    console.error("createBikeServiceCategory error:", err);
+    return res.status(500).json({ message: "Failed to add category" });
+  }
+};
+
+/* POST /api/bike-services/types/categories/:categoryId/sub-services
+   body: { name } */
+export const createBikeSubService = async (req, res) => {
+  try {
+    const ownerUserId = getOwnerUserId(req.user);
+    const categoryId = Number(req.params.categoryId);
+    const name = cleanName(req.body.name);
+
+    if (name.length < 2) {
+      return res
+        .status(400)
+        .json({ message: "Sub-service name must be at least 2 characters" });
+    }
+    if (name.length > 60) {
+      return res
+        .status(400)
+        .json({ message: "Sub-service name is too long (max 60)" });
+    }
+
+    const category = await prisma.bikeServiceCategory.findFirst({
+      where: { id: categoryId, ...visibleTo(ownerUserId) },
+      include: {
+        subServices: { where: visibleTo(ownerUserId) },
+      },
+    });
+
+    if (!category) {
+      return res.status(404).json({ message: "Category not found" });
+    }
+
+    const existing = category.subServices.find(
+      (s) => compareKey(s.name) === compareKey(name),
+    );
+    if (existing) {
+      return res.status(409).json({
+        message: `"${existing.name}" already exists in ${category.name}. Please select it from the list.`,
+        existing,
+      });
+    }
+
+    const subService = await prisma.bikeSubService.create({
+      data: { name: titleCase(name), categoryId, ownerUserId },
+    });
+
+    return res.status(201).json({ message: "Sub-service added", subService });
+  } catch (err) {
+    console.error("createBikeSubService error:", err);
+    return res.status(500).json({ message: "Failed to add sub-service" });
+  }
+};
+
+/* =====================================================
    GET CATEGORIES BY BIKE
    GET /api/bike-services/categories/:bikeId
 ===================================================== */
@@ -842,20 +1167,32 @@ export const getCategoriesByBike = async (req, res) => {
   try {
     const { bikeId } = req.params;
 
-    const bike = await prisma.bike.findUnique({
-      where: { id: Number(bikeId) },
+    const ownerUserId = getOwnerUserId(req.user);
+
+    const bike = await prisma.bike.findFirst({
+      where: { id: Number(bikeId), ownerUserId },
     });
 
     if (!bike) {
       return res.status(404).json({ message: "Bike not found" });
     }
 
+    const brand = String(bike.bikeBrand || "").trim();
+
+    // ✅ Categories saved with bikeBrand "All" (or empty / null) apply to every
+    //    bike. Brand match is case-insensitive ("HERO" = "Hero").
     const categories = await prisma.bikeServiceCategory.findMany({
       where: {
-        OR: [{ bikeBrand: bike.bikeBrand }, { bikeBrand: null }],
+        AND: [
+          { OR: brandFilter(brand) },
+          visibleTo(ownerUserId), // shared defaults + this garage's own
+        ],
       },
       include: {
-        subServices: true,
+        subServices: {
+          where: visibleTo(ownerUserId),
+          orderBy: { id: "asc" },
+        },
       },
       orderBy: { id: "asc" },
     });
@@ -1054,7 +1391,7 @@ export const sendBikeVehicleReadyWhatsApp = async (req, res) => {
     const ownerId = getOwnerUserId(req.user);
 
     const service = await prisma.bikeService.findFirst({
-      where: { id: serviceId, ownerUserId },
+      where: { id: serviceId, ownerUserId: ownerId },
       include: { client: true },
     });
 

@@ -929,6 +929,9 @@ model BikeServiceCategory {
 
   bikeBrand String? // Honda, Yamaha, etc
 
+  // null = default (shared by all garages), set = added by that garage only
+  ownerUserId Int?
+
   subServices BikeSubService[]
   services    BikeService[]
 
@@ -942,6 +945,9 @@ model BikeSubService {
 
   categoryId Int
   category   BikeServiceCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  // null = default (shared by all garages), set = added by that garage only
+  ownerUserId Int?
 
   services BikeService[]
 

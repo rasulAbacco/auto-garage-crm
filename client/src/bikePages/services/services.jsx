@@ -497,10 +497,19 @@ const ServiceCard = ({ service, isDark, onView, onDelete, updateStatus, index })
             <p className="text-2xl font-bold text-emerald-600 transition-all duration-300 hover:text-emerald-500">
               ₹{Number(service.grandTotal || 0).toFixed(2)}
             </p>
-            {service.balanceDue > 0 && (
-              <p className="text-xs text-red-500 mt-2 font-medium animate-pulse">
-                Due: ₹{Number(service.balanceDue || 0).toFixed(2)}
+            {service.paymentStatus === "Paid" ? (
+              <p className="text-xs text-emerald-600 mt-2 font-semibold">
+                ✓ Paid
+                {service.bikeInvoice?.paymentMode
+                  ? ` (${service.bikeInvoice.paymentMode})`
+                  : ""}
               </p>
+            ) : (
+              service.balanceDue > 0 && (
+                <p className="text-xs text-red-500 mt-2 font-medium animate-pulse">
+                  Due: ₹{Number(service.balanceDue || 0).toFixed(2)}
+                </p>
+              )
             )}
           </div>
 

@@ -50,6 +50,8 @@ export default function AddBilling() {
   const [selectedBike, setSelectedBike] = useState(null);
   const [searchParams] = useSearchParams();
   const serviceId = searchParams.get("serviceId");
+  // service picked automatically when a bike is selected on this page
+  const [autoServiceId, setAutoServiceId] = useState(null);
 
   const [form, setForm] = useState({
     invoiceNumber: generateInvoiceNumber(),
@@ -162,7 +164,10 @@ export default function AddBilling() {
 
     if (!clientServices.length) return;
 
-    const latestService = clientServices[0];
+    // prefer the latest service that has not been billed yet
+    const latestService =
+      clientServices.find((s) => !s.bikeInvoiceId) || clientServices[0];
+    setAutoServiceId(latestService.id);
 
     setForm((prev) => ({
       ...prev,
@@ -409,7 +414,11 @@ export default function AddBilling() {
       const payload = {
         ...form,
         bikeId: Number(form.bikeId),
-        serviceId: serviceData?.id || null,
+        // which service this bill belongs to (backend links them so the
+        // Services page shows Paid / Due correctly)
+        serviceId: isEditMode
+          ? null
+          : serviceData?.id || serviceId || autoServiceId || null,
         parsedInvoiceItems: JSON.stringify(invoiceItems),
       };
 
@@ -448,7 +457,11 @@ export default function AddBilling() {
             toast.success("Invoice sent to client on WhatsApp");
           } catch (whatsAppError) {
             console.error("WhatsApp send failed:", whatsAppError);
-            toast.error("Invoice created but WhatsApp failed");
+            toast.error(
+              `Invoice created but WhatsApp failed: ${
+                whatsAppError.response?.data?.message || whatsAppError.message
+              }`,
+            );
           }
         }
       }

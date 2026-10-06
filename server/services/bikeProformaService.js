@@ -1,4 +1,4 @@
-import puppeteer from "puppeteer";
+import { renderHtmlToPdf } from "../utils/pdfRenderer.js";
 import prisma from "../models/prismaClient.js";
 import { uploadBufferToR2 } from "./r2Service.js";
 
@@ -75,32 +75,9 @@ export const generateBikeProformaPDF = async (serviceId) => {
 
   const html = buildBikeProformaHTML(service, owner);
 
-  // LAUNCH OPTIONS
-  const browser = await puppeteer.launch({
-    headless: "new",
-    executablePath: puppeteer.executablePath(),
-    args: [
-      "--no-sandbox",
-      "--disable-setuid-sandbox",
-      "--disable-dev-shm-usage",
-      "--disable-gpu",
-      "--no-zygote",
-      "--single-process",
-    ],
-  });
   try {
-    const page = await browser.newPage();
-
-    await page.setContent(html, {
-      waitUntil: "networkidle0",
-      timeout: 30000,
-    });
-
-    const pdfBuffer = await page.pdf({
-      format: "A4",
-      printBackground: true,
-      margin: { top: "10mm", bottom: "10mm", left: "10mm", right: "10mm" },
-    });
+    // ✅ shared renderer: safe Chrome flags per OS + retry on crash
+    const pdfBuffer = await renderHtmlToPdf(html);
 
     // ✅ UPDATED: Upload path changed to bike-services
     const key = `bike-services/${service.id}/proforma-${service.id}.pdf`;
@@ -114,8 +91,6 @@ export const generateBikeProformaPDF = async (serviceId) => {
   } catch (error) {
     console.error("❌ PDF Generation Error:", error);
     throw error;
-  } finally {
-    if (browser) await browser.close();
   }
 };
 
