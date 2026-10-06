@@ -1,4 +1,5 @@
 import prisma from "../models/prismaClient.js";
+import { getOwnerUserId as getInvoiceOwnerId } from "../utils/getAdminId.js";
 import {
   sendWhatsAppTemplate,
   sendWhatsAppImage,
@@ -288,6 +289,10 @@ export const sendBikeFinalInvoiceWhatsApp = async (invoiceId, ownerUserId) => {
 
   /* 2️⃣ Send Template */
   let messageId = null;
+  let templateSent = false;
+  let pdfSent = false;
+  let templateError = null;
+  let pdfError = null;
 
   try {
     messageId = await sendWhatsAppTemplate({
@@ -302,7 +307,9 @@ export const sendBikeFinalInvoiceWhatsApp = async (invoiceId, ownerUserId) => {
     });
 
     console.log("✅ Template sent");
+    templateSent = true;
   } catch (err) {
+    templateError = err.message;
     console.error("⚠️ Template send failed:", err.message);
   }
 
@@ -315,8 +322,17 @@ export const sendBikeFinalInvoiceWhatsApp = async (invoiceId, ownerUserId) => {
     });
 
     console.log("✅ PDF sent via WhatsApp");
+    pdfSent = true;
   } catch (err) {
+    pdfError = err.message;
     console.error("⚠️ PDF send failed:", err.message);
+  }
+
+  // nothing reached the customer -> report it as a real failure
+  if (!templateSent && !pdfSent) {
+    throw new Error(
+      `WhatsApp send failed: ${templateError || pdfError || "unknown error"}`,
+    );
   }
 
   /* 4️⃣ Log Message (non-critical) */
@@ -336,5 +352,29 @@ export const sendBikeFinalInvoiceWhatsApp = async (invoiceId, ownerUserId) => {
   }
 
   console.log("🎉 Final invoice process completed");
+  return { templateSent, pdfSent, pdfUrl };
 };
 
+/* ============================================================
+   SEND FINAL INVOICE (HTTP)
+   POST /api/bike-invoices/:id/send-whatsapp
+============================================================ */
+export const sendBikeInvoiceWhatsAppHandler = async (req, res) => {
+  try {
+    const ownerUserId = getInvoiceOwnerId(req.user);
+    const result = await sendBikeFinalInvoiceWhatsApp(
+      req.params.id,
+      ownerUserId,
+    );
+    return res.json({ message: "Invoice sent on WhatsApp", ...result });
+  } catch (err) {
+    console.error("sendBikeInvoiceWhatsApp error:", err.message);
+    const status =
+      err.message === "Invoice not found"
+        ? 404
+        : err.message === "Customer phone not found"
+          ? 400
+          : 500;
+    return res.status(status).json({ message: err.message });
+  }
+};

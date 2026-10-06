@@ -526,7 +526,7 @@ const ServiceDetails = () => {
               {/* Invoice Status */}
               <div
                 className={`mt-6 p-4 rounded-xl ${
-                  service.invoiceStatus === "sent"
+                  (service.invoiceStatus === "sent" || service.invoiceStatus === "paid")
                     ? isDark
                       ? "bg-green-500/20"
                       : "bg-green-50"
@@ -541,7 +541,7 @@ const ServiceDetails = () => {
               >
                 <p
                   className={`text-sm font-semibold ${
-                    service.invoiceStatus === "sent"
+                    (service.invoiceStatus === "sent" || service.invoiceStatus === "paid")
                       ? "text-green-600"
                       : service.invoiceStatus === "generated"
                         ? "text-blue-600"
@@ -553,6 +553,23 @@ const ServiceDetails = () => {
                   Invoice Status:{" "}
                   {service.invoiceStatus?.toUpperCase() || "DRAFT"}
                 </p>
+                {service.bikeInvoice && (
+                  <p className={`text-xs mt-1 ${isDark ? "text-gray-400" : "text-gray-500"}`}>
+                    Invoice #{service.bikeInvoice.invoiceNumber} •{" "}
+                    <span
+                      className={
+                        service.paymentStatus === "Paid"
+                          ? "text-green-600 font-semibold"
+                          : "text-red-600 font-semibold"
+                      }
+                    >
+                      {service.paymentStatus}
+                    </span>
+                    {service.bikeInvoice.paymentMode
+                      ? ` • ${service.bikeInvoice.paymentMode}`
+                      : ""}
+                  </p>
+                )}
                 {service.invoiceSentAt && (
                   <p className={`text-xs mt-1 ${isDark ? "text-gray-400" : "text-gray-500"}`}>
                     Sent on {new Date(service.invoiceSentAt).toLocaleDateString()}

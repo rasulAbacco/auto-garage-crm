@@ -12,6 +12,8 @@ import {
   deleteBikeService,
   getBikeServiceTypes,
   getCategoriesByBike,
+  createBikeServiceCategory,
+  createBikeSubService,
   getServiceMedia,
 } from "../controllers/bikeServiceController.js";
 
@@ -37,7 +39,16 @@ const upload = multer({
 ================================ */
 
 // Categories filtered by bike brand
-router.get("/types/by-bike/:bikeId", getCategoriesByBike);
+// protect: needs the logged-in garage to check the bike belongs to it
+router.get("/types/by-bike/:bikeId", protect, getCategoriesByBike);
+
+// Add new category / sub-service (duplicate names are rejected with 409)
+router.post("/types/categories", protect, createBikeServiceCategory);
+router.post(
+  "/types/categories/:categoryId/sub-services",
+  protect,
+  createBikeSubService,
+);
 
 // All service types
 router.get("/types/list", getBikeServiceTypes);

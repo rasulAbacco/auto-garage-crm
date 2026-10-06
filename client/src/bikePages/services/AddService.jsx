@@ -27,6 +27,23 @@ import {
 import { Toaster, toast } from "react-hot-toast";
 import api from "../../utils/axiosInstance";
 
+/* ---------- name matching for duplicate checks ---------- */
+const typeKey = (v) => String(v || "").trim().replace(/\s+/g, " ").toLowerCase();
+
+const findExactType = (list, name) =>
+  typeKey(name) ? list.find((i) => typeKey(i.name) === typeKey(name)) : undefined;
+
+const findSimilarTypes = (list, name) => {
+  const k = typeKey(name);
+  if (k.length < 2) return [];
+  return list
+    .filter((i) => {
+      const n = typeKey(i.name);
+      return n !== k && (n.includes(k) || k.includes(n));
+    })
+    .slice(0, 4);
+};
+
 export default function AddService() {
   const { isDark } = useTheme();
   const navigate = useNavigate();
@@ -76,6 +93,13 @@ export default function AddService() {
   const [subServiceQuery, setSubServiceQuery] = useState("");
   const [showCategoryDropdown, setShowCategoryDropdown] = useState(false);
   const [showSubServiceDropdown, setShowSubServiceDropdown] = useState(false);
+
+  // "+ Add New" category / sub-service panel
+  const [addPanel, setAddPanel] = useState(null); // "category" | "subService" | null
+  const [newTypeName, setNewTypeName] = useState("");
+  const [savingType, setSavingType] = useState(false);
+  // old services may have free-text category/sub-service; keep them editable
+  const legacyTypesRef = useRef({ category: "", subService: "" });
 
   const categoryInputRef = useRef(null);
   const subServiceInputRef = useRef(null);
@@ -232,6 +256,10 @@ export default function AddService() {
 
         setCategoryQuery(data.category?.name || data.categoryText || "");
         setSubServiceQuery(data.subService?.name || data.subServiceText || "");
+        legacyTypesRef.current = {
+          category: data.category?.name || data.categoryText || "",
+          subService: data.subService?.name || data.subServiceText || "",
+        };
 
 
         if (data.serviceItems && data.serviceItems.length > 0) {
@@ -321,10 +349,12 @@ export default function AddService() {
   const handleCategoryChange = (e) => {
     const value = e.target.value;
     setCategoryQuery(value);
+    // typed name exactly matches an existing one -> use that one
+    const match = findExactType(categories, value);
     setForm({
       ...form,
-      category: "",
-      categoryText: value,
+      category: match ? match.id : "",
+      categoryText: match ? match.name : value,
       subService: "",
       subServiceText: "",
     });
@@ -348,12 +378,218 @@ export default function AddService() {
   const handleSubServiceChange = (e) => {
     const value = e.target.value;
     setSubServiceQuery(value);
+    const match = findExactType(subServices, value);
     setForm({
       ...form,
-      subService: "",
-      subServiceText: value,
+      subService: match ? match.id : "",
+      subServiceText: match ? match.name : value,
     });
     setShowSubServiceDropdown(true);
+  };
+
+  /* =====================================================
+     ADD NEW CATEGORY / SUB-SERVICE
+     - blocks duplicates (case / spacing ignored)
+     - if it already exists, selects the existing one instead
+  ===================================================== */
+  const openAddPanel = (kind) => {
+    const query = kind === "category" ? categoryQuery : subServiceQuery;
+    const list = kind === "category" ? categories : subServices;
+    setNewTypeName(findExactType(list, query) ? "" : query.trim());
+    setAddPanel(kind);
+    setShowCategoryDropdown(false);
+    setShowSubServiceDropdown(false);
+  };
+
+  const closeAddPanel = () => {
+    setAddPanel(null);
+    setNewTypeName("");
+  };
+
+  const selectExistingType = (kind, item) => {
+    if (kind === "category") {
+      const cat = { ...item, subServices: item.subServices || [] };
+      setCategories((prev) =>
+        prev.some((c) => c.id === cat.id) ? prev : [...prev, cat],
+      );
+      handleCategorySelect(cat);
+    } else {
+      setCategories((prev) =>
+        prev.map((c) =>
+          c.id === Number(form.category) &&
+          !(c.subServices || []).some((x) => x.id === item.id)
+            ? { ...c, subServices: [...(c.subServices || []), item] }
+            : c,
+        ),
+      );
+      handleSubServiceSelect(item);
+    }
+  };
+
+  const saveNewType = async (kind, rawName) => {
+    const name = String(rawName || "").trim().replace(/\s+/g, " ");
+    const label = kind === "category" ? "Category" : "Sub-service";
+
+    if (name.length < 2) {
+      toast.error(`${label} name must be at least 2 characters`);
+      return;
+    }
+
+    // already in the list -> select it, don't add again
+    const list = kind === "category" ? categories : subServices;
+    const dup = findExactType(list, name);
+    if (dup) {
+      selectExistingType(kind, dup);
+      toast(`"${dup.name}" already exists – selected it for you`, { icon: "ℹ️" });
+      closeAddPanel();
+      return;
+    }
+
+    if (kind === "subService" && !form.category) {
+      toast.error("Select or add the category first");
+      return;
+    }
+
+    try {
+      setSavingType(true);
+
+      if (kind === "category") {
+        const res = await api.post("/api/bike-services/types/categories", {
+          name,
+          bikeId: form.client || undefined,
+        });
+        const cat = { ...res.data.category, subServices: res.data.category.subServices || [] };
+        setCategories((prev) => [...prev, cat]);
+        handleCategorySelect(cat);
+        toast.success(`Category "${cat.name}" added`);
+      } else {
+        const res = await api.post(
+          `/api/bike-services/types/categories/${form.category}/sub-services`,
+          { name },
+        );
+        const sub = res.data.subService;
+        setCategories((prev) =>
+          prev.map((c) =>
+            c.id === Number(form.category)
+              ? { ...c, subServices: [...(c.subServices || []), sub] }
+              : c,
+          ),
+        );
+        handleSubServiceSelect(sub);
+        toast.success(`Sub-service "${sub.name}" added`);
+      }
+
+      closeAddPanel();
+    } catch (err) {
+      const existing = err.response?.data?.existing;
+      if (err.response?.status === 409 && existing) {
+        // server found a duplicate (e.g. added from another tab) -> use it
+        selectExistingType(kind, existing);
+        toast(err.response.data.message, { icon: "ℹ️" });
+        closeAddPanel();
+        return;
+      }
+      toast.error(err.response?.data?.message || `Failed to add ${label.toLowerCase()}`);
+    } finally {
+      setSavingType(false);
+    }
+  };
+
+  const renderAddPanel = (kind) => {
+    const list = kind === "category" ? categories : subServices;
+    const label = kind === "category" ? "category" : "sub-service";
+    const exact = findExactType(list, newTypeName);
+    const similar = findSimilarTypes(list, newTypeName);
+    const tooShort = newTypeName.trim().length < 2;
+
+    return (
+      <div
+        className={`mt-2 p-4 rounded-xl border-2 border-dashed ${
+          isDark ? "border-green-500/40 bg-gray-800" : "border-green-300 bg-green-50/60"
+        }`}
+      >
+        <p className={`text-xs font-semibold mb-2 ${isDark ? "text-gray-300" : "text-gray-700"}`}>
+          Add new {label}
+          {kind === "subService" && categoryQuery ? ` in "${categoryQuery}"` : ""}
+        </p>
+
+        <div className="flex gap-2">
+          <input
+            autoFocus
+            type="text"
+            value={newTypeName}
+            maxLength={60}
+            onChange={(e) => setNewTypeName(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                if (!tooShort && !exact && !savingType) saveNewType(kind, newTypeName);
+              }
+              if (e.key === "Escape") closeAddPanel();
+            }}
+            placeholder={`New ${label} name`}
+            className={`flex-1 min-w-0 px-3 py-2 rounded-lg border-2 text-sm focus:outline-none focus:ring-2 ${
+              exact ? "border-red-400 focus:ring-red-400" : "focus:ring-green-500"
+            } ${isDark ? "bg-gray-700 border-gray-600 text-white" : "bg-white border-gray-200 text-gray-900"}`}
+          />
+          <button
+            type="button"
+            disabled={savingType || tooShort || !!exact}
+            onClick={() => saveNewType(kind, newTypeName)}
+            className="px-4 py-2 rounded-lg text-sm font-semibold bg-green-600 hover:bg-green-700 text-white flex items-center gap-1 disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            {savingType ? <Loader2 size={16} className="animate-spin" /> : <Plus size={16} />}
+            Add
+          </button>
+          <button
+            type="button"
+            onClick={closeAddPanel}
+            title="Cancel"
+            className={`px-2 rounded-lg ${isDark ? "text-gray-400 hover:bg-gray-700" : "text-gray-500 hover:bg-gray-200"}`}
+          >
+            <X size={16} />
+          </button>
+        </div>
+
+        {exact && (
+          <div className="mt-2 flex flex-wrap items-center gap-2 text-sm text-red-500">
+            <AlertCircle size={14} />
+            <span>"{exact.name}" already exists.</span>
+            <button
+              type="button"
+              onClick={() => {
+                selectExistingType(kind, exact);
+                closeAddPanel();
+              }}
+              className="font-semibold underline text-green-600"
+            >
+              Use existing
+            </button>
+          </div>
+        )}
+
+        {!exact && similar.length > 0 && (
+          <div className={`mt-2 flex flex-wrap items-center gap-2 text-xs ${isDark ? "text-gray-400" : "text-gray-600"}`}>
+            <span>Similar existing:</span>
+            {similar.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => {
+                  selectExistingType(kind, item);
+                  closeAddPanel();
+                }}
+                className={`px-2 py-1 rounded-full border ${
+                  isDark ? "border-gray-600 hover:bg-gray-700" : "border-gray-300 hover:bg-white"
+                }`}
+              >
+                {item.name}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+    );
   };
 
   /* =====================================================
@@ -392,12 +628,34 @@ const handleSubmit = async (action = "create") => {
   }
 
   if (!form.category && !form.categoryText) {
-    toast.error("Please select or enter a service category");
+    toast.error("Please select a service category");
     return;
   }
 
   if (!form.subService && !form.subServiceText) {
-    toast.error("Please select or enter a sub-service");
+    toast.error("Please select a sub-service");
+    return;
+  }
+
+  // typed names must exist in the list (or be the old value of this service)
+  const isLegacy = (field, value) =>
+    isEditMode && typeKey(value) === typeKey(legacyTypesRef.current[field]);
+
+  if (
+    !form.category &&
+    !findExactType(categories, form.categoryText) &&
+    !isLegacy("category", form.categoryText)
+  ) {
+    toast.error(`"${form.categoryText}" is not in the list. Click "+ Add New" to add it.`);
+    return;
+  }
+
+  if (
+    !form.subService &&
+    !findExactType(subServices, form.subServiceText) &&
+    !isLegacy("subService", form.subServiceText)
+  ) {
+    toast.error(`"${form.subServiceText}" is not in the list. Click "+ Add New" to add it.`);
     return;
   }
 
@@ -627,10 +885,21 @@ const handleSend = () => {
             {/* Service Category & Sub-Service */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="space-y-2 relative">
-                <label className={`flex items-center gap-2 text-sm font-semibold ${isDark ? "text-gray-300" : "text-gray-700"}`}>
-                  <Wrench size={16} className="text-green-500" />
-                  Service Category <span className="text-red-500">*</span>
-                </label>
+                <div className="flex items-center justify-between">
+                  <label className={`flex items-center gap-2 text-sm font-semibold ${isDark ? "text-gray-300" : "text-gray-700"}`}>
+                    <Wrench size={16} className="text-green-500" />
+                    Service Category <span className="text-red-500">*</span>
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => (addPanel === "category" ? closeAddPanel() : openAddPanel("category"))}
+                    disabled={!form.client || categoryLoading}
+                    title={!form.client ? "Select a client first" : "Add a new category"}
+                    className="flex items-center gap-1 text-xs font-semibold text-green-600 hover:text-green-700 disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    <Plus size={14} /> Add New
+                  </button>
+                </div>
                 <input
                   ref={categoryInputRef}
                   type="text"
@@ -647,35 +916,53 @@ const handleSend = () => {
                     ref={categoryDropdownRef}
                     className={`absolute z-50 w-full mt-1 rounded-xl shadow-2xl border-2 max-h-60 overflow-y-auto ${isDark ? "bg-gray-700 border-gray-600" : "bg-white border-gray-200"}`}
                   >
-                    {filteredCategories.length > 0 ? (
-                      filteredCategories.map((cat) => (
-                        <div
-                          key={cat.id}
-                          onClick={() => handleCategorySelect(cat)}
-                          className={`px-4 py-3 cursor-pointer transition-colors duration-200 ${isDark ? "hover:bg-gray-600 text-white" : "hover:bg-gray-100 text-gray-900"}`}
-                        >
-                          {cat.name}
-                        </div>
-                      ))
-                    ) : (
-                      <div className={`px-4 py-3 ${isDark ? "text-gray-400" : "text-gray-500"}`}>
-                        <div className="flex items-center gap-2">
-                          <Wrench size={16} className="text-green-500" />
-                          <span>
-                            Will create new: "<strong>{categoryQuery}</strong>"
-                          </span>
-                        </div>
+                    {filteredCategories.map((cat) => (
+                      <div
+                        key={cat.id}
+                        onClick={() => handleCategorySelect(cat)}
+                        className={`px-4 py-3 cursor-pointer transition-colors duration-200 ${isDark ? "hover:bg-gray-600 text-white" : "hover:bg-gray-100 text-gray-900"}`}
+                      >
+                        {cat.name}
+                      </div>
+                    ))}
+
+                    {filteredCategories.length === 0 && !categoryQuery.trim() && (
+                      <div className={`px-4 py-3 text-sm ${isDark ? "text-gray-400" : "text-gray-500"}`}>
+                        No categories found
+                      </div>
+                    )}
+
+                    {categoryQuery.trim() && !findExactType(categories, categoryQuery) && (
+                      <div
+                        onClick={() => openAddPanel("category")}
+                        className={`px-4 py-3 cursor-pointer flex items-center gap-2 border-t text-green-600 font-medium ${isDark ? "border-gray-600 hover:bg-gray-600" : "border-gray-100 hover:bg-green-50"}`}
+                      >
+                        <Plus size={16} />
+                        <span>Add "<strong>{categoryQuery.trim()}</strong>" as new category</span>
                       </div>
                     )}
                   </div>
                 )}
+
+                {addPanel === "category" && renderAddPanel("category")}
               </div>
 
               <div className="space-y-2 relative">
-                <label className={`flex items-center gap-2 text-sm font-semibold ${isDark ? "text-gray-300" : "text-gray-700"}`}>
-                  <Wrench size={16} className="text-purple-500" />
-                  Sub-Service <span className="text-red-500">*</span>
-                </label>
+                <div className="flex items-center justify-between">
+                  <label className={`flex items-center gap-2 text-sm font-semibold ${isDark ? "text-gray-300" : "text-gray-700"}`}>
+                    <Wrench size={16} className="text-purple-500" />
+                    Sub-Service <span className="text-red-500">*</span>
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => (addPanel === "subService" ? closeAddPanel() : openAddPanel("subService"))}
+                    disabled={!form.category}
+                    title={!form.category ? "Select a category from the list first" : "Add a new sub-service"}
+                    className="flex items-center gap-1 text-xs font-semibold text-purple-600 hover:text-purple-700 disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    <Plus size={14} /> Add New
+                  </button>
+                </div>
                 <input
                   ref={subServiceInputRef}
                   type="text"
@@ -692,28 +979,35 @@ const handleSend = () => {
                     ref={subServiceDropdownRef}
                     className={`absolute z-50 w-full mt-1 rounded-xl shadow-2xl border-2 max-h-60 overflow-y-auto ${isDark ? "bg-gray-700 border-gray-600" : "bg-white border-gray-200"}`}
                   >
-                    {filteredSubServices.length > 0 ? (
-                      filteredSubServices.map((sub) => (
-                        <div
-                          key={sub.id}
-                          onClick={() => handleSubServiceSelect(sub)}
-                          className={`px-4 py-3 cursor-pointer transition-colors duration-200 ${isDark ? "hover:bg-gray-600 text-white" : "hover:bg-gray-100 text-gray-900"}`}
-                        >
-                          {sub.name}
-                        </div>
-                      ))
-                    ) : (
-                      <div className={`px-4 py-3 ${isDark ? "text-gray-400" : "text-gray-500"}`}>
-                        <div className="flex items-center gap-2">
-                          <Wrench size={16} className="text-green-500" />
-                          <span>
-                            Will create new: "<strong>{subServiceQuery}</strong>"
-                          </span>
-                        </div>
+                    {filteredSubServices.map((sub) => (
+                      <div
+                        key={sub.id}
+                        onClick={() => handleSubServiceSelect(sub)}
+                        className={`px-4 py-3 cursor-pointer transition-colors duration-200 ${isDark ? "hover:bg-gray-600 text-white" : "hover:bg-gray-100 text-gray-900"}`}
+                      >
+                        {sub.name}
+                      </div>
+                    ))}
+
+                    {filteredSubServices.length === 0 && !subServiceQuery.trim() && (
+                      <div className={`px-4 py-3 text-sm ${isDark ? "text-gray-400" : "text-gray-500"}`}>
+                        No sub-services yet for this category
+                      </div>
+                    )}
+
+                    {subServiceQuery.trim() && form.category && !findExactType(subServices, subServiceQuery) && (
+                      <div
+                        onClick={() => openAddPanel("subService")}
+                        className={`px-4 py-3 cursor-pointer flex items-center gap-2 border-t text-purple-600 font-medium ${isDark ? "border-gray-600 hover:bg-gray-600" : "border-gray-100 hover:bg-purple-50"}`}
+                      >
+                        <Plus size={16} />
+                        <span>Add "<strong>{subServiceQuery.trim()}</strong>" as new sub-service</span>
                       </div>
                     )}
                   </div>
                 )}
+
+                {addPanel === "subService" && renderAddPanel("subService")}
               </div>
             </div>
 

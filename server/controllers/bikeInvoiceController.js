@@ -1,6 +1,52 @@
 import prisma from "../models/prismaClient.js";
 import { getOwnerUserId } from "../utils/getAdminId.js";
-import { sendBikeFinalInvoiceWhatsApp } from "../controllers/bikeWhatsappController.js";
+
+/* ============================================================
+   SERVICE <-> INVOICE SYNC
+   Links the service to its invoice and keeps the service's
+   payment state in line with the invoice (Paid => due 0).
+============================================================ */
+const invoiceStatusFor = (status) =>
+  status === "Paid" ? "paid" : "generated";
+
+async function syncServicesWithInvoice(invoice, ownerUserId, serviceId) {
+  let targetId = serviceId ? Number(serviceId) : null;
+
+  // invoice made directly from Billing page (no serviceId sent):
+  // attach it to the latest un-billed service of this bike
+  if (!targetId) {
+    const alreadyLinked = await prisma.bikeService.count({
+      where: { bikeInvoiceId: invoice.id },
+    });
+    if (!alreadyLinked) {
+      const latest = await prisma.bikeService.findFirst({
+        where: {
+          ownerUserId,
+          clientId: invoice.bikeId,
+          bikeInvoiceId: null,
+        },
+        orderBy: { createdAt: "desc" },
+        select: { id: true },
+      });
+      targetId = latest?.id || null;
+    }
+  }
+
+  if (targetId) {
+    await prisma.bikeService.updateMany({
+      where: { id: targetId, ownerUserId },
+      data: { bikeInvoiceId: invoice.id },
+    });
+  }
+
+  await prisma.bikeService.updateMany({
+    where: { bikeInvoiceId: invoice.id, ownerUserId },
+    data: {
+      invoiceStatus: invoiceStatusFor(invoice.status),
+      balanceDue: invoice.status === "Paid" ? 0 : Number(invoice.balanceDue || 0),
+    },
+  });
+}
 
 /* ============================================================
    GET ALL BIKE INVOICES
@@ -72,7 +118,10 @@ export const getBikeInvoices = async (req, res) => {
         cgstTotal +
         sgstTotal -
         (Number(inv.discount) || 0);
-      const balanceDue = grandTotal - (Number(inv.advancePaid) || 0);
+      const balanceDue =
+        inv.status === "Paid"
+          ? 0
+          : grandTotal - (Number(inv.advancePaid) || 0);
 
       return {
         ...inv,
@@ -158,7 +207,10 @@ export const getBikeInvoiceById = async (req, res) => {
       cgstTotal +
       sgstTotal -
       (Number(invoice.discount) || 0);
-    const balanceDue = grandTotal - (Number(invoice.advancePaid) || 0);
+    const balanceDue =
+      invoice.status === "Paid"
+        ? 0
+        : grandTotal - (Number(invoice.advancePaid) || 0);
 
     res.json({
       ...invoice,
@@ -303,7 +355,8 @@ export const createBikeInvoice = async (req, res) => {
       advancePaid !== undefined ? Number(advancePaid || 0) : serviceAdvancePaid;
 
     const grandTotal = baseAmount - discount;
-    const balanceDue = grandTotal - finalAdvancePaid;
+    // ✅ fully paid invoice has nothing due
+    const balanceDue = status === "Paid" ? 0 : grandTotal - finalAdvancePaid;
 
     if (grandTotal <= 0) {
       return res.status(400).json({
@@ -367,17 +420,17 @@ export const createBikeInvoice = async (req, res) => {
     });
 
     /* ===============================
-       🔥 AUTO SEND WHATSAPP
+       🔗 LINK SERVICE + SYNC PAYMENT
     =============================== */
+    try {
+      await syncServicesWithInvoice(invoice, ownerUserId, serviceId);
+    } catch (syncErr) {
+      console.error("syncServicesWithInvoice error:", syncErr);
+    }
 
-    // If you want only send when Paid → wrap in if(status === "Paid")
-    sendBikeFinalInvoiceWhatsApp(invoice.id, ownerUserId)
-      .then(() => {
-        console.log("✅ Bike final invoice WhatsApp sent");
-      })
-      .catch((err) => {
-        console.error("⚠️ Bike WhatsApp failed:", err.message);
-      });
+    // ℹ️ WhatsApp is sent by the client via
+    //    POST /api/bike-invoices/:id/send-whatsapp (so the user sees the real result
+    //    and the customer doesn't get the invoice twice)
 
     return res.status(201).json({
       message: "Bike invoice created successfully",
@@ -405,6 +458,7 @@ export const updateBikeInvoice = async (req, res) => {
 
     const {
       bikeId,
+      serviceId,
       vehicle,
       serviceCategory,
       serviceSubCategory,
@@ -470,7 +524,9 @@ export const updateBikeInvoice = async (req, res) => {
         : Number(discountValue || 0);
 
     const grandTotal = baseAmount - discount;
-    const balanceDue = grandTotal - Number(advancePaid || 0);
+    // ✅ fully paid invoice has nothing due
+    const balanceDue =
+      status === "Paid" ? 0 : grandTotal - Number(advancePaid || 0);
 
     /* 💾 UPDATE INVOICE */
     const updatedInvoice = await prisma.bikeInvoice.update({
@@ -488,7 +544,7 @@ export const updateBikeInvoice = async (req, res) => {
         sgstTotal,
         discountType,
         discount,
-        advancePaid,
+        advancePaid: Number(advancePaid || 0),
         grandTotal,
         balanceDue,
 
@@ -515,6 +571,13 @@ export const updateBikeInvoice = async (req, res) => {
       },
       include: { bike: true, invoiceItems: true },
     });
+
+    // 🔗 keep linked service(s) in sync (e.g. Pending -> Paid)
+    try {
+      await syncServicesWithInvoice(updatedInvoice, ownerUserId, serviceId);
+    } catch (syncErr) {
+      console.error("syncServicesWithInvoice error:", syncErr);
+    }
 
     res.json({
       message: "Invoice updated successfully",
@@ -554,7 +617,7 @@ export const deleteBikeInvoice = async (req, res) => {
     // 🔒 Detach services
     await prisma.bikeService.updateMany({
       where: { bikeInvoiceId: invoice.id },
-      data: { bikeInvoiceId: null, status: "Pending" },
+      data: { bikeInvoiceId: null, status: "Pending", invoiceStatus: "draft" },
     });
 
     await prisma.bikeInvoice.delete({
