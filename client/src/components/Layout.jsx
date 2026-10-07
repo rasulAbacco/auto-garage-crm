@@ -27,7 +27,6 @@ import {
   LockKeyhole,
   ListTree,
   ShoppingCart,
-  ExternalLink,
   ShieldCheck,
   ShieldAlert,
 } from "lucide-react";
@@ -62,6 +61,8 @@ export default function Layout() {
     "/plan",
     "/reference",
     "/upgrade",
+    "/spare-parts",
+    "/spare-parts/vendors",
   ];
 
   /* ======================================================
@@ -160,7 +161,15 @@ export default function Layout() {
     {to: "/inventory-management", label: "Inventory Management", icon: Warehouse },
     { to: "/reports", label: "Reports", icon: BarChart2 },
     { to: "/ocr-scanner", label: "OCR Scanner", icon: FileText },
-
+    {
+      label: "Shop Spare Parts",
+      icon: ShoppingCart,
+      shop: true,
+      children: [
+        { to: "/spare-parts", label: "All Products" },
+        { to: "/spare-parts/vendors", label: "Vendors" },
+      ],
+    },
     { to: "/staff-management", label: "Staff Management", icon: UserRoundPlus },
     { to: "/salary-management", label: "Salary Management", icon: Wallet },
     { to: "/dynamic-data", label: "Data", icon: Database },
@@ -173,19 +182,13 @@ export default function Layout() {
         { to: "/marketplace/packages", label: "Packages" },
       ],
     },
-        // opens the spare-parts store in a new tab
-    {
-      href: "https://motordesk-spareparts.onrender.com/",
-      label: "Buy Spare Parts",
-      icon: ShoppingCart,
-    },
     { to: "/plan", label: "Your Plan", icon: IndianRupee },
     { to: "/reference", label: "Reference", icon: Network },
     { to: "/upgrade", label: "Upgrade", icon: Crown },
   ];
 
   const filteredMenu = menu.filter((item) => {
-    if (item.href) return true; // external links: everyone
+    if (item.shop) return true; // Shop Spare Parts: owners + staff
     if (isStaff) {
       return [
         "/car-dashboard",
@@ -365,34 +368,6 @@ export default function Layout() {
                       </div>
                     </div>
                   </div>
-                );
-              }
-
-              // external link -> new tab
-              if (item.href) {
-                const Icon = item.icon;
-                return (
-                  <a
-                    key={item.href}
-                    href={item.href}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    onClick={() => setSidebarOpen(false)}
-                    title={item.label}
-                    className="flex items-center px-3 py-3 rounded-xl font-medium transition-all duration-200 group"
-                    style={{ color: colors.textSecondary }}
-                  >
-                    <Icon
-                      className="flex-shrink-0 w-5 h-5"
-                      style={{ color: colors.textSecondary }}
-                    />
-                    <span
-                      className={`whitespace-nowrap flex items-center gap-2 overflow-hidden transition-all duration-300 ease-in-out ${sidebarExpanded ? "opacity-100 w-auto ml-3" : "opacity-0 w-0 ml-0"}`}
-                    >
-                      {item.label}
-                      <ExternalLink className="w-3.5 h-3.5 opacity-60" />
-                    </span>
-                  </a>
                 );
               }
 

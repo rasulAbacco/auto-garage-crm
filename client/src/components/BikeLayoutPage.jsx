@@ -23,7 +23,6 @@ import {
 ChevronDown,
 ChevronRight,
   ShoppingCart,
-  ExternalLink,
 } from "lucide-react";
 import { useTheme } from "../contexts/ThemeContext";
 import { useNavigate, Outlet  } from "react-router-dom";
@@ -79,7 +78,30 @@ const menu = [
     icon: FileText,
     roles: ["owner", "bike_team"],
   },
-    {
+  {
+    label: "Shop Spare Parts",
+    icon: ShoppingCart,
+    roles: ["owner", "bike_team"],
+    children: [
+      { to: "/bike-spare-parts", label: "All Products" },
+      { to: "/bike-spare-parts/vendors", label: "Vendors" },
+    ],
+  },
+
+  // 🔒 OWNER ONLY
+  {
+    to: "/bike-plan",
+    label: "Your Plan",
+    icon: IndianRupee,
+    roles: ["owner"],
+  },
+  {
+    to: "/bike-reference",
+    label: "Reference",
+    icon: Network,
+    roles: ["owner"],
+  },
+  {
     to: "/salary-manage",
     label: "Staff Management",
     icon: Package,
@@ -91,7 +113,13 @@ const menu = [
     icon: Users,
     roles: ["owner"],
   },
-    {
+  {
+    to: "/bike-plans",
+    label: "Upgrade",
+    icon: Crown,
+    roles: ["owner"],
+  },
+  {
   label: "Marketplace",
   icon: ListTree,
   roles: ["owner", "bike_team"],
@@ -110,36 +138,6 @@ const menu = [
     },
   ],
 },
-  {
-    // opens the spare-parts store in a new tab
-    href: "https://motordesk-spareparts.onrender.com/",
-    label: "Buy Spare Parts",
-    icon: ShoppingCart,
-    roles: ["owner", "bike_team"],
-  },
-  
-
-  // 🔒 OWNER ONLY
-  {
-    to: "/bike-plan",
-    label: "Your Plan",
-    icon: IndianRupee,
-    roles: ["owner"],
-  },
-  {
-    to: "/bike-reference",
-    label: "Reference",
-    icon: Network,
-    roles: ["owner"],
-  },
-
-  {
-    to: "/bike-plans",
-    label: "Upgrade",
-    icon: Crown,
-    roles: ["owner"],
-  },
-
 ];
 
 
@@ -308,38 +306,6 @@ const logout = () => {
                     </div>
                   )}
                 </div>
-              );
-            }
-
-            // ===============================
-            // EXTERNAL LINK (new tab)
-            // ===============================
-            if (item.href) {
-              return (
-                <a
-                  key={item.href}
-                  href={item.href}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  onClick={() => setSidebarOpen(false)}
-                  title={item.label}
-                  className={`
-                    w-full flex items-center gap-3 px-3 py-3 rounded-xl font-medium transition-all duration-200
-                    ${
-                      isDark
-                        ? "text-gray-300 hover:bg-gray-700 hover:text-white"
-                        : "text-gray-700 hover:bg-blue-50 hover:text-blue-600"
-                    }
-                  `}
-                >
-                  <Icon className="w-5 h-5 flex-shrink-0" />
-                  {sidebarExpanded && (
-                    <span className="flex items-center gap-2 transition-opacity duration-300">
-                      {item.label}
-                      <ExternalLink className="w-3.5 h-3.5 opacity-60" />
-                    </span>
-                  )}
-                </a>
               );
             }
 
