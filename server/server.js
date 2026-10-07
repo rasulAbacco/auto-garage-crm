@@ -73,7 +73,7 @@ import notificationRoutes from "./routes/notification.routes.js";
 // Import the new verification router layer
 import garageVerificationRoutes from "./routes/garageVerification.routes.js";
 import inventoryRoutes from "./routes/carInventoryRoutes.js";
-
+import sparePartsRoutes from "./routes/sparePartsRoutes.js";
 
 
 // console.log("Models in Prisma:", Object.keys(prisma));
@@ -259,7 +259,7 @@ app.use("/api/washing-staff-salary", washingStaffSalaryRoutes);
 app.use("/api/test", testRoutes);
 app.use("/api", serviceMediaRoutes);
 app.use("/api/washing-reminders", washingReminderRoutes);
-
+app.use("/api/spare-parts", sparePartsRoutes); // MotorDesk spare parts store (read-only)
 app.use("/api/marketplace", marketplaceRoutes);
 app.use("/api/notifications", notificationRoutes);
 /* -----------------------------------------------------

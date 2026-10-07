@@ -49,6 +49,7 @@ import Reference from "./pages/Reference.jsx";
 import BikeRegister from "./pages/BikeRegister.jsx";
 import WashRegister from "./pages/WashRegister.jsx";
 import BikeLayoutPage from "./components/BikeLayoutPage.jsx";
+import SparePartsStore from "./pages/spareparts/SparePartsStore.jsx";
 import Clients from "./bikePages/client/Clients.jsx";
 import Services from "./bikePages/services/services.jsx";
 import Billings from "./bikePages/Billing/Billings.jsx";
@@ -193,6 +194,9 @@ function App() {
               <Route path="/dynamic-data" element={<Data />} />
               <Route path="/staff-management" element={<StaffManagement />} />
               <Route path="/salary-management" element={<SalaryManagement />} />
+              {/* Shop Spare Parts (car) */}
+              <Route path="/spare-parts" element={<SparePartsStore key="car-products" vehicle="car" view="products" />} />
+              <Route path="/spare-parts/vendors" element={<SparePartsStore key="car-vendors" vehicle="car" view="vendors" />} />
               // App.jsx
               <Route
                 path="/billing/proforma-render/:token"
@@ -213,6 +217,9 @@ function App() {
               <Route path="bike-reference" element={<Reference />} />
               <Route path="/bike-plans" element={<Upgrade />} />
               <Route path="/bike-ocr-scanner" element={<OCRScanner />} />
+              {/* Shop Spare Parts (bike) */}
+              <Route path="/bike-spare-parts" element={<SparePartsStore key="bike-products" vehicle="bike" view="products" />} />
+              <Route path="/bike-spare-parts/vendors" element={<SparePartsStore key="bike-vendors" vehicle="bike" view="vendors" />} />
               <Route path="/editclient/:id" element={<AddClients />} />
               <Route path="/editclient/new" element={<AddClients />} />
               <Route path="/bikes/:id" element={<BikeDetail />} />
