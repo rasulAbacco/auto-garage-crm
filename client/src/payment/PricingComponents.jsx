@@ -18,6 +18,30 @@ import {
   FiPercent,
 } from "react-icons/fi";
 
+// --- SUBSCRIPTION PRICE HELPER ---
+// 1 month  -> fixed price, no discount
+// 2+ months -> region multi-month discount (10% urban / 5% rural)
+export const MONTH_OPTIONS = [1, 3, 6, 12];
+export const MAX_MONTHS = 24;
+
+export const calcSubscription = (monthlyPrice, months = 1, discount = 0.1) => {
+  const m = Math.max(1, Math.min(MAX_MONTHS, Number(months) || 1));
+  const price = Number(monthlyPrice) || 0;
+  const discountRate = m > 1 ? discount : 0;
+  const subtotal = price * m;
+  const discountAmount = Math.round(subtotal * discountRate);
+  const total = subtotal - discountAmount;
+  return {
+    months: m,
+    subtotal,
+    discountRate,
+    discountPct: Math.round(discountRate * 100),
+    discountAmount,
+    total,
+    effectiveMonthly: Math.round(total / m),
+  };
+};
+
 // --- HERO COMPONENT ---
 export const Hero = ({
   isDark,
@@ -25,7 +49,37 @@ export const Hero = ({
   setBillingPeriod,
   planType,
   setPlanType,
-}) => (
+  region = "urban",
+  setRegion = () => {},
+  regionConfig = { label: "Urban Cities", multiMonthDiscount: 0.1 },
+  freeTrialDays = 30,
+  months = 1,
+  setMonths = () => {},
+}) => {
+  const discountPct = Math.round((regionConfig.multiMonthDiscount || 0) * 100);
+  const offers = [
+    {
+      icon: FiClock,
+      title: `${freeTrialDays} Days Free Trial`,
+      desc: "On Premium & Customise packages",
+    },
+    {
+      icon: FiPercent,
+      title: `${discountPct}% Discount`,
+      desc: "On subscriptions longer than 1 month",
+    },
+    ...(regionConfig.customiseWebsitePerk
+      ? [
+          {
+            icon: FiAward,
+            title: "Website Free For 1 Year",
+            desc: `With Customise · Domain ₹${Number(regionConfig.domainCharge || 0).toLocaleString("en-IN")} paid by client`,
+          },
+        ]
+      : []),
+  ];
+
+  return (
   <section className="relative z-10 px-6 py-12 sm:py-20">
     <div className="max-w-7xl mx-auto text-center space-y-10 w-full">
       {/* Category Tag */}
@@ -43,49 +97,64 @@ export const Hero = ({
         </h1>
       </div>
 
-      {/* --- 50% Off Welcome Protocol Banner --- */}
+      {/* Region Selector Tab */}
+      <div className="inline-grid grid-cols-2 bg-[#F8FAFC] p-1.5 rounded-2xl border border-[#CBD5E1] w-full max-w-sm mx-auto gap-1 shadow-inner">
+        {[
+          { id: "urban", label: "Urban Cities" },
+          { id: "rural", label: "Rural Areas" },
+        ].map((r) => (
+          <button
+            key={r.id}
+            onClick={() => setRegion(r.id)}
+            className={`px-4 sm:px-8 py-3 rounded-xl text-[10px] font-black uppercase tracking-[0.2em] transition-all whitespace-nowrap ${region === r.id
+                ? "bg-[#001F3F] text-white shadow-xl"
+                : "text-slate-400 hover:text-[#001F3F]"
+              }`}
+          >
+            {r.label}
+          </button>
+        ))}
+      </div>
+
+      {/* --- Region Offers Banner --- */}
       <div className="max-w-7xl mx-auto relative group">
         <div
-          className={`p-8 md:p-10 rounded-[2.5rem] border-2 overflow-hidden flex flex-col md:flex-row items-center justify-between gap-8 transition-all duration-500 ${isDark
-              ? "bg-[#001F3F] border-white/10 shadow-2xl"
+          className={`p-8 md:p-10 rounded-[2.5rem] border-2 overflow-hidden flex flex-col lg:flex-row items-center justify-between gap-8 transition-all duration-500 ${isDark
+              ? "bg-[#001F3F] border-white/10 shadow-2xl text-white"
               : "bg-[#001F3F] border-[#001F3F] text-white shadow-xl"
             }`}
         >
           {/* Decorative Background Icon */}
           <FiCpu className="absolute right-[-5%] top-[-10%] w-64 h-64 opacity-5 pointer-events-none" />
 
-          <div className="flex flex-col md:flex-row items-center gap-6 relative z-10 text-center md:text-left">
-            <div className="w-16 h-16 rounded-2xl bg-emerald-600 flex items-center justify-center shadow-lg animate-pulse">
-              <FiPercent size={32} className="text-white" />
+          <div className="relative z-10 text-center lg:text-left">
+            <div className="inline-flex items-center bg-emerald-500 px-3 py-1 rounded-md mb-3">
+              <span className="text-[9px] font-black uppercase tracking-widest text-white">
+                {regionConfig.label} Offers
+              </span>
             </div>
-            <div>
-              <div className="inline-flex items-center bg-emerald-500 px-3 py-1 rounded-md mb-3">
-                <span className="text-[9px] font-black uppercase tracking-widest text-white">
-                  Welcome Protocol Active
-                </span>
-              </div>
-              <h3 className="text-2xl font-black uppercase tracking-tight italic mb-2">
-                50% Discount Applied
-              </h3>
-              <p className="text-blue-100/60 text-[10px] font-bold uppercase tracking-widest leading-relaxed">
-                Exclusive deployment strategy for{" "}
-                <span className="text-white">New Registrations</span> &{" "}
-                <span className="text-amber-400">First-Time Payments</span>.{" "}
-                <br />
-                Your operational subscription cost is reduced by half
-                automatically at checkout.
-              </p>
-            </div>
+            <h3 className="text-2xl font-black uppercase tracking-tight italic">
+              Start Free. Save More.
+            </h3>
           </div>
 
-          {/* Offer Status Widget */}
-          <div className="relative z-10 border-2 border-white/20 bg-white/5 backdrop-blur-md p-6 rounded-2xl min-w-[240px] text-center">
-            <p className="text-[9px] font-black uppercase tracking-[0.2em] text-blue-300 mb-1">
-              Verification Status
-            </p>
-            <p className="text-xl font-black italic uppercase tracking-tighter text-emerald-400">
-              50% Off Auto-Applied
-            </p>
+          <div
+            className={`relative z-10 grid grid-cols-1 ${offers.length === 3 ? "sm:grid-cols-3" : "sm:grid-cols-2"} gap-4 w-full lg:w-auto`}
+          >
+            {offers.map((o, i) => (
+              <div
+                key={i}
+                className="border-2 border-white/20 bg-white/5 backdrop-blur-md p-5 rounded-2xl min-w-[200px] text-center"
+              >
+                <o.icon size={20} className="mx-auto mb-2 text-emerald-400" />
+                <p className="text-sm font-black italic uppercase tracking-tight text-white">
+                  {o.title}
+                </p>
+                <p className="text-[9px] font-bold uppercase tracking-widest text-blue-100/60 mt-1 leading-relaxed">
+                  {o.desc}
+                </p>
+              </div>
+            ))}
           </div>
         </div>
       </div>
@@ -106,63 +175,99 @@ export const Hero = ({
         ))}
       </div>
 
-      {/* Billing Cycle Selector */}
-      <div className="flex items-center justify-center gap-6">
+      {/* Subscription Months Selector */}
+      <div className="flex flex-col items-center gap-4">
         <span
-          className={`text-[11px] font-black uppercase tracking-widest ${billingPeriod === "monthly" ? "text-[#001F3F]" : "text-slate-400"}`}
+          className={`text-[11px] font-black uppercase tracking-widest ${isDark ? "text-white" : "text-[#001F3F]"}`}
         >
-          Monthly
+          Subscription Duration
         </span>
-        <button
-          onClick={() =>
-            setBillingPeriod(billingPeriod === "monthly" ? "yearly" : "monthly")
-          }
-          className="relative w-14 h-7 rounded-full bg-[#001F3F] p-1 transition-all"
-        >
-          <div
-            className={`w-5 h-5 rounded-full bg-white transition-all duration-300 ${billingPeriod === "yearly" ? "translate-x-7" : "translate-x-0"
-              }`}
-          />
-        </button>
-        <div className="flex items-center gap-3">
-          <span
-            className={`text-[11px] font-black uppercase tracking-widest ${billingPeriod === "yearly" ? "text-[#001F3F]" : "text-slate-400"}`}
-          >
-            Yearly
-          </span>
-          <span className="text-green-600 text-[10px] font-black uppercase tracking-widest">
-            (Save 20%)
-          </span>
+
+        <div className="flex flex-wrap items-center justify-center gap-3">
+          {/* Quick picks */}
+          <div className="inline-flex bg-[#F8FAFC] p-1.5 rounded-2xl border border-[#CBD5E1] gap-1 shadow-inner">
+            {MONTH_OPTIONS.map((m) => (
+              <button
+                key={m}
+                onClick={() => setMonths(m)}
+                className={`px-4 sm:px-6 py-3 rounded-xl text-[10px] font-black uppercase tracking-[0.2em] transition-all whitespace-nowrap ${months === m
+                    ? "bg-[#001F3F] text-white shadow-xl"
+                    : "text-slate-400 hover:text-[#001F3F]"
+                  }`}
+              >
+                {m} {m === 1 ? "Month" : "Months"}
+              </button>
+            ))}
+          </div>
+
+          {/* Custom count stepper */}
+          <div className="inline-flex items-center bg-[#F8FAFC] p-1.5 rounded-2xl border border-[#CBD5E1] shadow-inner">
+            <button
+              onClick={() => setMonths(Math.max(1, months - 1))}
+              disabled={months <= 1}
+              aria-label="Decrease months"
+              className="w-10 h-10 rounded-xl text-lg font-black text-[#001F3F] hover:bg-white disabled:opacity-30 transition-all"
+            >
+              −
+            </button>
+            <input
+              type="number"
+              min={1}
+              max={MAX_MONTHS}
+              value={months}
+              onChange={(e) => {
+                const v = parseInt(e.target.value, 10);
+                setMonths(Number.isNaN(v) ? 1 : Math.max(1, Math.min(MAX_MONTHS, v)));
+              }}
+              aria-label="Number of months"
+              className="w-14 text-center bg-transparent text-sm font-black text-[#001F3F] outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+            />
+            <button
+              onClick={() => setMonths(Math.min(MAX_MONTHS, months + 1))}
+              disabled={months >= MAX_MONTHS}
+              aria-label="Increase months"
+              className="w-10 h-10 rounded-xl text-lg font-black text-[#001F3F] hover:bg-white disabled:opacity-30 transition-all"
+            >
+              +
+            </button>
+          </div>
         </div>
+
+        <span
+          className={`text-[10px] font-black uppercase tracking-widest ${months > 1 ? "text-green-600" : "text-slate-400"}`}
+        >
+          {months > 1
+            ? `${discountPct}% discount applied for ${months} months`
+            : `1 month at fixed price · choose 2+ months to save ${discountPct}%`}
+        </span>
       </div>
     </div>
   </section>
-);
+  );
+};
 
 // --- PRICING CARD COMPONENT ---
 export const PricingCard = ({
   plan,
   billingPeriod,
+  months: monthsProp,
   isDark,
   onSelect,
   isPopular,
 }) => {
   const Icon = plan.icon;
-  const isBasic = plan?.name?.toLowerCase().includes("basic");
+  const isTrial = plan.freeTrial ?? plan?.name?.toLowerCase().includes("basic");
+  const months = monthsProp ?? (billingPeriod === "yearly" ? 12 : 1);
 
-  // 1. Calculate the standard original market price based on cycle rules
-  const baseOriginalPrice =
-    billingPeriod === "yearly"
-      ? Math.round(plan.numericPrice * 12 * 0.8)
-      : plan.numericPrice;
-
-  const originalMonthlyEq =
-    billingPeriod === "yearly"
-      ? Math.round(baseOriginalPrice / 12)
-      : baseOriginalPrice;
-
-  // 2. Apply 50% discount rules for visual display layout (Standard / Premium)
-  const discountedMonthlyEq = Math.round(originalMonthlyEq * 0.5);
+  // 1 month = fixed price; 2+ months = region discount (10% urban / 5% rural)
+  const discount = plan.multiMonthDiscount ?? 0.1;
+  const discountPct = Math.round(discount * 100);
+  const monthlyPrice = plan.numericPrice;
+  const sub = calcSubscription(monthlyPrice, months, discount);
+  const isMulti = sub.months > 1;
+  const effectiveMonthly = sub.effectiveMonthly;
+  const lightSurface = isPopular || !isDark;
+  const fmt = (n) => Number(n).toLocaleString("en-IN");
 
   return (
     <div className="relative h-full flex flex-col">
@@ -185,13 +290,13 @@ export const PricingCard = ({
       >
         <div className="flex justify-between items-start mb-10">
           <div
-            className={`p-4 rounded-xl ${isDark ? "bg-slate-800 text-white" : "bg-slate-50 text-[#001F3F]"}`}
+            className={`p-4 rounded-xl ${lightSurface ? "bg-slate-50 text-[#001F3F]" : "bg-slate-800 text-white"}`}
           >
             <Icon size={24} />
           </div>
           <div className="text-right">
             <h3
-              className={`text-sm font-black uppercase tracking-widest ${isDark ? "text-white" : "text-[#001F3F]"}`}
+              className={`text-sm font-black uppercase tracking-widest ${lightSurface ? "text-[#001F3F]" : "text-white"}`}
             >
               {plan.name}
             </h3>
@@ -203,34 +308,50 @@ export const PricingCard = ({
 
         {/* --- Pricing Interface --- */}
         <div className="mb-4 flex items-baseline gap-2 flex-wrap">
-          {/* Main Display Price: ₹0 for Basic (Free Trial), Discounted Price for others */}
           <span
-            className={`text-5xl font-black tracking-tighter ${isDark ? "text-white" : "text-[#001F3F]"}`}
+            className={`text-5xl font-black tracking-tighter ${lightSurface ? "text-[#001F3F]" : "text-white"}`}
           >
-            ₹{isBasic ? "0" : discountedMonthlyEq}
+            ₹{fmt(effectiveMonthly)}
           </span>
 
-          {/* Original Market Price Struck-through (Shows standard cost for all plans now) */}
-          <span className="text-xl font-bold text-slate-400 line-through opacity-60 tracking-tight">
-            ₹{originalMonthlyEq}
-          </span>
+          {/* Regular monthly price struck-through when the multi-month discount applies */}
+          {isMulti && (
+            <span className="text-xl font-bold text-slate-400 line-through opacity-60 tracking-tight">
+              ₹{fmt(monthlyPrice)}
+            </span>
+          )}
 
           <span className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">
             /Month
           </span>
         </div>
 
-        {/* Informative Trial / Verification Tag */}
-        <div className="mb-10">
-          {isBasic ? (
-            <span className="text-[9px] font-black uppercase tracking-wider text-blue-600 bg-blue-50 px-2 py-1 rounded-md">
-              1 Month Free Trial
-            </span>
+        <p className="-mt-2 mb-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+          {isMulti ? (
+            <>
+              Total ₹{fmt(sub.total)} for {sub.months} months{" "}
+              <span className="text-green-600">(You save ₹{fmt(sub.discountAmount)})</span>
+            </>
           ) : (
-            <span className="text-[9px] font-black uppercase tracking-wider text-green-600 bg-green-50 px-2 py-1 rounded-md">
-              First Payment Only
+            <>Total ₹{fmt(sub.total)} for 1 month</>
+          )}
+        </p>
+
+        {/* Informative Trial / Offer Tags */}
+        <div className="mb-10 flex flex-wrap gap-2">
+          {isTrial && (
+            <span className="text-[9px] font-black uppercase tracking-wider text-blue-600 bg-blue-50 px-2 py-1 rounded-md">
+              30 Days Free Trial
             </span>
           )}
+          {plan.websitePerk && (
+            <span className="text-[9px] font-black uppercase tracking-wider text-amber-700 bg-amber-50 px-2 py-1 rounded-md">
+              Website Free 1 Year
+            </span>
+          )}
+          <span className="text-[9px] font-black uppercase tracking-wider text-green-600 bg-green-50 px-2 py-1 rounded-md">
+            {discountPct}% Off On Multi-Month
+          </span>
         </div>
 
         <ul className="space-y-5 mb-12 flex-1">
@@ -238,7 +359,7 @@ export const PricingCard = ({
             <li key={idx} className="flex items-center gap-3">
               <FiCheck className="text-green-500 stroke-[4]" size={16} />
               <span
-                className={`text-[10px] font-black uppercase tracking-widest ${isDark ? "text-slate-300" : "text-[#001F3F]"}`}
+                className={`text-[10px] font-black uppercase tracking-widest ${lightSurface ? "text-[#001F3F]" : "text-slate-300"}`}
               >
                 {feature}
               </span>
