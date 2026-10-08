@@ -10,14 +10,135 @@ import {
   FAQSection,
 } from "./PricingComponents";
 import PaymentModal from "./PaymentModal";
-import { FiZap, FiStar, FiAward, FiCpu } from "react-icons/fi";
+import { FiStar, FiAward, FiCpu } from "react-icons/fi";
 import Footer from "../components/Footer.jsx";
 import { captureReferralCodeFromLocation } from "../utils/referralCapture";
+
+// --- Region-wise pricing (monthly, ₹) ---
+// multiMonthDiscount: applied to any subscription longer than one month.
+// customiseWebsitePerk: "Website free for 1 year" + client-paid domain charge.
+export const REGION_PRICING = {
+  urban: {
+    label: "Urban Cities",
+    multiMonthDiscount: 0.1,
+    customiseWebsitePerk: true,
+    domainCharge: 1500,
+    prices: {
+      car: { premium: 500, customise: 700 },
+      bike: { premium: 500, customise: 700 },
+      washing: { premium: 400 },
+    },
+  },
+  rural: {
+    label: "Rural Areas",
+    multiMonthDiscount: 0.05,
+    customiseWebsitePerk: false,
+    domainCharge: null,
+    prices: {
+      car: { premium: 350, customise: 500 },
+      bike: { premium: 350, customise: 500 },
+      washing: { premium: 350 },
+    },
+  },
+};
+
+export const FREE_TRIAL_DAYS = 30;
+
+// Backend plan keys (server/routes/payments.js RAZORPAY_PLAN_MAP)
+const API_PLAN_KEYS = {
+  car: { premium: "premium", customise: "customise" },
+  bike: { premium: "bikepremium", customise: "bikecustomise" },
+  washing: { premium: "washpremium" },
+};
+
+const PREMIUM_FEATURES = [
+  `First ${FREE_TRIAL_DAYS} Days 100% Free`,
+  "Unlimited RC Image Uploads",
+  "High-Precision OCR",
+  "Team Access (10 Logins)",
+  "SMS/WhatsApp Protocols",
+  "Maintenance Alert Logic",
+  "Automated Invoicing",
+  "Payroll Management",
+  "Advanced Data Export",
+  "Priority Support Tier",
+];
+
+const WASHING_PREMIUM_FEATURES = [
+  `First ${FREE_TRIAL_DAYS} Days 100% Free`,
+  "Unlimited Queue Uploads",
+  "Team Access (10 Logins)",
+  "SMS/WhatsApp Protocols",
+  "Automated Invoicing",
+  "Payroll Management",
+  "Advanced Data Export",
+  "Priority Support Tier",
+];
+
+export function buildPlans(planType, region) {
+  const cfg = REGION_PRICING[region];
+  const prices = cfg.prices[planType] || cfg.prices.car;
+  const keys = API_PLAN_KEYS[planType] || API_PLAN_KEYS.car;
+
+  const plans = [
+    {
+      id: "premium",
+      name: "Premium Package",
+      tagline: `${FREE_TRIAL_DAYS} Days Free Trial`,
+      numericPrice: prices.premium,
+      icon: FiStar,
+      badge: "POPULAR",
+      freeTrial: true,
+      region,
+      multiMonthDiscount: cfg.multiMonthDiscount,
+      apiPlanName: keys.premium,
+      features:
+        planType === "washing" ? WASHING_PREMIUM_FEATURES : PREMIUM_FEATURES,
+    },
+  ];
+
+  if (prices.customise) {
+    plans.push({
+      id: "customise",
+      name: "Customise Package",
+      tagline: `${FREE_TRIAL_DAYS} Days Free Trial`,
+      numericPrice: prices.customise,
+      icon: FiAward,
+      badge: "BEST VALUE",
+      freeTrial: true,
+      region,
+      multiMonthDiscount: cfg.multiMonthDiscount,
+      apiPlanName: keys.customise,
+      websitePerk: cfg.customiseWebsitePerk,
+      domainCharge: cfg.domainCharge,
+      features: [
+        `First ${FREE_TRIAL_DAYS} Days 100% Free`,
+        "Full Premium Features",
+        "Customised Business Website",
+        ...(cfg.customiseWebsitePerk
+          ? [
+              "Website Free For 1 Year",
+              `Domain Charges ₹${cfg.domainCharge.toLocaleString("en-IN")} (Paid By Client)`,
+            ]
+          : []),
+        "Custom Branding & Workflows",
+        "Dedicated Account Manager",
+        "Integrated Gateways",
+      ],
+    });
+  }
+
+  return plans;
+}
 
 export default function ModernPricingPage() {
   const { isDark } = useTheme();
   const location = useLocation();
-  const [billingPeriod, setBillingPeriod] = useState("monthly");
+  // Number of months the customer subscribes for (1 = fixed price, 2+ = discount)
+  const [months, setMonths] = useState(1);
+  // Backend only understands monthly / yearly
+  const billingPeriod = months >= 12 ? "yearly" : "monthly";
+  const setBillingPeriod = (p) => setMonths(p === "yearly" ? 12 : 1);
   const [showModal, setShowModal] = useState(false);
   const [selectedPlan, setSelectedPlan] = useState(null);
   const [planType, setPlanType] = useState("car");
@@ -28,155 +149,10 @@ export default function ModernPricingPage() {
   // existing field.
   const referralCode = captureReferralCodeFromLocation(location.search);
 
-  // --- Plan Metadata (Standardized pricing nodes) ---
-  const carPlans = [
-    {
-      id: "basic",
-      name: "Basic Package",
-      tagline: "1 Month Free Trial Infrastructure",
-      numericPrice: 1000,
-      icon: FiZap,
-      features: [
-        "First 30 Days 100% Free",
-        "100% CHARGE APPLICABLE FROM 2ND MONTH",
-        "RC Image Uploads (10/day)",
-        "Standard OCR Extraction",
-        "Local History Cache",
-        "Export CSV/PDF",
-        "Technical Support",
-      ],
-    },
-    {
-      id: "standard",
-      name: "Standard Package",
-      tagline: "Optimized for high-volume",
-      numericPrice: 2000,
-      icon: FiStar,
-      badge: "POPULAR",
-      features: [
-        "Unlimited Node Uploads",
-        "High-Precision OCR",
-        "Priority Support Tier",
-        "Advanced Data Export",
-        "SMS/WhatsApp Protocols",
-        "Team Access (3 Logins)",
-      ],
-    },
-    {
-      id: "premium",
-      name: "Premium Package",
-      tagline: "Enterprise-grade control",
-      numericPrice: 3000,
-      icon: FiAward,
-      badge: "BEST VALUE",
-      features: [
-        "Full Standard Features",
-        "Team Access (10 Logins)",
-        "Maintenance Alert Logic",
-        "Bulk Processing Engine",
-        "Dedicated Account Manager",
-        "Automated Invoicing",
-        "Payroll Management",
-        "Integrated Gateways",
-      ],
-    },
-  ];
+  const [region, setRegion] = useState("urban");
 
-  const bikePlans = [
-    {
-      id: "basic",
-      name: "Basic Package",
-      tagline: "1 Month Free Trial Setup",
-      numericPrice: 600,
-      icon: FiZap,
-      features: [
-        "First 30 Days 100% Free",
-        "100% CHARGE APPLICABLE FROM 2ND MONTH",
-        "RC Image Uploads (10/day)",
-        "Standard OCR Extraction",
-        "Local History Cache",
-        "Export CSV/PDF",
-        "Technical Support",
-      ],
-    },
-    {
-      id: "standard",
-      name: "Standard Package",
-      tagline: "Enhanced efficiency",
-      numericPrice: 1200,
-      icon: FiStar,
-      badge: "POPULAR",
-      features: [
-        "Unlimited Node Uploads",
-        "High-Precision OCR",
-        "Priority Support Tier",
-        "Advanced Data Export",
-        "SMS/WhatsApp Protocols",
-        "Team Access (3 Logins)",
-      ],
-    },
-    {
-      id: "premium",
-      name: "Premium Package",
-      tagline: "Elite fleet management",
-      numericPrice: 2000,
-      icon: FiAward,
-      badge: "BEST VALUE",
-      features: [
-        "Full Standard Features",
-        "Team Access (10 Logins)",
-        "Maintenance Alert Logic",
-        "Bulk Processing Engine",
-        "Dedicated Account Manager",
-        "Automated Invoicing",
-        "Payroll Management",
-        "Integrated Gateways",
-      ],
-    },
-  ];
-
-  const washingPlans = [
-    {
-      id: "standard",
-      name: "Standard Package",
-      tagline: "Queue management ready",
-      numericPrice: 500,
-      icon: FiStar,
-      badge: "POPULAR",
-      features: [
-        "Unlimited Queue Uploads",
-        "Priority Support Tier",
-        "Advanced Data Export",
-        "SMS/WhatsApp Protocols",
-        "Team Access (3 Logins)",
-      ],
-    },
-    {
-      id: "premium",
-      name: "Premium Package",
-      tagline: "Scale-ready infrastructure",
-      numericPrice: 1000,
-      icon: FiAward,
-      badge: "BEST VALUE",
-      features: [
-        "Full Standard Features",
-        "Team Access (10 Logins)",
-        "Maintenance Alert Logic",
-        "Bulk Processing Engine",
-        "Dedicated Account Manager",
-        "Automated Invoicing",
-        "Payroll Management",
-        "Integrated Gateways",
-      ],
-    },
-  ];
-
-  let activePlans =
-    planType === "bike"
-      ? bikePlans
-      : planType === "washing"
-        ? washingPlans
-        : carPlans;
+  const regionConfig = REGION_PRICING[region];
+  const activePlans = buildPlans(planType, region);
 
   const handlePlanSelect = (plan) => {
     setSelectedPlan(plan);
@@ -217,8 +193,9 @@ export default function ModernPricingPage() {
           className={`text-lg max-w-2xl mx-auto font-medium ${isDark ? "text-slate-400" : "text-slate-500"
             }`}
         >
-          Select the operational tier that aligns with your garage nodes.
-          Flexible billing cycles for global scalability.
+          Select your location and service type. Start with a{" "}
+          {FREE_TRIAL_DAYS}-day free trial on Premium, and save more on
+          multi-month subscriptions.
         </p>
       </div>
 
@@ -230,6 +207,12 @@ export default function ModernPricingPage() {
           setBillingPeriod={setBillingPeriod}
           planType={planType}
           setPlanType={setPlanType}
+          region={region}
+          setRegion={setRegion}
+          regionConfig={regionConfig}
+          freeTrialDays={FREE_TRIAL_DAYS}
+          months={months}
+          setMonths={setMonths}
         />
       </div>
 
@@ -245,12 +228,13 @@ export default function ModernPricingPage() {
         >
           {activePlans.map((plan) => (
             <div
-              key={plan.id}
-              className="animate-in fade-in slide-in-from-bottom-4 duration-500"
+              key={`${region}-${planType}-${plan.id}`}
+              className={`animate-in fade-in slide-in-from-bottom-4 duration-500 ${activePlans.length === 1 ? "w-full max-w-md" : ""}`}
             >
               <PricingCard
                 plan={plan}
                 billingPeriod={billingPeriod}
+                months={months}
                 isDark={isDark}
                 onSelect={handlePlanSelect}
                 isPopular={plan.badge === "POPULAR"}
@@ -280,6 +264,7 @@ export default function ModernPricingPage() {
         show={showModal}
         plan={selectedPlan}
         billingPeriod={billingPeriod}
+        months={months}
         isDark={isDark}
         planType={planType}
         onClose={() => setShowModal(false)}

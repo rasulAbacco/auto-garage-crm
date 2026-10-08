@@ -16,11 +16,13 @@ import {
   FiChevronRight,
 } from "react-icons/fi";
 import { getStoredReferralCode, saveReferralCode } from "../utils/referralCapture";
+import { calcSubscription } from "./PricingComponents";
 
 const PaymentModal = ({
   show,
   plan,
   billingPeriod,
+  months: monthsProp, // 🆕 subscription month count from the pricing page
   isDark,
   planType,
   onClose,
@@ -45,6 +47,13 @@ const PaymentModal = ({
   const [razorpayLoaded, setRazorpayLoaded] = useState(false);
   const navigate = useNavigate();
 
+  // Month count: from the pricing page selector, or derived from billingPeriod
+  // for older callers (upgrade pages) that only pass monthly / yearly.
+  const months = monthsProp ?? (billingPeriod === "yearly" ? 12 : 1);
+  const subscription = plan
+    ? calcSubscription(plan.numericPrice, months, plan.multiMonthDiscount ?? 0.1)
+    : null;
+
   useEffect(() => {
     if (document.getElementById("razorpay-js")) {
       setRazorpayLoaded(true);
@@ -62,15 +71,13 @@ const PaymentModal = ({
     if (showSuccess && paymentResponse) {
       const timer = setTimeout(() => {
         onComplete(plan, formData);
-        const finalPriceCalc =
-          billingPeriod === "yearly"
-            ? Math.round(plan.numericPrice * 12 * 0.9)
-            : plan.numericPrice;
+        const finalPriceCalc = subscription.total;
 
         const stateData = {
           paymentData: {
             plan: { name: plan.name, numericPrice: plan.numericPrice },
             billingPeriod,
+            months: subscription.months,
             finalPrice: finalPriceCalc,
             formData,
             paymentId: paymentResponse.paymentId,
@@ -97,6 +104,7 @@ const PaymentModal = ({
     navigate,
     onComplete,
     planType,
+    subscription,
   ]);
 
   useEffect(() => {
@@ -135,12 +143,12 @@ const PaymentModal = ({
 
   if (!show || !plan) return null;
 
-  const isBasicPlan = String(plan?.name || "").toLowerCase().includes("basic");
+  // Trial plans (Premium) start with a 30-day free trial; legacy "basic" kept as fallback
+  const isBasicPlan =
+    plan?.freeTrial ?? String(plan?.name || "").toLowerCase().includes("basic");
 
-  const finalPrice =
-    billingPeriod === "yearly"
-      ? Math.round(plan.numericPrice * 12 * 0.9)
-      : plan.numericPrice;
+  // 1 month = fixed price; 2+ months = 10% urban / 5% rural discount
+  const finalPrice = subscription.total;
 
   const validateForm = () => {
     const newErrors = {};
@@ -182,6 +190,9 @@ const PaymentModal = ({
     try {
       // Differentiates car, bike, and wash identifiers dynamically before hitting API maps
       const normalizedPlanName = (() => {
+        // New pricing plans carry their backend key explicitly
+        if (plan?.apiPlanName) return plan.apiPlanName;
+
         const raw = String(plan?.name || "").toLowerCase().trim();
         const category = String(planType || "car").toLowerCase().trim();
 
@@ -196,12 +207,26 @@ const PaymentModal = ({
           .trim();
       })();
 
+      const pricingSelection = plan?.region
+        ? {
+            category: String(planType || "car").toLowerCase(),
+            region: plan.region,
+            tier: plan.id,
+            months: subscription.months,
+          }
+        : null;
+
       const payload = {
         plan: {
           name: normalizedPlanName,
           numericPrice: Number(plan.numericPrice),
         },
         billingPeriod: billingPeriod.toLowerCase(),
+        // 🆕 region / month-count pricing — the server recomputes the amount
+        // from this selection and never trusts the displayed total.
+        ...(pricingSelection ? { pricing: pricingSelection } : {}),
+        months: subscription.months,
+        totalAmount: subscription.total,
         customer: {
           ...formData,
         },
@@ -212,7 +237,7 @@ const PaymentModal = ({
       console.log("PAYLOAD PRICE:", payload.plan.numericPrice);
 
       // 🔥 LOCKED IN PATHWAY FIX: Catching both basic variants securely to invoke direct trial mandates
-      if (normalizedPlanName === "basic" || normalizedPlanName === "bikebasic") {
+      if (isBasicPlan) {
         console.log("BASIC PLAN TRIGGERED: INITIALIZING DIRECT 1-MONTH SUBSCRIPTION");
         const subRes = await fetch(`${API}/api/payments/create-subscription`, {
           method: "POST",
@@ -346,6 +371,7 @@ const PaymentModal = ({
                     numericPrice: Number(plan.numericPrice),
                   },
                   billingPeriod: billingPeriod.toLowerCase(),
+                  ...(pricingSelection ? { pricing: pricingSelection } : {}),
                 }),
               },
             );
@@ -565,15 +591,35 @@ const PaymentModal = ({
                     isDark={isDark}
                   />
                   <SummaryLine
-                    label="Cycle"
-                    value={billingPeriod}
+                    label="Duration"
+                    value={`${subscription.months} ${subscription.months === 1 ? "Month" : "Months"}`}
                     highlight
                     isDark={isDark}
                   />
-                  {!isBasicPlan && billingPeriod === "yearly" && (
+                  <SummaryLine
+                    label="Plan Price"
+                    value={`₹${Number(plan.numericPrice).toLocaleString("en-IN")}/month`}
+                    isDark={isDark}
+                  />
+                  {subscription.months > 1 && (
+                    <>
+                      <SummaryLine
+                        label="Subtotal"
+                        value={`₹${subscription.subtotal.toLocaleString("en-IN")}`}
+                        isDark={isDark}
+                      />
+                      <SummaryLine
+                        label={`Multi-Month Discount (${subscription.discountPct}%)`}
+                        value={`-₹${subscription.discountAmount.toLocaleString("en-IN")}`}
+                        success
+                        isDark={isDark}
+                      />
+                    </>
+                  )}
+                  {isBasicPlan && (
                     <SummaryLine
-                      label="Efficiency Discount"
-                      value="-10%"
+                      label="Free Trial"
+                      value="30 Days"
                       success
                       isDark={isDark}
                     />
@@ -587,15 +633,18 @@ const PaymentModal = ({
                   <div
                     className={`text-5xl font-black tracking-tighter mb-1 ${isDark ? "text-white" : "text-[#001F3F]"}`}
                   >
-                    ₹{isBasicPlan ? "0" : finalPrice}
+                    ₹{Number(finalPrice).toLocaleString("en-IN")}
                   </div>
                   <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest italic">
-                    {isBasicPlan
-                      ? "First 30 Days Free"
-                      : billingPeriod === "yearly"
-                        ? "Billed Annually"
-                        : "Billed Monthly"}
+                    {subscription.months > 1
+                      ? `For ${subscription.months} months · ₹${subscription.effectiveMonthly.toLocaleString("en-IN")}/month`
+                      : "For 1 month · fixed price"}
                   </p>
+                  {isBasicPlan && (
+                    <p className="mt-3 inline-block text-[9px] font-black uppercase tracking-wider text-blue-600 bg-blue-50 px-2 py-1 rounded-md">
+                      ₹0 today · First 30 days free, billing starts after trial
+                    </p>
+                  )}
                 </div>
               </div>
 

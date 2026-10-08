@@ -4,6 +4,11 @@ import crypto from "crypto";
 import prisma from "../models/prismaClient.js";
 import { PlanType } from "@prisma/client";
 import { protect } from "../middleware/authMiddleware.js";
+import {
+  computePricing,
+  getOrCreateRazorpayPlan,
+  FREE_TRIAL_DAYS,
+} from "../config/pricing.js";
 const router = express.Router();
 
 /* ----------------------------------------------
@@ -64,7 +69,10 @@ const PRISMA_PLAN_MAP = {
 ---------------------------------------------- */
 function addInterval(date, billingPeriod) {
   const d = new Date(date);
-  if (billingPeriod === "monthly") {
+  const multi = /^(\d+)-months?$/.exec(String(billingPeriod || ""));
+  if (multi) {
+    d.setMonth(d.getMonth() + Number(multi[1]));
+  } else if (billingPeriod === "monthly") {
     d.setMonth(d.getMonth() + 1);
   } else {
     d.setFullYear(d.getFullYear() + 1);
@@ -130,8 +138,29 @@ router.post("/create-subscription", async (req, res) => {
       });
     }
 
-    const razorpayPlanId = RAZORPAY_PLAN_MAP[rawPlanName];
-    const prismaPlan = PRISMA_PLAN_MAP[rawPlanName];
+    // 🆕 Region / month-count pricing: price computed on the server and a
+    // matching Razorpay plan is created or reused. Legacy callers (upgrade
+    // pages) don't send `pricing` and keep using the .env plan IDs below.
+    const pricing = req.body?.pricing ? computePricing(req.body.pricing) : null;
+    if (pricing?.error) {
+      return res.status(400).json({ success: false, error: pricing.error });
+    }
+
+    let razorpayPlanId = RAZORPAY_PLAN_MAP[rawPlanName];
+    let prismaPlan = PRISMA_PLAN_MAP[rawPlanName];
+
+    if (pricing) {
+      try {
+        razorpayPlanId = await getOrCreateRazorpayPlan(razorpay, pricing);
+        prismaPlan = pricing.prismaPlan;
+      } catch (err) {
+        console.error("RAZORPAY PLAN RESOLVE ERROR:", err);
+        return res.status(502).json({
+          success: false,
+          error: err?.error?.description || "Could not prepare Razorpay plan",
+        });
+      }
+    }
 
     if (!razorpayPlanId || !prismaPlan) {
       console.log("FAILED: PLAN MAP");
@@ -158,9 +187,24 @@ router.post("/create-subscription", async (req, res) => {
     console.log("TRIAL ELIGIBLE:", !isUpgrade);
 
     let startAt;
+    let isTrialStart = false;
+    const DAY = 24 * 60 * 60 * 1000;
 
-    // 🔥 MODIFIED TRIAL TIMELINES MATRIX
-    if (!isUpgrade && useTrial) {
+    if (pricing) {
+      if (pricing.isTrialTier) {
+        // Premium: 30-day free trial for new customers, then billed every N months
+        if (!isUpgrade && useTrial) {
+          startAt = Math.floor((Date.now() + FREE_TRIAL_DAYS * DAY) / 1000);
+          isTrialStart = true;
+        }
+      } else {
+        // Customise: first N months already paid via the one-time order,
+        // so recurring billing starts after that period.
+        const firstPeriodEnd = addInterval(new Date(), pricing.billingPeriod);
+        startAt = Math.floor(firstPeriodEnd.getTime() / 1000);
+      }
+      console.log("PRICING:", pricing.pricingKey, "START AT:", startAt ? new Date(startAt * 1000) : "now");
+    } else if (!isUpgrade && useTrial) {
       if (rawPlanName === "basic" || rawPlanName === "bikebasic") {
         // Basic / Bike Basic gets a full 30-day Free Trial node window
         startAt = Math.floor((Date.now() + 30 * 24 * 60 * 60 * 1000) / 1000);
@@ -175,7 +219,15 @@ router.post("/create-subscription", async (req, res) => {
       console.log("\n========== TRIAL ACTIVE: NO ==========");
     }
 
-    const totalCount = billingPeriod === "monthly" ? 12 : 1;
+    if (!pricing) isTrialStart = !!startAt;
+
+    // New pricing: cover roughly one year of billing cycles
+    const totalCount = pricing
+      ? Math.max(1, Math.ceil(12 / pricing.months))
+      : billingPeriod === "monthly" ? 12 : 1;
+
+    const recordStatus = isTrialStart ? "TRIAL" : pricing && startAt ? "ACTIVE" : "PENDING";
+    const nextBillingDate = startAt ? new Date(startAt * 1000) : null;
 
     const subscriptionPayload = {
       plan_id: razorpayPlanId,
@@ -186,6 +238,7 @@ router.post("/create-subscription", async (req, res) => {
         planName: plan.name,
         customerEmail: customer.email,
         customerPhone: customer.phone,
+        ...(pricing ? { pricingKey: pricing.pricingKey } : {}),
       },
     };
 
@@ -227,10 +280,11 @@ router.post("/create-subscription", async (req, res) => {
         },
         data: {
           subscriptionId: subscription.id,
-          isTrial: !!startAt,
-          status: startAt ? "TRIAL" : "PENDING",
-          trialEndDate: startAt ? new Date(startAt * 1000) : null,
-          nextBillingDate: startAt ? new Date(startAt * 1000) : null,
+          isTrial: isTrialStart,
+          status: recordStatus,
+          trialEndDate: isTrialStart ? nextBillingDate : null,
+          nextBillingDate,
+          ...(pricing && !isTrialStart ? { expiryDate: nextBillingDate } : {}),
         },
       });
     } else {
@@ -244,22 +298,22 @@ router.post("/create-subscription", async (req, res) => {
           address: customer.address || null,
 
           plan: prismaPlan,
-          billingPeriod,
-          amount: Number(plan.numericPrice),
+          billingPeriod: pricing ? pricing.billingPeriod : billingPeriod,
+          amount: pricing ? pricing.total : Number(plan.numericPrice),
 
-          originalAmount: Number(plan.numericPrice),
-          discountAmount: 0,
-          discountPercent: 0,
+          originalAmount: pricing ? pricing.subtotal : Number(plan.numericPrice),
+          discountAmount: pricing ? pricing.discountAmount : 0,
+          discountPercent: pricing ? pricing.discountPercent : 0,
           firstPaymentDiscountUsed: false,
 
           referralCode: customer.referenceCode || null,
           gstNumber: customer.gstNumber || null,
 
           subscriptionId: subscription.id,
-          isTrial: !!startAt,
-          status: startAt ? "TRIAL" : "PENDING",
-          trialEndDate: startAt ? new Date(startAt * 1000) : null,
-          nextBillingDate: startAt ? new Date(startAt * 1000) : null,
+          isTrial: isTrialStart,
+          status: recordStatus,
+          trialEndDate: isTrialStart ? nextBillingDate : null,
+          nextBillingDate,
         },
       });
     }
@@ -268,8 +322,8 @@ router.post("/create-subscription", async (req, res) => {
       success: true,
       subscription,
       razorpayKey: process.env.RAZORPAY_KEY_ID,
-      isTrial: !!startAt,
-      trialEndDate: startAt ? new Date(startAt * 1000) : null,
+      isTrial: isTrialStart,
+      trialEndDate: isTrialStart ? nextBillingDate : null,
       paymentRecordId: payment.id,
     });
   } catch (err) {
@@ -290,7 +344,13 @@ router.post("/verify-first-payment-order", async (req, res) => {
       customer,
       plan,
       billingPeriod,
+      pricing: pricingInput,
     } = req.body;
+
+    const pricing = pricingInput ? computePricing(pricingInput) : null;
+    if (pricing?.error) {
+      return res.status(400).json({ success: false, error: pricing.error });
+    }
 
     const generatedSignature = crypto
       .createHmac("sha256", process.env.RAZORPAY_KEY_SECRET)
@@ -329,14 +389,27 @@ router.post("/verify-first-payment-order", async (req, res) => {
     const normalizedPlan = plan.name.toLowerCase().trim().replace(/\s+/g, "");
     const isBasicPlan = normalizedPlan.includes("basic");
 
-    // Deny 50% checkout discount calculations explicitly on basic package variants
-    const eligible = isBasicPlan ? false : !existingDiscount;
+    let discountPercent;
+    let discountAmount;
+    let finalAmount;
+    let prismaPlan;
+    let recordOriginalAmount = originalAmount;
 
-    const discountPercent = eligible ? 50 : 0;
-    const discountAmount = eligible ? originalAmount * 0.5 : 0;
-    const finalAmount = originalAmount - discountAmount;
-
-    const prismaPlan = PRISMA_PLAN_MAP[normalizedPlan];
+    if (pricing) {
+      // 🆕 New pricing: multi-month discount only, no 50% first-payment offer
+      discountPercent = pricing.discountPercent;
+      discountAmount = pricing.discountAmount;
+      finalAmount = pricing.total;
+      recordOriginalAmount = pricing.subtotal;
+      prismaPlan = pricing.prismaPlan;
+    } else {
+      // Deny 50% checkout discount calculations explicitly on basic package variants
+      const eligible = isBasicPlan ? false : !existingDiscount;
+      discountPercent = eligible ? 50 : 0;
+      discountAmount = eligible ? originalAmount * 0.5 : 0;
+      finalAmount = originalAmount - discountAmount;
+      prismaPlan = PRISMA_PLAN_MAP[normalizedPlan];
+    }
 
     const payment = await prisma.payment.create({
       data: {
@@ -347,11 +420,11 @@ router.post("/verify-first-payment-order", async (req, res) => {
         address: customer.address || null,
 
         plan: prismaPlan,
-        billingPeriod,
+        billingPeriod: pricing ? pricing.billingPeriod : billingPeriod,
 
         amount: finalAmount,
 
-        originalAmount,
+        originalAmount: recordOriginalAmount,
         discountAmount,
         discountPercent,
 
@@ -663,11 +736,17 @@ router.post("/create-first-payment-order", async (req, res) => {
     const normalizedPlan = plan.name.toLowerCase().trim().replace(/\s+/g, "");
     const isBasicPlan = normalizedPlan.includes("basic");
 
-    const eligible = isBasicPlan ? false : !existingDiscount;
+    // 🆕 New pricing: amount computed on the server from region + months
+    const pricing = req.body?.pricing ? computePricing(req.body.pricing) : null;
+    if (pricing?.error) {
+      return res.status(400).json({ success: false, error: pricing.error });
+    }
 
-    const discountPercent = eligible ? 50 : 0;
-    const discountAmount = eligible ? originalAmount * 0.5 : 0;
-    const finalAmount = originalAmount - discountAmount;
+    const eligible = pricing ? false : isBasicPlan ? false : !existingDiscount;
+
+    const discountPercent = pricing ? pricing.discountPercent : eligible ? 50 : 0;
+    const discountAmount = pricing ? pricing.discountAmount : eligible ? originalAmount * 0.5 : 0;
+    const finalAmount = pricing ? pricing.total : originalAmount - discountAmount;
 
     const order = await razorpay.orders.create({
       amount: Math.round(finalAmount * 100),
