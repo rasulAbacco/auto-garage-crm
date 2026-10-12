@@ -31,6 +31,7 @@ export default function ModernLogin() {
     car: { label: "Car Garage", icon: FiTruck },
     bike: { label: "Bike Workshop", icon: FiActivity },
     wash: { label: "Wash Center", icon: FiBox },
+    puncher: { label: "Puncher Shop", icon: FiCpu },
   };
 
   const handleInputChange = (e) => {
@@ -46,6 +47,13 @@ export default function ModernLogin() {
 
     if (!formData.identifier || !formData.password) {
       setError("Please fill in all fields");
+      setIsLoading(false);
+      return;
+    }
+
+    // 🛞 Puncher Shops are owner-only accounts for now
+    if (loginMode === "staff" && crmType === "puncher") {
+      setError("Puncher Shop has owner login only. Please use Owner Node.");
       setIsLoading(false);
       return;
     }
@@ -209,7 +217,7 @@ export default function ModernLogin() {
 
           <div className="p-10">
             {/* Infrastructure Selector HUB */}
-            <div className="bg-[#F8FAFC] border border-[#CBD5E1] rounded-2xl p-1.5 grid grid-cols-3 gap-1.5 mb-10 shadow-inner">
+            <div className="bg-[#F8FAFC] border border-[#CBD5E1] rounded-2xl p-1.5 grid grid-cols-2 sm:grid-cols-4 gap-1.5 mb-10 shadow-inner">
               {Object.entries(CRM_CONFIG).map(([key, config]) => (
                 <button
                   key={key}

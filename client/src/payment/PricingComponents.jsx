@@ -161,16 +161,21 @@ export const Hero = ({
 
       {/* Category Selector Tab */}
       <div className="mt-12 inline-grid grid-cols-2 sm:flex bg-[#F8FAFC] p-1.5 rounded-2xl border border-[#CBD5E1] w-full max-w-sm sm:max-w-max mx-auto gap-1 sm:gap-0 shadow-inner">
-        {["car", "bike", "washing"].map((type) => (
+        {[
+          { type: "car", label: "car CRM" },
+          { type: "bike", label: "bike CRM" },
+          { type: "washing", label: "washing CRM" },
+          { type: "puncher", label: "Puncher Shop" },
+        ].map(({ type, label }) => (
           <button
             key={type}
             onClick={() => setPlanType(type)}
-            className={`px-4 sm:px-10 py-3 rounded-xl text-[10px] font-black uppercase tracking-[0.2em] transition-all whitespace-nowrap ${planType === type
+            className={`px-4 sm:px-8 py-3 rounded-xl text-[10px] font-black uppercase tracking-[0.2em] transition-all whitespace-nowrap ${planType === type
                 ? "bg-[#001F3F] text-white shadow-xl scale-[1.02] sm:scale-100"
                 : "text-slate-400 hover:text-[#001F3F]"
-              } ${type === "washing" ? "col-span-2 sm:col-span-1" : ""}`}
+              }`}
           >
-            {type} CRM
+            {label}
           </button>
         ))}
       </div>
@@ -185,7 +190,7 @@ export const Hero = ({
 
         <div className="flex flex-wrap items-center justify-center gap-3">
           {/* Quick picks */}
-          <div className="inline-flex bg-[#F8FAFC] p-1.5 rounded-2xl border border-[#CBD5E1] gap-1 shadow-inner">
+          <div className="grid grid-cols-2 sm:inline-flex bg-[#F8FAFC] p-1.5 rounded-2xl border border-[#CBD5E1] gap-1 shadow-inner w-full max-w-sm sm:w-auto sm:max-w-none">
             {MONTH_OPTIONS.map((m) => (
               <button
                 key={m}

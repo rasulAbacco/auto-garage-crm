@@ -74,6 +74,10 @@ import notificationRoutes from "./routes/notification.routes.js";
 import garageVerificationRoutes from "./routes/garageVerification.routes.js";
 import inventoryRoutes from "./routes/carInventoryRoutes.js";
 import sparePartsRoutes from "./routes/sparePartsRoutes.js";
+// 🛞 Puncher Shops (Car / Bike) module
+import puncherRoutes from "./puncher/routes/puncher.routes.js";
+// 📨 Contact Us form emails
+import contactRoutes from "./routes/contactRoutes.js";
 
 
 // console.log("Models in Prisma:", Object.keys(prisma));
@@ -262,6 +266,12 @@ app.use("/api/washing-reminders", washingReminderRoutes);
 app.use("/api/spare-parts", sparePartsRoutes); // MotorDesk spare parts store (read-only)
 app.use("/api/marketplace", marketplaceRoutes);
 app.use("/api/notifications", notificationRoutes);
+
+// 🛞 Puncher Shops CRM (owner-only, PUNCHER workspace)
+app.use("/api/puncher", puncherRoutes);
+
+// 📨 Contact Us form (public)
+app.use("/api/contact", contactRoutes);
 /* -----------------------------------------------------
    ⚠️ 404 Handler (For undefined routes)
 ----------------------------------------------------- */

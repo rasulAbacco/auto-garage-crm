@@ -14,6 +14,7 @@ export const REGION_PRICING = {
       car: { premium: 500, customise: 700 },
       bike: { premium: 500, customise: 700 },
       washing: { premium: 400 },
+      puncher: { premium: 200 }, // 🛞 Puncher Shops (Car / Bike)
     },
   },
   rural: {
@@ -22,6 +23,7 @@ export const REGION_PRICING = {
       car: { premium: 350, customise: 500 },
       bike: { premium: 350, customise: 500 },
       washing: { premium: 350 },
+      puncher: { premium: 100 }, // 🛞 Puncher Shops (Car / Bike)
     },
   },
 };

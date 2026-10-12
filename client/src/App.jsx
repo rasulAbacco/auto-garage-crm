@@ -105,6 +105,20 @@ import SocketProvider from "./providers/SocketProvider";
 import BookingPopupProvider from "./providers/BookingPopupProvider";
 import BookingPopup from "./components/BookingPopup";
 
+/* 🛞 Puncher Shops (Car / Bike) */
+import PuncherRegister from "./pages/PuncherRegister.jsx";
+import PuncherLayout from "./puncherPages/PuncherLayout.jsx";
+import PuncherDashboard from "./puncherPages/PuncherDashboard.jsx";
+import PuncherClients from "./puncherPages/clients/PuncherClients.jsx";
+import PuncherClientDetails from "./puncherPages/clients/PuncherClientDetails.jsx";
+import PuncherServices from "./puncherPages/services/PuncherServices.jsx";
+import PuncherBillings from "./puncherPages/billing/PuncherBillings.jsx";
+import PuncherInvoice from "./puncherPages/billing/PuncherInvoice.jsx";
+import PuncherPlan from "./puncherPages/plans/PuncherPlan.jsx";
+import PuncherReference from "./puncherPages/reference/PuncherReference.jsx";
+import PuncherUpgrade from "./puncherPages/upgrade/PuncherUpgrade.jsx";
+import PuncherProfile from "./puncherPages/profile/PuncherProfile.jsx";
+
 function App() {
   const garageId = localStorage.getItem("userId");
   console.log("GARAGE ID:", garageId);
@@ -138,6 +152,7 @@ function App() {
             <Route path="car-register" element={<CarRegister />} />
             <Route path="bike-register" element={<BikeRegister />} />
             <Route path="washing-register" element={<WashRegister />} />
+            <Route path="puncher-register" element={<PuncherRegister />} />
 
             {/* Protected routes */}
             {/* Car routes */}
@@ -302,6 +317,26 @@ function App() {
                 path="/washing-marketplace/packages"
                 element={<MarketplacePackages />}
               />
+            </Route>
+
+            {/* ================= 🛞 PUNCHER SHOPS (CAR / BIKE) ================= */}
+            <Route
+              element={
+                <ProtectedRoute>
+                  <PuncherLayout />
+                </ProtectedRoute>
+              }
+            >
+              <Route path="/puncher-dashboard" element={<PuncherDashboard />} />
+              <Route path="/puncher-clients" element={<PuncherClients />} />
+              <Route path="/puncher-clients/:id" element={<PuncherClientDetails />} />
+              <Route path="/puncher-services" element={<PuncherServices />} />
+              <Route path="/puncher-billing" element={<PuncherBillings />} />
+              <Route path="/puncher-billing/:id" element={<PuncherInvoice />} />
+              <Route path="/puncher-plan" element={<PuncherPlan />} />
+              <Route path="/puncher-reference" element={<PuncherReference />} />
+              <Route path="/puncher-upgrade" element={<PuncherUpgrade />} />
+              <Route path="/puncher-profile" element={<PuncherProfile />} />
             </Route>
 
             {/* ================= FALLBACK ================= */}
