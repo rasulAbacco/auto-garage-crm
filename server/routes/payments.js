@@ -9,6 +9,7 @@ import {
   getOrCreateRazorpayPlan,
   FREE_TRIAL_DAYS,
 } from "../config/pricing.js";
+import { sendPaymentInvoice } from "../services/paymentInvoice/paymentInvoice.service.js";
 const router = express.Router();
 
 /* ----------------------------------------------
@@ -63,6 +64,34 @@ const PRISMA_PLAN_MAP = {
   bikepremium: "PREMIUM",
   washpremium: "PREMIUM",
 };
+
+/* ----------------------------------------------
+   🧾 INVOICE EMAIL (only for captured payments)
+   Confirms with Razorpay that the money was actually captured and uses the
+   real charged amount. Runs in the background so it never delays or breaks
+   the payment response. Failed / cancelled payments never call this.
+---------------------------------------------- */
+function invoiceCapturedPayment({ paymentId, source, paymentRecord, pricingKey, paymentEntity }) {
+  (async () => {
+    const entity = paymentEntity?.id === paymentId
+      ? paymentEntity
+      : await razorpay.payments.fetch(paymentId);
+
+    if (!entity || entity.status !== "captured") {
+      console.log(`🧾 No invoice for ${paymentId}: payment status is "${entity?.status}"`);
+      return;
+    }
+
+    await sendPaymentInvoice({
+      razorpayPaymentId: entity.id,
+      amountPaid: Number(entity.amount) / 100, // paise → rupees
+      paidAt: entity.created_at ? new Date(entity.created_at * 1000) : new Date(),
+      source,
+      paymentRecord,
+      pricingKey,
+    });
+  })().catch((err) => console.error("🧾 Invoice background job failed:", err?.message || err));
+}
 
 /* ----------------------------------------------
    🔹 DATE UTILS
@@ -441,6 +470,14 @@ router.post("/verify-first-payment-order", async (req, res) => {
       },
     });
 
+    // 🧾 Signature verified → email the invoice (only if Razorpay shows it captured)
+    invoiceCapturedPayment({
+      paymentId: razorpay_payment_id,
+      source: "ORDER",
+      paymentRecord: payment,
+      pricingKey: pricing?.pricingKey,
+    });
+
     return res.json({
       success: true,
       payment,
@@ -516,6 +553,14 @@ router.post("/verify-payment-localhost", async (req, res) => {
       });
 
       return payment;
+    });
+
+    // 🧾 Active subscription with a real payment → email the invoice
+    invoiceCapturedPayment({
+      paymentId,
+      source: "LOCAL_VERIFY",
+      paymentRecord: updated,
+      pricingKey: subscription.notes?.pricingKey,
     });
 
     return res.json({ success: true, updated });
@@ -608,7 +653,19 @@ router.post("/razorpay-webhook", async (req, res) => {
           },
         });
 
-        await prisma.user.update({
+        // 🧾 Subscription charge captured (first charge after trial + renewals).
+        // Triggered before the user update so it still goes out if the
+        // customer has not finished registering yet.
+        invoiceCapturedPayment({
+          paymentId: paymentEntity.id,
+          source: "SUBSCRIPTION_CHARGED",
+          paymentRecord: record,
+          pricingKey: sub.notes?.pricingKey,
+          paymentEntity,
+        });
+
+        // updateMany: no error if the account is not registered yet
+        await prisma.user.updateMany({
           where: { email: record.email },
           data: {
             plan: record.plan,

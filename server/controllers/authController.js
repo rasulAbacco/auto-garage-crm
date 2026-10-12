@@ -12,12 +12,32 @@ import { generateToken } from "../utils/generateToken.js";
 export const registerUser = async (req, res) => {
   try {
     // Destructure the new garage service flags along with original fields
-    const { username, email, password, crmType, pickupDrop, towingService } =
-      req.body;
+    const {
+      username,
+      email,
+      password,
+      crmType,
+      pickupDrop,
+      towingService,
+      puncherVehicleSupport, // 🛞 Puncher Shops: CAR | BIKE | BOTH
+    } = req.body;
 
     /* ---------- BASIC VALIDATION ---------- */
     if (!username || !email || !password || !crmType) {
       return res.status(400).json({ message: "All fields are required" });
+    }
+
+    const VALID_CRMS = ["CAR", "BIKE", "WASH", "PUNCHER"];
+    if (!VALID_CRMS.includes(String(crmType).toUpperCase())) {
+      return res.status(400).json({ message: "Invalid CRM type" });
+    }
+
+    const isPuncher = String(crmType).toUpperCase() === "PUNCHER";
+    const vehicleSupport = String(puncherVehicleSupport || "BOTH").toUpperCase();
+    if (isPuncher && !["CAR", "BIKE", "BOTH"].includes(vehicleSupport)) {
+      return res
+        .status(400)
+        .json({ message: "Select Car, Bike, or Car & Bike for your Puncher Shop" });
     }
 
     const emailLower = email.toLowerCase().trim();
@@ -100,7 +120,11 @@ export const registerUser = async (req, res) => {
       email: emailLower,
       password: hashedPassword,
       role: "user",
-      allowedCrms: [upperCrmType],
+      // 🛞 Keep access to CRMs the account already has (e.g. a Car garage
+      // that also registers a Puncher Shop keeps Car access).
+      allowedCrms: Array.from(
+        new Set([...(existingUserByEmail?.allowedCrms || []), upperCrmType]),
+      ),
       myReferralCode,
 
       // 🚗 GARAGE CONFIGURATION FIELDS (Fallback safely to false if not provided)
@@ -133,6 +157,21 @@ export const registerUser = async (req, res) => {
     } else {
       user = await prisma.user.create({
         data: userData,
+      });
+    }
+
+    /* =================================================
+       🛞 PUNCHER SHOP PROFILE (Car / Bike / Car & Bike)
+    ================================================= */
+    if (isPuncher) {
+      await prisma.puncherShop.upsert({
+        where: { userId: user.id },
+        create: {
+          userId: user.id,
+          vehicleSupport,
+          shopName: latestPayment.companyName || null,
+        },
+        update: { vehicleSupport },
       });
     }
 

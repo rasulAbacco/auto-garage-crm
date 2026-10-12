@@ -12,29 +12,47 @@ import {
   FiX,
 } from "react-icons/fi";
 
+const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:5001";
+
 export default function ContactUs() {
   const { isDark } = useTheme();
   const [formData, setFormData] = useState({
     name: "",
     email: "",
     message: "",
+    website: "", // honeypot (hidden from people)
   });
   const [loading, setLoading] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [error, setError] = useState("");
 
   const handleChange = (e) => {
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
+    if (error) setError("");
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
-    setTimeout(() => {
-      setLoading(false);
+    setError("");
+    try {
+      const res = await fetch(`${API_BASE}/api/contact`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(formData),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.success) {
+        throw new Error(data.message || "Could not send your message. Please try again.");
+      }
       setSubmitted(true);
-      setFormData({ name: "", email: "", message: "" });
-    }, 1500);
+      setFormData({ name: "", email: "", message: "", website: "" });
+    } catch (err) {
+      setError(err.message || "Could not send your message. Please try again.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -137,7 +155,7 @@ export default function ContactUs() {
               >
                 <iframe
                   src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d15544.932465958704!2d77.5527066637976!3d13.08440708030314!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x3bae2387c5242ab3%3A0xb5933098d4ce3ad9!2sAbacco%20technology!5e0!3m2!1sen!2sin!4v1762863117438!5m2!1sen!2sin"
-                  className="w-full h-full grayscale opacity-60 group-hover:grayscale-0 group-hover:opacity-100 transition-all duration-700"
+                  className="w-full h-full transition-all duration-700"
                   allowFullScreen
                   loading="lazy"
                 ></iframe>
@@ -183,11 +201,37 @@ export default function ContactUs() {
                     Transmission Successful.
                   </h3>
                   <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">
-                    Our engineers will respond shortly.
+                    We will respond within 24 hours.
                   </p>
+                  <p className="mt-2 text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                    A confirmation has been sent to your email.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => setSubmitted(false)}
+                    className="mt-6 text-[10px] font-black uppercase tracking-widest text-blue-500 hover:text-[#001F3F]"
+                  >
+                    Send another message
+                  </button>
                 </div>
               ) : (
                 <form onSubmit={handleSubmit} className="space-y-6">
+                  {error && (
+                    <div role="alert" className="p-3 bg-red-500/10 border border-red-500 text-red-500 text-sm rounded-lg">
+                      {error}
+                    </div>
+                  )}
+                  {/* Honeypot: hidden from people, bots fill it */}
+                  <input
+                    type="text"
+                    name="website"
+                    value={formData.website}
+                    onChange={handleChange}
+                    tabIndex={-1}
+                    autoComplete="off"
+                    aria-hidden="true"
+                    className="hidden"
+                  />
                   <InputField
                     label="Identity Name"
                     icon={<FiUser />}
@@ -201,6 +245,7 @@ export default function ContactUs() {
                     label="Return Email Address"
                     icon={<FiMail />}
                     name="email"
+                    type="email"
                     value={formData.email}
                     onChange={handleChange}
                     placeholder="your@email.com"
@@ -279,6 +324,7 @@ const InputField = ({
   onChange,
   placeholder,
   isDark,
+  type = "text",
 }) => (
   <div className="space-y-3">
     <label
@@ -287,7 +333,7 @@ const InputField = ({
       {React.cloneElement(icon, { className: "text-blue-500" })} {label}
     </label>
     <input
-      type="text"
+      type={type}
       name={name}
       value={value}
       onChange={onChange}

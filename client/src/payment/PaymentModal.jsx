@@ -29,6 +29,7 @@ const PaymentModal = ({
   onComplete,
   userData,
   isUpgradePage,
+  skipRegisterRedirect, // 🆕 in-app upgrades (Puncher Shop) stay inside the CRM after paying
   referralCode, // 🆕 captured from ?ref= on the pricing page, auto-fills the existing Reference Code field
 }) => {
   const [isProcessing, setIsProcessing] = useState(false);
@@ -71,6 +72,10 @@ const PaymentModal = ({
     if (showSuccess && paymentResponse) {
       const timer = setTimeout(() => {
         onComplete(plan, formData);
+        if (skipRegisterRedirect) {
+          setIsProcessing(false);
+          return;
+        }
         const finalPriceCalc = subscription.total;
 
         const stateData = {
@@ -89,8 +94,18 @@ const PaymentModal = ({
           car: "/car-register",
           bike: "/bike-register",
           washing: "/washing-register",
+          puncher: "/puncher-register",
         };
-        navigate(routes[planType] || "/car-register", { state: stateData });
+        // Never silently fall back to Car registration — that registers the
+        // account under the wrong CRM (e.g. a Puncher Shop ending up as Car).
+        const registerRoute = routes[String(planType || "").toLowerCase()];
+        if (!registerRoute) {
+          console.error("Unknown planType for registration:", planType);
+          alert("Payment received, but the CRM type is unknown. Please contact support before registering.");
+          setIsProcessing(false);
+          return;
+        }
+        navigate(registerRoute, { state: stateData });
         setIsProcessing(false);
       }, 2000);
       return () => clearTimeout(timer);

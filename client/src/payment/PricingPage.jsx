@@ -27,6 +27,7 @@ export const REGION_PRICING = {
       car: { premium: 500, customise: 700 },
       bike: { premium: 500, customise: 700 },
       washing: { premium: 400 },
+      puncher: { premium: 200 }, // 🛞 Bike/Car Puncher Shops
     },
   },
   rural: {
@@ -38,6 +39,7 @@ export const REGION_PRICING = {
       car: { premium: 350, customise: 500 },
       bike: { premium: 350, customise: 500 },
       washing: { premium: 350 },
+      puncher: { premium: 100 }, // 🛞 Bike/Car Puncher Shops
     },
   },
 };
@@ -49,6 +51,7 @@ const API_PLAN_KEYS = {
   car: { premium: "premium", customise: "customise" },
   bike: { premium: "bikepremium", customise: "bikecustomise" },
   washing: { premium: "washpremium" },
+  puncher: { premium: "puncherpremium" },
 };
 
 const PREMIUM_FEATURES = [
@@ -75,6 +78,17 @@ const WASHING_PREMIUM_FEATURES = [
   "Priority Support Tier",
 ];
 
+const PUNCHER_PREMIUM_FEATURES = [
+  `First ${FREE_TRIAL_DAYS} Days 100% Free`,
+  "Car, Bike or Car & Bike Shops",
+  "Unlimited Clients & Puncture Jobs",
+  "Tyre-wise Service Logging",
+  "GST Billing & Printable Invoices",
+  "Daily Collections Dashboard",
+  "Advanced Data Export",
+  "Priority Support Tier",
+];
+
 export function buildPlans(planType, region) {
   const cfg = REGION_PRICING[region];
   const prices = cfg.prices[planType] || cfg.prices.car;
@@ -93,7 +107,11 @@ export function buildPlans(planType, region) {
       multiMonthDiscount: cfg.multiMonthDiscount,
       apiPlanName: keys.premium,
       features:
-        planType === "washing" ? WASHING_PREMIUM_FEATURES : PREMIUM_FEATURES,
+        planType === "washing"
+          ? WASHING_PREMIUM_FEATURES
+          : planType === "puncher"
+            ? PUNCHER_PREMIUM_FEATURES
+            : PREMIUM_FEATURES,
     },
   ];
 

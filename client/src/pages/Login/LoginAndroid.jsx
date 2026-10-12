@@ -22,6 +22,7 @@ const CRM_TYPES = [
   { key: "car", label: "Car Node", icon: FiTruck },
   { key: "bike", label: "Bike Node", icon: FiActivity },
   { key: "wash", label: "Wash Node", icon: FiBox },
+  { key: "puncher", label: "Puncher", icon: FiTruck },
 ];
 
 export default function LoginAndroid() {
@@ -46,6 +47,13 @@ export default function LoginAndroid() {
 
     if (!formData.identifier || !formData.password) {
       setError("Please fill in all fields");
+      setLoading(false);
+      return;
+    }
+
+    // 🛞 Puncher Shops are owner-only accounts for now
+    if (loginMode === "staff" && crmType === "puncher") {
+      setError("Puncher Shop has owner login only. Please use Owner Node.");
       setLoading(false);
       return;
     }
@@ -204,7 +212,7 @@ export default function LoginAndroid() {
 
           <div className="p-6">
             {/* Infrastructure Selector HUB */}
-            <div className="bg-[#F8FAFC] border border-[#CBD5E1] rounded-xl p-1 grid grid-cols-3 gap-1 mb-6 shadow-inner">
+            <div className="bg-[#F8FAFC] border border-[#CBD5E1] rounded-xl p-1 grid grid-cols-4 gap-1 mb-6 shadow-inner">
               {CRM_TYPES.map(({ key, label, icon: Icon }) => (
                 <button
                   key={key}
