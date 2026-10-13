@@ -1,3 +1,4 @@
+// server/controllers/reminderController.js
 import prisma from "../models/prismaClient.js";
 
 /* -------------------------------------------------------
@@ -9,36 +10,40 @@ function subtractDays(date, days) {
   return d;
 }
 
-/* =======================================================
-   GET ALL REMINDERS
-======================================================= */
+/* -------------------------------------------------------
+   Utility: Does the logged-in user own this reminder?
+--------------------------------------------------------*/
+function canAccess(reminder, req) {
+  // Reminders created without a user (legacy rows) are accessible to anyone logged in
+  if (!reminder.userId || !req.user?.id) return true;
+  return reminder.userId === req.user.id;
+}
+
 /* =======================================================
    GET ALL REMINDERS (WITH TIME-RANGE FILTERING)
 ======================================================= */
 export const getReminders = async (req, res) => {
   try {
     const userId = req.user?.id;
-    const { range } = req.query; // 🔄 Read the time range filter parameter
+    const { range } = req.query;
 
-    // Base query condition
-    let where = userId ? { userId } : {};
+    const where = userId ? { userId } : {};
 
     if (range && range !== "all") {
       const now = new Date();
-      let startDate = new Date();
-      let endDate = new Date();
+      let startDate;
+      let endDate;
 
       if (range === "week") {
-        // Calculate the current week boundary range (Sunday to Saturday)
         const currentDay = now.getDay();
-
+        startDate = new Date(now);
         startDate.setDate(now.getDate() - currentDay);
         startDate.setHours(0, 0, 0, 0);
 
+        endDate = new Date(now);
         endDate.setDate(now.getDate() + (6 - currentDay));
         endDate.setHours(23, 59, 59, 999);
       } else if (range === "month") {
-        // Calculate the current month boundaries
         startDate = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
         endDate = new Date(
           now.getFullYear(),
@@ -50,16 +55,13 @@ export const getReminders = async (req, res) => {
           999,
         );
       } else if (range === "year") {
-        // Calculate the current year boundaries
         startDate = new Date(now.getFullYear(), 0, 1, 0, 0, 0, 0);
-        endDate = new Date(now.getFullYear(), 12, 0, 23, 59, 59, 999);
+        endDate = new Date(now.getFullYear(), 11, 31, 23, 59, 59, 999);
       }
 
-      // Add timestamp boundary condition map to Prisma query payload rules
-      where.serviceDate = {
-        gte: startDate,
-        lte: endDate,
-      };
+      if (startDate && endDate) {
+        where.serviceDate = { gte: startDate, lte: endDate };
+      }
     }
 
     const reminders = await prisma.reminder.findMany({
@@ -75,18 +77,14 @@ export const getReminders = async (req, res) => {
             regNumber: true,
           },
         },
-        user: {
-          select: { id: true, username: true },
-        },
+        user: { select: { id: true, username: true } },
       },
       orderBy: { serviceDate: "asc" },
     });
 
-    return res.status(200).json({
-      success: true,
-      total: reminders.length,
-      data: reminders,
-    });
+    return res
+      .status(200)
+      .json({ success: true, total: reminders.length, data: reminders });
   } catch (error) {
     console.error("❌ Error fetching reminders:", error);
     return res.status(500).json({
@@ -102,17 +100,19 @@ export const getReminders = async (req, res) => {
 ======================================================= */
 export const getReminderById = async (req, res) => {
   try {
-    const { id } = req.params;
+    const id = Number(req.params.id);
+    if (isNaN(id)) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Invalid reminder id" });
+    }
 
     const reminder = await prisma.reminder.findUnique({
-      where: { id: Number(id) },
-      include: {
-        client: true,
-        user: true,
-      },
+      where: { id },
+      include: { client: true, user: { select: { id: true, username: true } } },
     });
 
-    if (!reminder) {
+    if (!reminder || !canAccess(reminder, req)) {
       return res
         .status(404)
         .json({ success: false, message: "Reminder not found" });
@@ -135,17 +135,27 @@ export const createReminder = async (req, res) => {
     const { clientId, serviceDate, note } = req.body;
 
     if (!clientId || !serviceDate) {
-      return res.status(400).json({
-        message: "clientId and serviceDate are required",
-      });
+      return res
+        .status(400)
+        .json({
+          success: false,
+          message: "clientId and serviceDate are required",
+        });
     }
 
-    const parsedClientId = parseInt(clientId);
+    const parsedClientId = parseInt(clientId, 10);
     if (isNaN(parsedClientId)) {
-      return res.status(400).json({ message: "Invalid clientId" });
+      return res
+        .status(400)
+        .json({ success: false, message: "Invalid clientId" });
     }
 
     const serviceDateObj = new Date(serviceDate);
+    if (isNaN(serviceDateObj.getTime())) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Invalid serviceDate" });
+    }
 
     const reminder = await prisma.reminder.create({
       data: {
@@ -156,10 +166,7 @@ export const createReminder = async (req, res) => {
         remind15At: subtractDays(serviceDateObj, 15),
         remind7At: subtractDays(serviceDateObj, 7),
       },
-      include: {
-        client: true,
-        user: true,
-      },
+      include: { client: true, user: { select: { id: true, username: true } } },
     });
 
     return res.status(201).json({
@@ -179,47 +186,81 @@ export const createReminder = async (req, res) => {
 
 /* =======================================================
    UPDATE REMINDER
+   Body may include: note, serviceDate, clientId, completed
+   - completed: true  -> stops all WhatsApp alerts (sent15 + sent7 = true)
+   - completed: false -> re-opens the reminder (flags reset)
 ======================================================= */
 export const updateReminder = async (req, res) => {
   try {
-    const { id } = req.params;
+    const id = Number(req.params.id);
+    if (isNaN(id)) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Invalid reminder id" });
+    }
 
-    const existing = await prisma.reminder.findUnique({
-      where: { id: Number(id) },
-    });
+    const existing = await prisma.reminder.findUnique({ where: { id } });
 
-    if (!existing) {
+    if (!existing || !canAccess(existing, req)) {
       return res
         .status(404)
         .json({ success: false, message: "Reminder not found" });
     }
 
-    let updatedData = {
-      note: req.body.note ?? existing.note,
-    };
+    const updatedData = {};
 
-    // If serviceDate is updated, recalculate reminder dates
+    if (req.body.note !== undefined) {
+      updatedData.note = req.body.note || null;
+    }
+
+    // If serviceDate is updated, recalculate reminder dates and reset flags
     if (req.body.serviceDate) {
       const newServiceDate = new Date(req.body.serviceDate);
-
+      if (isNaN(newServiceDate.getTime())) {
+        return res
+          .status(400)
+          .json({ success: false, message: "Invalid serviceDate" });
+      }
       updatedData.serviceDate = newServiceDate;
       updatedData.remind15At = subtractDays(newServiceDate, 15);
       updatedData.remind7At = subtractDays(newServiceDate, 7);
-      updatedData.sent15 = false; // reset flags
+      updatedData.sent15 = false;
       updatedData.sent7 = false;
     }
 
     if (req.body.clientId) {
-      updatedData.clientId = Number(req.body.clientId);
+      const parsedClientId = Number(req.body.clientId);
+      if (isNaN(parsedClientId)) {
+        return res
+          .status(400)
+          .json({ success: false, message: "Invalid clientId" });
+      }
+      updatedData.clientId = parsedClientId;
+    }
+
+    // Mark complete / reopen (also accepts legacy `sent` field from older UI)
+    const completed =
+      typeof req.body.completed === "boolean"
+        ? req.body.completed
+        : typeof req.body.sent === "boolean"
+          ? req.body.sent
+          : undefined;
+
+    if (completed !== undefined) {
+      updatedData.sent15 = completed;
+      updatedData.sent7 = completed;
+    }
+
+    if (Object.keys(updatedData).length === 0) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Nothing to update" });
     }
 
     const updatedReminder = await prisma.reminder.update({
-      where: { id: Number(id) },
+      where: { id },
       data: updatedData,
-      include: {
-        client: true,
-        user: true,
-      },
+      include: { client: true, user: { select: { id: true, username: true } } },
     });
 
     return res.json({
@@ -229,9 +270,11 @@ export const updateReminder = async (req, res) => {
     });
   } catch (error) {
     console.error("❌ Error updating reminder:", error);
-    return res
-      .status(500)
-      .json({ success: false, message: "Error updating reminder" });
+    return res.status(500).json({
+      success: false,
+      message: "Error updating reminder",
+      error: error.message,
+    });
   }
 };
 
@@ -240,21 +283,22 @@ export const updateReminder = async (req, res) => {
 ======================================================= */
 export const deleteReminder = async (req, res) => {
   try {
-    const { id } = req.params;
+    const id = Number(req.params.id);
+    if (isNaN(id)) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Invalid reminder id" });
+    }
 
-    const reminder = await prisma.reminder.findUnique({
-      where: { id: Number(id) },
-    });
+    const reminder = await prisma.reminder.findUnique({ where: { id } });
 
-    if (!reminder) {
+    if (!reminder || !canAccess(reminder, req)) {
       return res
         .status(404)
         .json({ success: false, message: "Reminder not found" });
     }
 
-    await prisma.reminder.delete({
-      where: { id: Number(id) },
-    });
+    await prisma.reminder.delete({ where: { id } });
 
     return res.json({
       success: true,
@@ -262,8 +306,10 @@ export const deleteReminder = async (req, res) => {
     });
   } catch (error) {
     console.error("❌ Error deleting reminder:", error);
-    return res
-      .status(500)
-      .json({ success: false, message: "Error deleting reminder" });
+    return res.status(500).json({
+      success: false,
+      message: "Error deleting reminder",
+      error: error.message,
+    });
   }
 };
