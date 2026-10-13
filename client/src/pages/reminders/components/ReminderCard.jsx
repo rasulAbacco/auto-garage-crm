@@ -1,58 +1,76 @@
 // client/src/pages/reminders/components/ReminderCard.jsx
-import React from "react";
+import React, { useState } from "react";
 import {
   FiUser,
   FiCalendar,
   FiTrash2,
   FiCheckCircle,
   FiMessageSquare,
-  FiClock,
+  FiLoader,
 } from "react-icons/fi";
 import { motion } from "framer-motion";
 import { useTheme } from "../../../contexts/ThemeContext";
-import axios from "axios";
 
 export default function ReminderCard({
   reminder,
   client,
   onDelete,
+  onComplete,
   index,
-  refreshReminders,
 }) {
   const { isDark } = useTheme();
-  const API_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:5001";
+  const [busy, setBusy] = useState(null); // "delete" | "complete" | null
 
-  const handleMarkDone = async () => {
+  const isCompleted = Boolean(reminder.sent15 && reminder.sent7);
+
+  const dateObj = new Date(reminder.serviceDate);
+  const validDate = !isNaN(dateObj.getTime());
+  const formattedDate = validDate
+    ? dateObj.toLocaleDateString("en-IN", {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+      })
+    : "No date";
+  const formattedTime = validDate
+    ? dateObj.toLocaleTimeString("en-IN", {
+        hour: "2-digit",
+        minute: "2-digit",
+      })
+    : "";
+
+  const handleComplete = async () => {
+    if (!onComplete || busy) return;
+    setBusy("complete");
     try {
-      await axios.put(`${API_URL}/api/reminders/${reminder.id}`, {
-        sent: true,
-      });
-      refreshReminders && refreshReminders();
-    } catch (err) {
-      console.error("Error marking done:", err);
+      await onComplete(reminder.id);
+    } finally {
+      setBusy(null);
     }
   };
 
-  // Uses serviceDate or remindAt depending on your backend field name
-  const dateObj = new Date(reminder.serviceDate || reminder.remindAt);
-  const formattedDate = dateObj.toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
+  const handleDelete = async () => {
+    if (!onDelete || busy) return;
+    setBusy("delete");
+    try {
+      await onDelete(reminder.id);
+    } finally {
+      setBusy(null);
+    }
+  };
 
-  const isSent = reminder.sent;
+  const displayClient = client || reminder.client;
 
   return (
     <motion.div
       initial={{ opacity: 0, y: 5 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: index * 0.03 }}
+      transition={{ delay: Math.min(index, 20) * 0.03 }}
       className={`group flex flex-col md:flex-row items-start md:items-center justify-between p-5 transition-colors ${
         isDark
           ? "hover:bg-gray-800/40 border-gray-800 text-gray-100"
           : "hover:bg-gray-50 border-gray-100 text-gray-900"
-      } ${index !== 0 ? "border-t" : ""}`}
+      } ${index !== 0 ? "border-t" : ""} ${isCompleted ? "opacity-70" : ""}`}
     >
       {/* SECTION 1: CLIENT & VEHICLE */}
       <div className="flex items-start gap-4 w-full md:w-1/4">
@@ -65,20 +83,22 @@ export default function ReminderCard({
         </div>
         <div className="overflow-hidden">
           <h3 className="font-bold text-sm md:text-base truncate">
-            {client?.fullName || `Client #${reminder.clientId}`}
+            {displayClient?.fullName || `Client #${reminder.clientId}`}
           </h3>
           <p
             className={`text-xs mt-0.5 ${isDark ? "text-gray-400" : "text-gray-500"}`}
           >
-            {client?.vehicleMake} {client?.vehicleModel}
+            {[displayClient?.vehicleMake, displayClient?.vehicleModel]
+              .filter(Boolean)
+              .join(" ")}
+            {displayClient?.regNumber ? ` · ${displayClient.regNumber}` : ""}
           </p>
         </div>
       </div>
 
-      {/* SECTION 2: NOTE (Your 'hlloooooo' message) */}
+      {/* SECTION 2: NOTE */}
       <div className="flex-1 w-full md:px-6 mt-3 md:mt-0">
-        {/* Changed from reminder.note to reminder.message to match your screenshot */}
-        {reminder.message || reminder.note ? (
+        {reminder.note ? (
           <div
             className={`flex items-start gap-2 p-3 rounded-xl border border-dashed text-sm leading-relaxed ${
               isDark
@@ -90,9 +110,7 @@ export default function ReminderCard({
               size={16}
               className="mt-0.5 shrink-0 opacity-60 text-blue-500"
             />
-            <span className="break-all">
-              {reminder.message || reminder.note}
-            </span>
+            <span className="break-words">{reminder.note}</span>
           </div>
         ) : (
           <div className="text-xs italic opacity-30 px-3">No note provided</div>
@@ -101,46 +119,67 @@ export default function ReminderCard({
 
       {/* SECTION 3: DATE & STATUS */}
       <div className="flex items-center justify-between md:justify-end gap-6 mt-4 md:mt-0 w-full md:w-auto">
-        {/* DATE DISPLAY */}
-        <div className="flex items-center gap-2 text-sm font-semibold whitespace-nowrap">
-          <FiCalendar className="text-blue-500" size={14} />
-          {formattedDate}
+        <div className="flex flex-col text-sm font-semibold whitespace-nowrap">
+          <span className="flex items-center gap-2">
+            <FiCalendar className="text-blue-500" size={14} />
+            {formattedDate}
+          </span>
+          {formattedTime && (
+            <span
+              className={`text-xs font-normal ml-6 ${isDark ? "text-gray-400" : "text-gray-500"}`}
+            >
+              {formattedTime}
+            </span>
+          )}
         </div>
 
-        {/* STATUS & ACTIONS */}
         <div className="flex items-center gap-2">
           <div
             className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider border ${
-              isSent
+              isCompleted
                 ? "bg-green-500/10 text-green-500 border-green-500/20"
                 : "bg-blue-500/10 text-blue-500 border-blue-500/20"
             }`}
           >
-            {isSent ? "Sent" : "Pending"}
+            {isCompleted ? "Completed" : "Pending"}
           </div>
 
           <div className="flex items-center gap-1">
-            {!isSent && (
+            {!isCompleted && (
               <button
-                onClick={handleMarkDone}
-                className={`p-2 rounded-lg transition-colors ${
+                type="button"
+                title="Mark as completed"
+                onClick={handleComplete}
+                disabled={!!busy}
+                className={`p-2 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
                   isDark
                     ? "hover:bg-green-500/20 text-gray-400 hover:text-green-500"
                     : "hover:bg-green-100 text-green-500 hover:text-green-700"
                 }`}
               >
-                <FiCheckCircle size={18} />
+                {busy === "complete" ? (
+                  <FiLoader size={18} className="animate-spin" />
+                ) : (
+                  <FiCheckCircle size={18} />
+                )}
               </button>
             )}
             <button
-              onClick={() => onDelete(reminder.id)}
-              className={`p-2 rounded-lg transition-colors ${
+              type="button"
+              title="Delete reminder"
+              onClick={handleDelete}
+              disabled={!!busy}
+              className={`p-2 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
                 isDark
                   ? "hover:bg-red-500/20 text-gray-400 hover:text-red-500"
                   : "hover:bg-red-100 text-red-500 hover:text-red-700"
               }`}
             >
-              <FiTrash2 size={18} />
+              {busy === "delete" ? (
+                <FiLoader size={18} className="animate-spin" />
+              ) : (
+                <FiTrash2 size={18} />
+              )}
             </button>
           </div>
         </div>

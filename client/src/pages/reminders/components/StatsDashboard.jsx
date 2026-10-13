@@ -1,10 +1,8 @@
+// client/src/pages/reminders/components/StatsDashboard.jsx
 import React from "react";
 import { FiBell, FiAlertCircle, FiClock, FiCalendar } from "react-icons/fi";
 import { useTheme } from "../../../contexts/ThemeContext";
 
-/* =========================================
-   Simple Metric Item
-========================================= */
 const Metric = ({ title, value, icon: Icon, colorClass, isLast }) => {
   const { isDark } = useTheme();
 
@@ -41,24 +39,21 @@ const Metric = ({ title, value, icon: Icon, colorClass, isLast }) => {
   );
 };
 
-/* =========================================
-   Dashboard (Simplified)
-========================================= */
 export default function StatsDashboard({ reminders = [], stats }) {
   const { isDark } = useTheme();
 
-  // Use stats from props if available (passed from parent),
-  // otherwise calculate locally as a fallback
+  const isCompleted = (r) => Boolean(r.sent15 && r.sent7);
+
   const displayStats = stats || {
     total: reminders.length,
-    pending: reminders.filter((r) => !r.sent).length,
+    pending: reminders.filter((r) => !isCompleted(r)).length,
     overdue: reminders.filter(
-      (r) => !r.sent && new Date(r.serviceDate) < new Date(),
+      (r) => !isCompleted(r) && new Date(r.serviceDate) < new Date(),
     ).length,
     upcoming: reminders.filter((r) => {
       const diff =
         (new Date(r.serviceDate) - new Date()) / (1000 * 60 * 60 * 24);
-      return diff >= 0 && diff <= 7;
+      return !isCompleted(r) && diff >= 0 && diff <= 7;
     }).length,
   };
 
@@ -76,7 +71,7 @@ export default function StatsDashboard({ reminders = [], stats }) {
       />
       <Metric
         title="Pending"
-        value={displayStats.pending || displayStats.today}
+        value={displayStats.pending}
         icon={FiClock}
         colorClass="bg-indigo-500"
       />

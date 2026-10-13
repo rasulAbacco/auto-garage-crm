@@ -1,12 +1,12 @@
-// RemindersList.jsx
+// client/src/pages/reminders/RemindersList.jsx
 import React, { useMemo, useState, useEffect } from "react";
 import axios from "axios";
 import SearchBar from "../../components/SearchBar.jsx";
 import {
-  FiBell,
   FiPlus,
   FiX,
   FiCheckCircle,
+  FiAlertCircle,
   FiInbox,
   FiFilter,
   FiCalendar,
@@ -16,33 +16,66 @@ import StatsDashboard from "./components/StatsDashboard.jsx";
 import ReminderForm from "./components/ReminderForm.jsx";
 import ReminderCard from "./components/ReminderCard.jsx";
 
+const API_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:5001";
+
+const getAuthConfig = () => {
+  const token = localStorage.getItem("token");
+  return {
+    headers: {
+      Authorization: token ? `Bearer ${token}` : "",
+      "Content-Type": "application/json",
+    },
+  };
+};
+
+// A reminder is "completed" once both WhatsApp flags are set
+export const isReminderCompleted = (r) => Boolean(r?.sent15 && r?.sent7);
+
+function getReminderStatus(reminder) {
+  if (isReminderCompleted(reminder))
+    return { status: "completed", label: "Completed" };
+  if (!reminder?.serviceDate) return { status: "unknown", label: "No Date" };
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const service = new Date(reminder.serviceDate);
+  service.setHours(0, 0, 0, 0);
+
+  const diffDays = Math.round((service - today) / (1000 * 60 * 60 * 24));
+  if (diffDays < 0) return { status: "overdue", label: "Overdue" };
+  if (diffDays === 0) return { status: "today", label: "Today" };
+  return { status: "upcoming", label: `${diffDays} days`, diffDays };
+}
+
 export default function RemindersList() {
   const [q, setQ] = useState("");
   const [showForm, setShowForm] = useState(false);
   const [filterStatus, setFilterStatus] = useState("all");
-  const [timeRange, setTimeRange] = useState("all"); // 🔄 NEW: Local state tracking for Year/Month/Week queries
+  const [timeRange, setTimeRange] = useState("all");
   const [reminders, setReminders] = useState([]);
   const [clients, setClients] = useState([]);
   const [loading, setLoading] = useState(true);
   const [successMessage, setSuccessMessage] = useState("");
+  const [errorMessage, setErrorMessage] = useState("");
   const { isDark } = useTheme();
 
-  const API_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:5001";
-
-  const getAuthConfig = () => {
-    const token = localStorage.getItem("token");
-    return {
-      headers: {
-        Authorization: token ? `Bearer ${token}` : "",
-        "Content-Type": "application/json",
-      },
-    };
+  const flash = (type, text) => {
+    if (type === "success") {
+      setErrorMessage("");
+      setSuccessMessage(text);
+      setTimeout(() => setSuccessMessage(""), 3000);
+    } else {
+      setSuccessMessage("");
+      setErrorMessage(text);
+      setTimeout(() => setErrorMessage(""), 4000);
+    }
   };
 
-  const fetchReminders = async () => {
+  // showSpinner = true only for first load / range change,
+  // so delete/complete don't flash the full-screen loader
+  const fetchReminders = async (showSpinner = false) => {
     try {
-      setLoading(true);
-      // 🔄 UPDATED: Passes the active dynamic calendar timeRange selection parameter to your endpoint API
+      if (showSpinner) setLoading(true);
       const [remRes, clientRes] = await Promise.all([
         axios.get(
           `${API_URL}/api/reminders?range=${timeRange}`,
@@ -50,19 +83,62 @@ export default function RemindersList() {
         ),
         axios.get(`${API_URL}/api/clients`, getAuthConfig()),
       ]);
-      setReminders(remRes.data.data || remRes.data);
-      setClients(clientRes.data.data || clientRes.data);
+      setReminders(remRes.data.data || remRes.data || []);
+      setClients(clientRes.data.data || clientRes.data || []);
     } catch (error) {
       console.error("❌ Failed to fetch:", error);
+      flash("error", "Failed to load reminders.");
     } finally {
       setLoading(false);
     }
   };
 
-  // Re-trigger fetch call every single time a dropdown structural range selector updates
   useEffect(() => {
-    fetchReminders();
+    fetchReminders(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [timeRange]);
+
+  /* ---------------- DELETE ---------------- */
+  const handleDelete = async (id) => {
+    if (!window.confirm("Delete this reminder? This cannot be undone.")) return;
+    try {
+      await axios.delete(`${API_URL}/api/reminders/${id}`, getAuthConfig());
+      setReminders((prev) => prev.filter((r) => r.id !== id));
+      flash("success", "Reminder deleted.");
+    } catch (error) {
+      console.error("❌ Delete failed:", error);
+      flash(
+        "error",
+        error.response?.data?.message || "Failed to delete reminder.",
+      );
+    }
+  };
+
+  /* ---------------- MARK COMPLETE ---------------- */
+  const handleComplete = async (id) => {
+    try {
+      const res = await axios.put(
+        `${API_URL}/api/reminders/${id}`,
+        { completed: true },
+        getAuthConfig(),
+      );
+      const updated = res.data?.data;
+      setReminders((prev) =>
+        prev.map((r) =>
+          r.id === id
+            ? { ...r, ...(updated || { sent15: true, sent7: true }) }
+            : r,
+        ),
+      );
+      flash("success", "Reminder marked as completed.");
+    } catch (error) {
+      console.error("❌ Complete failed:", error);
+      flash(
+        "error",
+        error.response?.data?.message || "Failed to update reminder.",
+      );
+    }
+  };
 
   const nameById = useMemo(
     () => Object.fromEntries(clients.map((c) => [String(c.id), c.fullName])),
@@ -70,44 +146,36 @@ export default function RemindersList() {
   );
 
   const filtered = useMemo(() => {
+    const term = q.toLowerCase();
     let results = reminders.filter((r) =>
-      [nameById[String(r.clientId)] || "", r.note || "", r.serviceDate].some(
-        (v) => String(v).toLowerCase().includes(q.toLowerCase()),
-      ),
+      [
+        nameById[String(r.clientId)] || r.client?.fullName || "",
+        r.note || "",
+        r.client?.regNumber || "",
+        r.serviceDate || "",
+      ].some((v) => String(v).toLowerCase().includes(term)),
     );
     if (filterStatus !== "all") {
       results = results.filter(
-        (r) => getReminderStatus(r.serviceDate).status === filterStatus,
+        (r) => getReminderStatus(r).status === filterStatus,
       );
     }
     return results;
   }, [q, reminders, nameById, filterStatus]);
 
-  function getReminderStatus(date) {
-    if (!date) return { status: "unknown", label: "No Date" };
-    const today = new Date();
-    const serviceDate = new Date(date);
-    const diffDays = Math.ceil((serviceDate - today) / (1000 * 60 * 60 * 24));
-    if (diffDays < 0) return { status: "overdue", label: "Overdue" };
-    if (diffDays === 0) return { status: "today", label: "Today" };
-    return { status: "upcoming", label: `${diffDays} days` };
-  }
-
-  const stats = useMemo(
-    () => ({
+  const stats = useMemo(() => {
+    const statuses = reminders.map((r) => getReminderStatus(r));
+    return {
       total: reminders.length,
-      overdue: reminders.filter(
-        (r) => getReminderStatus(r.serviceDate).status === "overdue",
+      pending: reminders.filter((r) => !isReminderCompleted(r)).length,
+      overdue: statuses.filter((s) => s.status === "overdue").length,
+      today: statuses.filter((s) => s.status === "today").length,
+      upcoming: statuses.filter(
+        (s) =>
+          s.status === "today" || (s.status === "upcoming" && s.diffDays <= 7),
       ).length,
-      today: reminders.filter(
-        (r) => getReminderStatus(r.serviceDate).status === "today",
-      ).length,
-      upcoming: reminders.filter(
-        (r) => getReminderStatus(r.serviceDate).status === "upcoming",
-      ).length,
-    }),
-    [reminders],
-  );
+    };
+  }, [reminders]);
 
   if (loading) {
     return (
@@ -168,14 +236,13 @@ export default function RemindersList() {
             <SearchBar
               value={q}
               onChange={setQ}
-              placeholder="Filter by name or note..."
+              placeholder="Filter by name, reg number or note..."
               className="border-none bg-transparent"
             />
           </div>
 
-          {/* 🔄 TIMEFRAME FILTERS DROPDOWN WRAPPERS BLOCK */}
           <div className="flex w-full md:w-auto items-center gap-2 flex-wrap sm:flex-nowrap">
-            {/* Calendar Timeframe Range Selection */}
+            {/* Time range */}
             <div
               className={`flex items-center gap-2 px-3 py-2 rounded-lg border w-full sm:w-auto ${isDark ? "bg-gray-800 border-gray-700" : "bg-gray-50 border-gray-200"}`}
             >
@@ -192,7 +259,7 @@ export default function RemindersList() {
               </select>
             </div>
 
-            {/* Service Status Sub-Filter */}
+            {/* Status */}
             <div
               className={`flex items-center gap-2 px-3 py-2 rounded-lg border w-full sm:w-auto ${isDark ? "bg-gray-800 border-gray-700" : "bg-gray-50 border-gray-200"}`}
             >
@@ -206,6 +273,7 @@ export default function RemindersList() {
                 <option value="overdue">Overdue</option>
                 <option value="today">Due Today</option>
                 <option value="upcoming">Upcoming</option>
+                <option value="completed">Completed</option>
               </select>
             </div>
           </div>
@@ -213,21 +281,27 @@ export default function RemindersList() {
 
         {/* FEEDBACK */}
         {successMessage && (
-          <div className="flex items-center gap-3 p-4 mb-6 rounded-lg bg-green-500/10 border border-green-500/20 text-green-500 animate-in fade-in slide-in-from-top-4">
+          <div className="flex items-center gap-3 p-4 mb-6 rounded-lg bg-green-500/10 border border-green-500/20 text-green-500">
             <FiCheckCircle size={20} />
             <span className="text-sm font-medium">{successMessage}</span>
+          </div>
+        )}
+        {errorMessage && (
+          <div className="flex items-center gap-3 p-4 mb-6 rounded-lg bg-red-500/10 border border-red-500/20 text-red-500">
+            <FiAlertCircle size={20} />
+            <span className="text-sm font-medium">{errorMessage}</span>
           </div>
         )}
 
         {/* FORM DRAWER */}
         {showForm && (
-          <div className="mb-8 animate-in zoom-in-95 duration-200">
+          <div className="mb-8">
             <ReminderForm
               clients={clients}
-              onSubmit={async (data) => {
-                // Submit handler framework logic link placeholder mapping rule
+              refreshReminders={() => {
                 fetchReminders();
                 setShowForm(false);
+                flash("success", "Reminder created.");
               }}
               onCancel={() => setShowForm(false)}
             />
@@ -244,13 +318,18 @@ export default function RemindersList() {
               <p className="text-lg">No reminders found</p>
             </div>
           ) : (
-            <div className="divide-y divide-gray-200 dark:divide-gray-800">
+            <div>
               {filtered.map((reminder, i) => (
                 <ReminderCard
                   key={reminder.id}
                   reminder={reminder}
-                  client={clients.find((c) => c.id === reminder.clientId)}
-                  onDelete={fetchReminders}
+                  client={
+                    clients.find(
+                      (c) => String(c.id) === String(reminder.clientId),
+                    ) || reminder.client
+                  }
+                  onDelete={handleDelete}
+                  onComplete={handleComplete}
                   index={i}
                 />
               ))}

@@ -1,7 +1,20 @@
+// client/src/pages/reminders/components/ReminderForm.jsx
 import React, { useState, useEffect } from "react";
 import { FiUser, FiCalendar, FiFileText, FiSend, FiInfo } from "react-icons/fi";
 import { useTheme } from "../../../contexts/ThemeContext";
 import axios from "axios";
+
+const API_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:5001";
+
+const getAuthConfig = () => {
+  const token = localStorage.getItem("token");
+  return {
+    headers: {
+      Authorization: token ? `Bearer ${token}` : "",
+      "Content-Type": "application/json",
+    },
+  };
+};
 
 export default function ReminderForm({
   clients = [],
@@ -10,40 +23,23 @@ export default function ReminderForm({
 }) {
   const { isDark } = useTheme();
 
-  const [form, setForm] = useState({
-    clientId: "",
-    serviceDate: "",
-    note: "",
-  });
-
+  const [form, setForm] = useState({ clientId: "", serviceDate: "", note: "" });
   const [loading, setLoading] = useState(false);
   const [localClients, setLocalClients] = useState(clients);
   const [message, setMessage] = useState("");
 
-  const API_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:5001";
-
-  const getAuthConfig = () => {
-    const token = localStorage.getItem("token");
-    return {
-      headers: {
-        Authorization: token ? `Bearer ${token}` : "",
-        "Content-Type": "application/json",
-      },
-    };
-  };
-
+  // Keep local list in sync with parent; fetch only if parent has none
   useEffect(() => {
+    if (clients.length > 0) {
+      setLocalClients(clients);
+      return;
+    }
     const fetchClients = async () => {
-      if (clients.length === 0) {
-        try {
-          const res = await axios.get(
-            `${API_URL}/api/clients`,
-            getAuthConfig(),
-          );
-          setLocalClients(res.data.data || res.data);
-        } catch (error) {
-          console.error("❌ Failed to load clients:", error);
-        }
+      try {
+        const res = await axios.get(`${API_URL}/api/clients`, getAuthConfig());
+        setLocalClients(res.data.data || res.data || []);
+      } catch (error) {
+        console.error("❌ Failed to load clients:", error);
       }
     };
     fetchClients();
@@ -61,24 +57,26 @@ export default function ReminderForm({
         `${API_URL}/api/reminders`,
         {
           clientId: Number(form.clientId),
-          serviceDate: form.serviceDate,
+          // Convert the browser's local (IST) time to an ISO string so the
+          // server stores the exact moment the user picked
+          serviceDate: new Date(form.serviceDate).toISOString(),
           note: form.note,
         },
         getAuthConfig(),
       );
 
-      setMessage("✅ Reminder set successfully.");
       setForm({ clientId: "", serviceDate: "", note: "" });
       refreshReminders && refreshReminders();
-      setTimeout(() => setMessage(""), 3000);
     } catch (error) {
-      setMessage("❌ Error saving reminder.");
+      console.error("❌ Error saving reminder:", error);
+      setMessage(
+        `❌ ${error.response?.data?.message || "Error saving reminder."}`,
+      );
     } finally {
       setLoading(false);
     }
   };
 
-  // Shared input styles for classic look
   const inputBaseClass = `w-full px-4 py-2.5 rounded-lg border transition-all outline-none text-sm ${
     isDark
       ? "bg-gray-800 border-gray-700 text-gray-100 focus:border-blue-500"
@@ -95,7 +93,6 @@ export default function ReminderForm({
         isDark ? "bg-gray-900 border-gray-800" : "bg-white border-gray-200"
       }`}
     >
-      {/* MINIMAL HEADER */}
       <div
         className={`px-6 py-4 border-b ${isDark ? "border-gray-800" : "border-gray-100"}`}
       >
@@ -143,7 +140,7 @@ export default function ReminderForm({
             />
           </div>
 
-          {/* NOTE - FULL WIDTH */}
+          {/* NOTE */}
           <div className="md:col-span-2 space-y-1">
             <label className={labelClass}>
               <FiFileText size={14} /> Internal Notes
@@ -173,12 +170,10 @@ export default function ReminderForm({
         </div>
 
         {/* ACTIONS */}
-        <div className="mt-8 flex items-center justify-between border-t pt-6 border-transparent">
+        <div className="mt-8 flex items-center justify-between pt-6">
           <div>
             {message && (
-              <span
-                className={`text-sm font-medium ${message.includes("✅") ? "text-green-500" : "text-red-500"}`}
-              >
+              <span className="text-sm font-medium text-red-500">
                 {message}
               </span>
             )}
