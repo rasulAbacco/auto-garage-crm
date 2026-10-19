@@ -233,25 +233,39 @@ export default function Invoice({ previewData }) {
       />
 
       {/* Toolbar */}
-      <div className="max-w-[210mm] mx-auto mb-6 flex flex-col sm:flex-row justify-between items-center gap-4 no-print">
+      <div className="max-w-[210mm] mx-auto mb-6 flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-3 no-print">
         <Link
           to="/billing"
-          className="flex items-center gap-2 text-gray-500 hover:text-black transition-colors font-medium"
+          className={`inline-flex items-center gap-1.5 text-[12px] font-black uppercase tracking-[0.15em] transition-colors ${
+            isDark
+              ? "text-slate-400 hover:text-white"
+              : "text-slate-500 hover:text-[#001F3F]"
+          }`}
         >
-          <FiArrowLeft /> Back to Billing
+          <FiArrowLeft size={14} /> Back to billing
         </Link>
-        <div className="flex gap-3 w-full sm:w-auto">
+        <div className="grid grid-cols-2 sm:flex gap-2">
           <button
+            type="button"
             onClick={() => window.print()}
-            className="flex-1 sm:flex-none bg-gray-800 text-white px-5 py-2 rounded-md flex items-center justify-center gap-2 hover:bg-black"
+            className={`h-10 px-4 rounded-xl border-2 inline-flex items-center justify-center gap-2 text-[12px] font-black uppercase tracking-[0.15em] transition-all active:scale-95 ${
+              isDark
+                ? "border-white/10 text-slate-200 hover:bg-white/5"
+                : "border-[#CBD5E1] text-[#001F3F] bg-white hover:bg-[#F8FAFC]"
+            }`}
           >
-            <FiPrinter /> Print
+            <FiPrinter size={14} /> Print
           </button>
           <button
+            type="button"
             onClick={handleDownloadPDF}
-            className="flex-1 sm:flex-none bg-blue-600 text-white px-5 py-2 rounded-md flex items-center justify-center gap-2 hover:bg-blue-700"
+            className={`h-10 px-4 rounded-xl inline-flex items-center justify-center gap-2 text-[12px] font-black uppercase tracking-[0.15em] shadow-lg transition-all active:scale-95 ${
+              isDark
+                ? "bg-white text-[#001F3F] hover:bg-blue-50"
+                : "bg-[#001F3F] text-white hover:bg-black"
+            }`}
           >
-            <FiDownload /> Download PDF
+            <FiDownload size={14} /> Download PDF
           </button>
         </div>
       </div>
@@ -440,7 +454,10 @@ export default function Invoice({ previewData }) {
                         {(
                           item.quantity *
                           item.unitPrice *
-                          (1 + (item.cgstRate + item.sgstRate) / 100)
+                          (1 +
+                            (Number(item.cgstRate || 0) +
+                              Number(item.sgstRate || 0)) /
+                              100)
                         ).toFixed(2)}
                       </td>
                     </tr>
@@ -531,7 +548,10 @@ export default function Invoice({ previewData }) {
                         {(
                           item.quantity *
                           item.unitPrice *
-                          (1 + (item.cgstRate + item.sgstRate) / 100)
+                          (1 +
+                            (Number(item.cgstRate || 0) +
+                              Number(item.sgstRate || 0)) /
+                              100)
                         ).toFixed(2)}
                       </td>
                     </tr>

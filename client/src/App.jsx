@@ -12,6 +12,8 @@ import ScrollToTop from "./components/ScrollToTop.jsx";
 import Login from "./pages/Login/Login.jsx";
 import Layout from "./components/Layout.jsx";
 import ProtectedRoute from "./routes/ProtectedRoute.jsx";
+import AppEntry from "./routes/AppEntry.jsx";
+import { isNativeApp } from "./utils/authStorage";
 
 /* App pages */
 import Dashboard from "./pages/Dashboard.jsx";
@@ -119,6 +121,9 @@ import PuncherReference from "./puncherPages/reference/PuncherReference.jsx";
 import PuncherUpgrade from "./puncherPages/upgrade/PuncherUpgrade.jsx";
 import PuncherProfile from "./puncherPages/profile/PuncherProfile.jsx";
 
+// 📱 Inside the Android / iOS app the marketing site is never shown
+const NATIVE = isNativeApp();
+
 function App() {
   const garageId = localStorage.getItem("userId");
   console.log("GARAGE ID:", garageId);
@@ -133,8 +138,9 @@ function App() {
         <BookingPopupProvider>
           <Routes>
             {/* ================= PUBLIC ================= */}
+            {NATIVE && <Route index element={<AppEntry />} />}
             <Route element={<PublicLayout />}>
-              <Route index element={<Landing />} />
+              {!NATIVE && <Route index element={<Landing />} />}
               <Route path="pricing" element={<PricingPage />} />
               <Route path="car-garage" element={<CarGarage />} />
               <Route path="bike-garage" element={<BikeGarage />} />
@@ -181,11 +187,18 @@ function App() {
               // Edit billing
               <Route path="/billing/:id" element={<Invoice />} />
               <Route path="/reminders" element={<RemindersList />} />
-
-              <Route path="/inventory-management" element={<InventoryManage />} />
-              <Route path="/inventory-management/:id" element={<InventoryManage />} />
-              <Route path="/inventory-management/new" element={<InventoryManage />} />
-              
+              <Route
+                path="/inventory-management"
+                element={<InventoryManage />}
+              />
+              <Route
+                path="/inventory-management/:id"
+                element={<InventoryManage />}
+              />
+              <Route
+                path="/inventory-management/new"
+                element={<InventoryManage />}
+              />
               <Route path="/reports" element={<Reports />} />
               <Route path="/details" element={<DetailsPage />} />
               <Route path="/ocr-Scanner" element={<DetailsPage />} />
@@ -210,8 +223,26 @@ function App() {
               <Route path="/staff-management" element={<StaffManagement />} />
               <Route path="/salary-management" element={<SalaryManagement />} />
               {/* Shop Spare Parts (car) */}
-              <Route path="/spare-parts" element={<SparePartsStore key="car-products" vehicle="car" view="products" />} />
-              <Route path="/spare-parts/vendors" element={<SparePartsStore key="car-vendors" vehicle="car" view="vendors" />} />
+              <Route
+                path="/spare-parts"
+                element={
+                  <SparePartsStore
+                    key="car-products"
+                    vehicle="car"
+                    view="products"
+                  />
+                }
+              />
+              <Route
+                path="/spare-parts/vendors"
+                element={
+                  <SparePartsStore
+                    key="car-vendors"
+                    vehicle="car"
+                    view="vendors"
+                  />
+                }
+              />
               // App.jsx
               <Route
                 path="/billing/proforma-render/:token"
@@ -232,9 +263,32 @@ function App() {
               <Route path="bike-reference" element={<Reference />} />
               <Route path="/bike-plans" element={<Upgrade />} />
               <Route path="/bike-ocr-scanner" element={<OCRScanner />} />
+              {/* Inventory (same page as car CRM; bike layout already offsets content) */}
+              <Route
+                path="/bike-inventory"
+                element={<InventoryManage key="bike-inventory" className="" />}
+              />
               {/* Shop Spare Parts (bike) */}
-              <Route path="/bike-spare-parts" element={<SparePartsStore key="bike-products" vehicle="bike" view="products" />} />
-              <Route path="/bike-spare-parts/vendors" element={<SparePartsStore key="bike-vendors" vehicle="bike" view="vendors" />} />
+              <Route
+                path="/bike-spare-parts"
+                element={
+                  <SparePartsStore
+                    key="bike-products"
+                    vehicle="bike"
+                    view="products"
+                  />
+                }
+              />
+              <Route
+                path="/bike-spare-parts/vendors"
+                element={
+                  <SparePartsStore
+                    key="bike-vendors"
+                    vehicle="bike"
+                    view="vendors"
+                  />
+                }
+              />
               <Route path="/editclient/:id" element={<AddClients />} />
               <Route path="/editclient/new" element={<AddClients />} />
               <Route path="/bikes/:id" element={<BikeDetail />} />
@@ -304,7 +358,7 @@ function App() {
                 element={<NewInvoice />}
               />
               <Route
-                 path="/washing-marketplace/bookings"
+                path="/washing-marketplace/bookings"
                 element={<MarketplaceBookings />}
               />
 
@@ -329,7 +383,10 @@ function App() {
             >
               <Route path="/puncher-dashboard" element={<PuncherDashboard />} />
               <Route path="/puncher-clients" element={<PuncherClients />} />
-              <Route path="/puncher-clients/:id" element={<PuncherClientDetails />} />
+              <Route
+                path="/puncher-clients/:id"
+                element={<PuncherClientDetails />}
+              />
               <Route path="/puncher-services" element={<PuncherServices />} />
               <Route path="/puncher-billing" element={<PuncherBillings />} />
               <Route path="/puncher-billing/:id" element={<PuncherInvoice />} />
@@ -340,7 +397,10 @@ function App() {
             </Route>
 
             {/* ================= FALLBACK ================= */}
-            <Route path="*" element={<Navigate to="/" replace />} />
+            <Route
+              path="*"
+              element={NATIVE ? <AppEntry /> : <Navigate to="/" replace />}
+            />
           </Routes>
           <BookingPopup />
         </BookingPopupProvider>

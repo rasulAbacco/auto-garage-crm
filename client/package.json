@@ -14,6 +14,8 @@
     "@capacitor/camera": "^7.0.3",
     "@capacitor/cli": "^7.4.4",
     "@capacitor/core": "^7.4.4",
+    "@capacitor/ios": "^7.6.9",
+    "@capacitor/preferences": "^7.0.4",
     "@capacitor/status-bar": "^7.0.5",
     "@react-google-maps/api": "^2.20.8",
     "axios": "^1.16.1",

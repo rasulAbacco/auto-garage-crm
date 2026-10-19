@@ -1,28 +1,105 @@
-// client/src/pages/profile/Profile.jsx
+// client/src/pages/Profile.jsx
 import React, { useState, useEffect } from "react";
 import {
   Camera,
   Save,
   Mail,
   User,
+  Phone,
+  Building2,
   Lock,
-  Eye,
-  EyeOff,
-  ArrowRight,
+  MapPin,
   Trash2,
+  Loader2,
+  Landmark,
+  FileUp,
+  CheckCircle2,
+  ChevronDown,
+  PlayCircle,
+  ShieldCheck,
+  AlertTriangle,
+  Clock,
+  KeyRound,
 } from "lucide-react";
+import toast, { Toaster } from "react-hot-toast";
 import { useNavigate } from "react-router-dom";
 import { useTheme } from "../contexts/ThemeContext";
 import CompanyLocationMap from "../components/CompanyLocationMap";
+import {
+  tk,
+  btnBase,
+  PageHeading,
+  SectionCard,
+  TextField,
+} from "../pages/clients/components/clientUi";
+import { PasswordField } from "../components/Car/staffUi";
 
 const API_URL = import.meta.env.VITE_API_BASE_URL;
 
+// which "has…" flag each upload field turns on
+const DOC_FLAG = {
+  panDocument: "hasPanDocument",
+  bankProofDocument: "hasBankProof",
+  aadharDocument: "hasAadharDocument",
+  gstDocument: "hasGstDocument",
+  incorporationDocument: "hasIncorporationDocument",
+};
+
+const KYC_DOCS = [
+  { field: "panDocument", label: "PAN card" },
+  { field: "bankProofDocument", label: "Bank proof (cheque / passbook)" },
+  { field: "aadharDocument", label: "Aadhaar card" },
+  { field: "gstDocument", label: "GST certificate" },
+  { field: "incorporationDocument", label: "Incorporation certificate" },
+];
+
+const KYC_STATUS = {
+  VERIFIED: {
+    cls: "border-green-500/30 bg-green-500/10 text-green-600",
+    icon: ShieldCheck,
+    label: "Verified",
+  },
+  PENDING: {
+    cls: "border-amber-500/30 bg-amber-500/10 text-amber-600",
+    icon: Clock,
+    label: "Under review",
+  },
+  REJECTED: {
+    cls: "border-red-500/30 bg-red-500/10 text-red-500",
+    icon: AlertTriangle,
+    label: "Rejected",
+  },
+  NOT_SUBMITTED: {
+    cls: "border-slate-500/30 bg-slate-500/10 text-slate-500",
+    icon: AlertTriangle,
+    label: "Not submitted",
+  },
+};
+
+const initials = (s = "") =>
+  String(s || "")
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((w) => w[0])
+    .slice(0, 2)
+    .join("")
+    .toUpperCase() || "U";
+
 export default function Profile() {
-  const [user, setUser] = useState({});
-  const [showPassword, setShowPassword] = useState(false);
-  const [imagePreview, setImagePreview] = useState(null);
   const { isDark } = useTheme();
+  const t = tk(isDark);
   const navigate = useNavigate();
+
+  const [user, setUser] = useState({});
+  const [imagePreview, setImagePreview] = useState(null);
+  const [uploadingImg, setUploadingImg] = useState(false);
+  const [savingProfile, setSavingProfile] = useState(false);
+  const [savingKyc, setSavingKyc] = useState(false);
+  const [uploadingDoc, setUploadingDoc] = useState(null);
+  const [showHelp, setShowHelp] = useState(false);
+  const [confirmText, setConfirmText] = useState("");
+  const [deleting, setDeleting] = useState(false);
 
   const [formData, setFormData] = useState({
     username: "",
@@ -48,7 +125,6 @@ export default function Profile() {
     gstNumber: "",
     incorporationNumber: "",
     kycStatus: "NOT_SUBMITTED",
-    // 🔄 Tracks explicit binary presence properties from server API
     hasPanDocument: false,
     hasBankProof: false,
     hasAadharDocument: false,
@@ -56,9 +132,14 @@ export default function Profile() {
     hasIncorporationDocument: false,
   });
 
-  // Fetch User & KYC Data
+  /* ---------- load ---------- */
   useEffect(() => {
-    const storedUser = JSON.parse(localStorage.getItem("user") || "{}");
+    let storedUser = {};
+    try {
+      storedUser = JSON.parse(localStorage.getItem("user") || "{}");
+    } catch {
+      storedUser = {};
+    }
     setUser(storedUser);
     setFormData({
       username: storedUser?.username || "",
@@ -81,10 +162,9 @@ export default function Profile() {
     }
 
     const fetchKyc = async () => {
-      const token = localStorage.getItem("token");
       try {
         const res = await fetch(`${API_URL}/api/profile/kyc`, {
-          headers: { Authorization: `Bearer ${token}` },
+          headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
         });
         if (res.ok) {
           const data = await res.json();
@@ -114,7 +194,7 @@ export default function Profile() {
     fetchKyc();
   }, []);
 
-  // Handlers
+  /* ---------- handlers ---------- */
   const handleInputChange = (e) => {
     const { name, value } = e.target;
     name in formData
@@ -123,39 +203,50 @@ export default function Profile() {
   };
 
   const handleImageChange = (e) => {
-    const file = e.target.files[0];
+    const file = e.target.files?.[0];
     if (!file) return;
     const reader = new FileReader();
     reader.onloadend = () => {
-      const base64 = reader.result;
-      setImagePreview(base64);
-      uploadImage(base64);
+      setImagePreview(reader.result);
+      uploadImage(reader.result);
     };
     reader.readAsDataURL(file);
+    e.target.value = "";
   };
 
   const uploadImage = async (base64Image) => {
-    const token = localStorage.getItem("token");
+    setUploadingImg(true);
     try {
       const res = await fetch(`${API_URL}/api/user/upload-image`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
+          Authorization: `Bearer ${localStorage.getItem("token")}`,
         },
         body: JSON.stringify({ image: base64Image }),
       });
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
       if (res.ok) {
         localStorage.setItem("user", JSON.stringify(data.user));
         setUser(data.user);
+        toast.success("Photo updated");
+      } else {
+        toast.error(data.message || "Photo upload failed");
       }
     } catch (err) {
       console.error(err);
+      toast.error("Photo upload failed");
+    } finally {
+      setUploadingImg(false);
     }
   };
 
   const handleSaveProfile = async () => {
+    if (formData.newPassword && !formData.password) {
+      toast.error("Enter your current password to set a new one");
+      return;
+    }
+    setSavingProfile(true);
     const token = localStorage.getItem("token");
     try {
       const res = await fetch(`${API_URL}/api/user/update`, {
@@ -166,8 +257,13 @@ export default function Profile() {
         },
         body: JSON.stringify(formData),
       });
-      const data = await res.json();
-      if (!res.ok) return alert(data.message || "Update failed");
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        toast.error(data.message || "Update failed");
+        return;
+      }
+      localStorage.setItem("user", JSON.stringify(data.user));
+      setUser(data.user);
 
       if (formData.password && formData.newPassword) {
         const passRes = await fetch(`${API_URL}/api/user/change-password`, {
@@ -181,538 +277,537 @@ export default function Profile() {
             newPassword: formData.newPassword,
           }),
         });
-        if (!passRes.ok) return alert("Password update failed");
+        if (!passRes.ok) {
+          const pd = await passRes.json().catch(() => ({}));
+          toast.error(
+            pd.message || "Profile saved, but the password was not changed",
+          );
+          return;
+        }
       }
 
-      localStorage.setItem("user", JSON.stringify(data.user));
-      setUser(data.user);
-      alert("Profile Updated!");
-      navigate("/car-dashboard");
+      toast.success("Profile updated");
+      setTimeout(() => navigate("/car-dashboard"), 700);
     } catch (err) {
       console.error(err);
+      toast.error("Could not reach the server");
+    } finally {
+      setSavingProfile(false);
     }
   };
 
   const handleSaveKyc = async () => {
-    const token = localStorage.getItem("token");
+    setSavingKyc(true);
     try {
       const res = await fetch(`${API_URL}/api/profile/kyc`, {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
+          Authorization: `Bearer ${localStorage.getItem("token")}`,
         },
         body: JSON.stringify(kycData),
       });
       if (res.ok) {
-        alert("KYC Updated");
+        toast.success("KYC details sent for review");
         setKycData((p) => ({ ...p, kycStatus: "PENDING" }));
+      } else {
+        const d = await res.json().catch(() => ({}));
+        toast.error(d.message || "Could not save KYC details");
       }
     } catch (err) {
       console.error(err);
+      toast.error("Could not reach the server");
+    } finally {
+      setSavingKyc(false);
     }
   };
 
   const handleDocumentUpload = async (e, field) => {
-    const file = e.target.files[0];
+    const file = e.target.files?.[0];
+    e.target.value = "";
     if (!file) return;
-    const formDataObj = new FormData();
-    formDataObj.append(field, file);
-    const token = localStorage.getItem("token");
+    const fd = new FormData();
+    fd.append(field, file);
+    setUploadingDoc(field);
     try {
       const res = await fetch(`${API_URL}/api/profile/kyc/documents`, {
         method: "POST",
-        headers: { Authorization: `Bearer ${token}` },
-        body: formDataObj,
+        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+        body: fd,
       });
       if (res.ok) {
-        alert("Document Uploaded Successfully");
-        // 🔄 Immediate state toggle to confirm file write transaction
-        const flagKey = `has${field.charAt(0).toUpperCase() + field.slice(1)}`;
-        setKycData((p) => ({ ...p, [flagKey]: true }));
+        toast.success(`${file.name} uploaded`);
+        setKycData((p) => ({ ...p, [DOC_FLAG[field]]: true }));
       } else {
-        alert("Document upload failed");
+        toast.error("Document upload failed");
       }
     } catch (err) {
       console.error(err);
+      toast.error("Document upload failed");
+    } finally {
+      setUploadingDoc(null);
     }
   };
 
   const handleDeleteAccount = async () => {
-    if (!window.confirm("Are you sure? This cannot be undone.")) return;
-    const token = localStorage.getItem("token");
+    setDeleting(true);
     try {
       const res = await fetch(`${API_URL}/api/auth/delete`, {
         method: "DELETE",
-        headers: { Authorization: `Bearer ${token}` },
+        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
       });
       if (res.ok) {
         localStorage.clear();
         navigate("/");
+      } else {
+        toast.error("Could not delete the account");
       }
     } catch (err) {
       console.error(err);
+      toast.error("Could not reach the server");
+    } finally {
+      setDeleting(false);
     }
   };
 
-  const inputClass = `w-full px-4 py-3 rounded-lg border transition-all ${
-    isDark
-      ? "bg-gray-800 border-gray-700 text-white focus:border-indigo-500"
-      : "bg-white border-gray-300 text-gray-900 focus:border-indigo-600"
-  }`;
+  /* ---------- ui ---------- */
+  const field = (name, label, icon, props = {}) => (
+    <TextField
+      isDark={isDark}
+      label={label}
+      icon={icon}
+      name={name}
+      value={(name in formData ? formData[name] : kycData[name]) ?? ""}
+      onChange={handleInputChange}
+      {...props}
+    />
+  );
+
+  const ks = KYC_STATUS[kycData.kycStatus] || KYC_STATUS.NOT_SUBMITTED;
+  const KsIcon = ks.icon;
+  const docsDone = KYC_DOCS.filter((d) => kycData[DOC_FLAG[d.field]]).length;
+  const hasCoords = formData.companyLatitude && formData.companyLongitude;
 
   return (
-    <div
-      className={`min-h-screen py-10 px-4 sm:px-10 ${
-        isDark ? "bg-gray-900 text-gray-100" : "bg-gray-50 text-gray-900"
-      }`}
-    >
-      <div className="w-full max-w-5xl mx-auto space-y-8">
-        {/* Header & Image */}
-        <div
-          className={`p-8 rounded-2xl shadow-sm border ${
-            isDark ? "bg-gray-800 border-gray-700" : "bg-white border-gray-200"
-          }`}
-        >
-          <div className="flex flex-col sm:flex-row items-center gap-6 mb-8">
-            <div className="relative">
-              <img
-                src={
-                  imagePreview ||
-                  "https://cdn-icons-png.flaticon.com/512/149/149071.png"
-                }
-                alt="Profile"
-                className="w-28 h-28 rounded-full object-cover border-4 shadow-sm"
-              />
-              <label className="absolute bottom-0 right-0 p-2 bg-indigo-600 rounded-full cursor-pointer hover:bg-indigo-700 transition">
-                <Camera className="w-4 h-4 text-white" />
+    <div className="min-h-screen lg:ml-16">
+      <Toaster
+        position="top-right"
+        toastOptions={{ style: { fontSize: 14 } }}
+      />
+      <div className="mx-auto max-w-[1100px] space-y-4 sm:space-y-5">
+        <PageHeading
+          isDark={isDark}
+          title="Profile"
+          accent="settings."
+          subtitle="Your account, garage details, payout KYC and security."
+        />
+
+        {/* identity hero */}
+        <section className="relative overflow-hidden rounded-2xl border-2 border-white/5 bg-gradient-to-br from-[#001F3F] to-[#000814] p-4 text-white shadow-2xl shadow-black/20 sm:p-5">
+          <div className="pointer-events-none absolute -right-12 -top-12 h-40 w-40 rotate-12 rounded-3xl border-2 border-white/5" />
+          <div className="relative flex flex-col items-center gap-4 text-center sm:flex-row sm:text-left">
+            <div className="relative shrink-0">
+              {imagePreview ? (
+                <img
+                  src={imagePreview}
+                  alt="Profile"
+                  className="h-20 w-20 rounded-2xl border-2 border-white/20 object-cover"
+                />
+              ) : (
+                <div className="flex h-20 w-20 items-center justify-center rounded-2xl bg-white text-[16px] font-black text-[#001F3F]">
+                  {initials(formData.username || formData.companyName)}
+                </div>
+              )}
+              <label
+                className="absolute -bottom-2 -right-2 flex h-8 w-8 cursor-pointer items-center justify-center rounded-xl border-2 border-[#001F3F] bg-white text-[#001F3F] shadow-lg transition hover:bg-blue-50"
+                title="Change photo"
+              >
+                {uploadingImg ? (
+                  <Loader2 size={14} className="animate-spin" />
+                ) : (
+                  <Camera size={14} />
+                )}
                 <input
                   type="file"
                   className="hidden"
                   onChange={handleImageChange}
                   accept="image/*"
+                  disabled={uploadingImg}
                 />
               </label>
             </div>
-            <div>
-              <h1 className="text-3xl font-bold">Profile Settings</h1>
-              <p className={isDark ? "text-gray-400" : "text-gray-600"}>
-                Manage your account details and preferences
+            <div className="min-w-0 flex-1">
+              <h2 className="truncate text-[16px] font-black uppercase tracking-tight">
+                {formData.companyName || formData.username || "Your garage"}
+              </h2>
+              <p className="truncate text-[14px] text-white/60">
+                {formData.username}
+                {formData.email ? ` · ${formData.email}` : ""}
               </p>
+              <div className="mt-2 flex flex-wrap justify-center gap-1.5 sm:justify-start">
+                <span className="inline-flex items-center gap-1 rounded-lg border border-white/15 bg-white/10 px-2 py-0.5 text-[12px] font-black uppercase tracking-wider">
+                  <KsIcon size={12} /> KYC {ks.label}
+                </span>
+                {user?.plan && (
+                  <span className="inline-flex items-center gap-1 rounded-lg border border-white/15 bg-white/10 px-2 py-0.5 text-[12px] font-black uppercase tracking-wider">
+                    {user.plan} plan
+                  </span>
+                )}
+              </div>
             </div>
           </div>
+        </section>
 
-          {/* Form Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Username</label>
-              <input
-                name="username"
-                value={formData.username}
-                onChange={handleInputChange}
-                className={inputClass}
-              />
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Email Address</label>
-              <input
-                type="email"
-                name="email"
-                value={formData.email}
-                onChange={handleInputChange}
-                className={inputClass}
-              />
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Phone Number</label>
-              <input
-                name="phone"
-                value={formData.phone}
-                onChange={handleInputChange}
-                className={inputClass}
-              />
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Company Name</label>
-              <input
-                name="companyName"
-                value={formData.companyName}
-                onChange={handleInputChange}
-                className={inputClass}
-              />
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Latitude</label>
-              <input
-                type="text"
-                step="any"
-                name="companyLatitude"
-                value={formData.companyLatitude}
-                onChange={handleInputChange}
-                className={inputClass}
-                placeholder="13.0623"
-              />
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Longitude</label>
-              <input
-                type="text"
-                step="any"
-                name="companyLongitude"
-                value={formData.companyLongitude}
-                onChange={handleInputChange}
-                className={inputClass}
-                placeholder="77.5612"
-              />
+        {/* account & garage */}
+        <SectionCard
+          isDark={isDark}
+          icon={User}
+          step="01"
+          title="Account & garage"
+          subtitle="Shown on invoices, payslips and the MotorDesk app"
+        >
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            {field("username", "Username", <User size={12} />)}
+            {field("email", "Email address", <Mail size={12} />, {
+              type: "email",
+            })}
+            {field("phone", "Phone number", <Phone size={12} />, {
+              type: "tel",
+              inputMode: "tel",
+            })}
+            {field("companyName", "Garage name", <Building2 size={12} />)}
+            {field("companyAddress", "Garage address", <MapPin size={12} />, {
+              className: "md:col-span-2",
+              placeholder: "Shop no, street, area, city, PIN",
+            })}
+          </div>
+        </SectionCard>
+
+        {/* location */}
+        <SectionCard
+          isDark={isDark}
+          icon={MapPin}
+          step="02"
+          title="Garage location"
+          subtitle="So customers find you in the app"
+          right={
+            hasCoords ? (
+              <span className="hidden items-center gap-1 rounded-lg border border-green-500/30 bg-green-500/10 px-2 py-0.5 text-[12px] font-black uppercase tracking-wider text-green-600 sm:inline-flex">
+                <CheckCircle2 size={12} /> Set
+              </span>
+            ) : null
+          }
+        >
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-3">
+              {field("companyLatitude", "Latitude", null, {
+                placeholder: "13.0623",
+                inputMode: "decimal",
+                inputClassName: "font-mono",
+              })}
+              {field("companyLongitude", "Longitude", null, {
+                placeholder: "77.5612",
+                inputMode: "decimal",
+                inputClassName: "font-mono",
+              })}
             </div>
 
-            <div className="md:col-span-2">
-              <div
-                className={`p-4 rounded-2xl border ${
-                  isDark
-                    ? "bg-gray-900 border-gray-700"
-                    : "bg-blue-50 border-blue-200"
-                }`}
+            <div className={`overflow-hidden rounded-xl border-2 ${t.inner}`}>
+              <button
+                type="button"
+                onClick={() => setShowHelp((v) => !v)}
+                aria-expanded={showHelp}
+                className={`flex w-full items-center justify-between gap-2 px-3 py-2.5 text-left text-[14px] font-black ${t.heading}`}
               >
-                <h3 className="text-lg font-semibold mb-3">
-                  How to Get Latitude & Longitude
-                </h3>
-                <div className="space-y-3 text-sm">
-                  <div>
-                    <p className="font-medium mb-1">💻 For PC / Laptop:</p>
-                    <p className={isDark ? "text-gray-400" : "text-gray-700"}>
-                      Open Google Maps, search your company location, right
-                      click on the exact location, then copy the coordinates.
-                      <br />
-                      Example: <strong>12.9716, 77.5946</strong>
-                      <br />
-                      First value = <strong>Latitude (12.9716)</strong>
-                      <br />
-                      Second value = <strong>Longitude (77.5946)</strong>
-                    </p>
-                  </div>
-                  <div>
-                    <p className="font-medium mb-1">📱 For Mobile:</p>
-                    <p className={isDark ? "text-gray-400" : "text-gray-700"}>
-                      Open Google Maps, search your company location, then press
-                      and hold the exact location on the map to drop a pin.
-                      <br />
-                      The coordinates will appear below.
-                      <br />
-                      Example: <strong>12.9716, 77.5946</strong>
-                      <br />
-                      First value = <strong>Latitude (12.9716)</strong>
-                      <br />
-                      Second value = <strong>Longitude (77.5946)</strong>
-                    </p>
-                  </div>
+                How do I find latitude & longitude?
+                <ChevronDown
+                  size={16}
+                  className={`shrink-0 text-slate-400 transition-transform ${showHelp ? "rotate-180" : ""}`}
+                />
+              </button>
+              {showHelp && (
+                <div
+                  className={`space-y-3 border-t-2 px-3 py-3 text-[14px] ${t.line} ${t.body}`}
+                >
+                  <p>
+                    <b className={t.heading}>On a computer:</b> open Google
+                    Maps, find your garage, right-click the exact spot and click
+                    the numbers at the top to copy them.
+                  </p>
+                  <p>
+                    <b className={t.heading}>On a phone:</b> open Google Maps,
+                    press and hold on your garage to drop a pin. The numbers
+                    appear in the search bar.
+                  </p>
+                  <p
+                    className={`rounded-lg border px-2.5 py-2 font-mono text-[12px] ${t.inner}`}
+                  >
+                    12.9716, 77.5946 → first = Latitude, second = Longitude
+                  </p>
                   <a
                     href="https://www.youtube.com/watch?v=GUenyBF9C5I"
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="inline-flex items-center gap-2 mt-3 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl transition"
+                    className={`${btnBase} h-9 border-2 px-3 ${t.btnGhost}`}
                   >
-                    ▶ Watch Tutorial Video
+                    <PlayCircle size={14} className="text-red-500" /> Watch
+                    tutorial
                   </a>
                 </div>
-              </div>
+              )}
             </div>
 
-            <div className="space-y-2 relative">
-              <label className="text-sm font-medium">Current Password</label>
-              <input
-                type={showPassword ? "text" : "password"}
-                name="password"
-                placeholder="Enter current password"
-                value={formData.password}
-                onChange={handleInputChange}
-                className={inputClass}
-              />
-              <button
-                type="button"
-                onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-3 top-9 text-gray-500"
-              >
-                {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-              </button>
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium">New Password</label>
-              <input
-                type={showPassword ? "text" : "password"}
-                name="newPassword"
-                placeholder="Enter new password"
-                value={formData.newPassword}
-                onChange={handleInputChange}
-                className={inputClass}
+            <div className={`overflow-hidden rounded-xl border-2 ${t.line}`}>
+              <CompanyLocationMap
+                latitude={formData.companyLatitude}
+                longitude={formData.companyLongitude}
+                companyName={formData.companyName}
               />
             </div>
           </div>
+        </SectionCard>
 
-          <button
-            onClick={handleSaveProfile}
-            className="mt-8 w-full sm:w-auto px-8 py-3 bg-indigo-600 text-white font-semibold rounded-lg hover:bg-indigo-700 transition flex items-center justify-center gap-2"
-          >
-            <Save size={18} /> Save Changes
-          </button>
-        </div>
-
-        <div
-          className={`p-6 rounded-2xl shadow-sm border ${
-            isDark ? "bg-gray-800 border-gray-700" : "bg-white border-gray-200"
-          }`}
+        {/* password */}
+        <SectionCard
+          isDark={isDark}
+          icon={KeyRound}
+          step="03"
+          title="Change password"
+          subtitle="Leave both empty to keep your current password"
         >
-          <h2 className="text-xl font-bold mb-4">Company Location</h2>
-          <CompanyLocationMap
-            latitude={formData.companyLatitude}
-            longitude={formData.companyLongitude}
-            companyName={formData.companyName}
-          />
-        </div>
-
-        {/* KYC Section */}
-        <div
-          className={`p-8 rounded-2xl shadow-sm border ${
-            isDark ? "bg-gray-800 border-gray-700" : "bg-white border-gray-200"
-          }`}
-        >
-          <div className="flex justify-between items-center mb-6">
-            <h2 className="text-xl font-bold">Payout KYC Information</h2>
-            <span
-              className={`px-3 py-1 rounded-full text-xs font-medium ${
-                kycData.kycStatus === "VERIFIED"
-                  ? "bg-green-100 text-green-700"
-                  : kycData.kycStatus === "PENDING"
-                    ? "bg-yellow-100 text-yellow-700"
-                    : "bg-gray-200 text-gray-600"
-              }`}
-            >
-              {kycData.kycStatus}
-            </span>
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            <PasswordField
+              isDark={isDark}
+              label="Current password"
+              icon={<Lock size={12} />}
+              name="password"
+              value={formData.password}
+              onChange={handleInputChange}
+              placeholder="Current password"
+              autoComplete="current-password"
+            />
+            <PasswordField
+              isDark={isDark}
+              label="New password"
+              icon={<Lock size={12} />}
+              name="newPassword"
+              value={formData.newPassword}
+              onChange={handleInputChange}
+              placeholder="New password"
+              autoComplete="new-password"
+            />
           </div>
+        </SectionCard>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Account Holder Name</label>
-              <input
-                name="accountName"
-                value={kycData.accountName || ""}
-                onChange={handleInputChange}
-                className={inputClass}
-                placeholder="John Doe"
-              />
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Bank Account Number</label>
-              <input
-                name="bankAccount"
-                value={kycData.bankAccount || ""}
-                onChange={handleInputChange}
-                className={inputClass}
-                placeholder="1234567890"
-              />
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Bank Name</label>
-              <input
-                name="bankName"
-                value={kycData.bankName || ""}
-                onChange={handleInputChange}
-                className={inputClass}
-                placeholder="HDFC Bank"
-              />
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Branch</label>
-              <input
-                name="branch"
-                value={kycData.branch || ""}
-                onChange={handleInputChange}
-                className={inputClass}
-                placeholder="Indiranagar"
-              />
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium">IFSC Code</label>
-              <input
-                name="ifscCode"
-                value={kycData.ifscCode || ""}
-                onChange={handleInputChange}
-                className={inputClass}
-                placeholder="HDFC0001234"
-              />
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium">UPI ID</label>
-              <input
-                name="upiId"
-                value={kycData.upiId || ""}
-                onChange={handleInputChange}
-                className={inputClass}
-                placeholder="example@upi"
-              />
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium">PAN Number</label>
-              <input
-                name="panNumber"
-                value={kycData.panNumber || ""}
-                onChange={handleInputChange}
-                className={inputClass}
-                placeholder="ABCDE1234F"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Aadhar Number</label>
-              <input
-                name="aadharNumber"
-                value={kycData.aadharNumber || ""}
-                onChange={handleInputChange}
-                className={inputClass}
-                placeholder="0000 0000 0000"
-              />
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium">GST Number</label>
-              <input
-                name="gstNumber"
-                value={kycData.gstNumber || ""}
-                onChange={handleInputChange}
-                className={inputClass}
-                placeholder="22AAAAA0000A1Z5"
-              />
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium">
-                Incorporation Certificate Number
-              </label>
-              <input
-                name="incorporationNumber"
-                value={kycData.incorporationNumber || ""}
-                onChange={handleInputChange}
-                className={inputClass}
-                placeholder="U12345KA2026PTC000000"
-              />
-            </div>
-
-            {/* DOCUMENT FILES SEGMENT */}
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <label className="text-sm font-medium">
-                  Upload PAN Document
-                </label>
-                {kycData.hasPanDocument && (
-                  <span className="text-[11px] font-semibold px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-500 dark:bg-emerald-500/20 border border-emerald-500/20">
-                    ✓ Uploaded
-                  </span>
-                )}
-              </div>
-              <input
-                type="file"
-                onChange={(e) => handleDocumentUpload(e, "panDocument")}
-                className={`${inputClass} file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100`}
-              />
-            </div>
-
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <label className="text-sm font-medium">Upload Bank Proof</label>
-                {kycData.hasBankProof && (
-                  <span className="text-[11px] font-semibold px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-500 dark:bg-emerald-500/20 border border-emerald-500/20">
-                    ✓ Uploaded
-                  </span>
-                )}
-              </div>
-              <input
-                type="file"
-                onChange={(e) => handleDocumentUpload(e, "bankProofDocument")}
-                className={`${inputClass} file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100`}
-              />
-            </div>
-
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <label className="text-sm font-medium">
-                  Upload Aadhar Card
-                </label>
-                {kycData.hasAadharDocument && (
-                  <span className="text-[11px] font-semibold px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-500 dark:bg-emerald-500/20 border border-emerald-500/20">
-                    ✓ Uploaded
-                  </span>
-                )}
-              </div>
-              <input
-                type="file"
-                onChange={(e) => handleDocumentUpload(e, "aadharDocument")}
-                className={`${inputClass} file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100`}
-              />
-            </div>
-
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <label className="text-sm font-medium">
-                  Upload GST Document
-                </label>
-                {kycData.hasGstDocument && (
-                  <span className="text-[11px] font-semibold px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-500 dark:bg-emerald-500/20 border border-emerald-500/20">
-                    ✓ Uploaded
-                  </span>
-                )}
-              </div>
-              <input
-                type="file"
-                onChange={(e) => handleDocumentUpload(e, "gstDocument")}
-                className={`${inputClass} file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100`}
-              />
-            </div>
-
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <label className="text-sm font-medium">
-                  Upload Incorporation Certificate
-                </label>
-                {kycData.hasIncorporationDocument && (
-                  <span className="text-[11px] font-semibold px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-500 dark:bg-emerald-500/20 border border-emerald-500/20">
-                    ✓ Uploaded
-                  </span>
-                )}
-              </div>
-              <input
-                type="file"
-                onChange={(e) =>
-                  handleDocumentUpload(e, "incorporationDocument")
-                }
-                className={`${inputClass} file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100`}
-              />
-            </div>
-          </div>
-
-          <button
-            onClick={handleSaveKyc}
-            className="mt-6 w-full sm:w-auto px-8 py-3 bg-gray-700 text-white font-semibold rounded-lg hover:bg-gray-800 transition dark:bg-indigo-600 dark:hover:bg-indigo-700"
-          >
-            Save KYC Details
-          </button>
-        </div>
-
-        {/* Danger Zone */}
+        {/* save bar */}
         <div
-          className={`p-8 rounded-2xl shadow-sm border border-red-200 ${
-            isDark ? "bg-red-900/10 border-red-800" : "bg-red-50"
-          }`}
+          className={`sticky z-20 flex items-center justify-between gap-3 rounded-2xl border-2 p-3 shadow-xl lg:static lg:shadow-none ${t.card}`}
+          style={{ bottom: "calc(66px + env(safe-area-inset-bottom))" }}
         >
-          <h2 className="text-lg font-bold text-red-600">Delete Account</h2>
-          <p className="text-sm text-red-500 mb-4">
-            Once deleted, your account and all data will be permanently removed.
+          <p className={`hidden text-[14px] sm:block ${t.muted}`}>
+            Saves account, location and password.
           </p>
           <button
-            onClick={handleDeleteAccount}
-            className="px-6 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition flex items-center gap-2"
+            type="button"
+            onClick={handleSaveProfile}
+            disabled={savingProfile}
+            className={`${btnBase} h-11 w-full px-6 shadow-lg sm:w-auto ${t.btnPrimary}`}
           >
-            <Trash2 size={18} /> Delete My Account
+            {savingProfile ? (
+              <Loader2 size={14} className="animate-spin" />
+            ) : (
+              <Save size={14} />
+            )}
+            {savingProfile ? "Saving…" : "Save changes"}
           </button>
         </div>
+
+        {/* KYC */}
+        <SectionCard
+          isDark={isDark}
+          icon={Landmark}
+          step="04"
+          title="Payout KYC"
+          subtitle="Bank details for marketplace payouts"
+          right={
+            <span
+              className={`inline-flex shrink-0 items-center gap-1 rounded-lg border px-2 py-0.5 text-[12px] font-black uppercase tracking-wider ${ks.cls}`}
+            >
+              <KsIcon size={12} />{" "}
+              <span className="hidden sm:inline">{ks.label}</span>
+            </span>
+          }
+        >
+          <div className="space-y-5">
+            <div>
+              <p className="mb-2 text-[12px] font-bold uppercase tracking-wider text-slate-400">
+                Bank account
+              </p>
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                {field("accountName", "Account holder name", null, {
+                  placeholder: "As printed on passbook",
+                })}
+                {field("bankAccount", "Account number", null, {
+                  placeholder: "1234567890",
+                  inputMode: "numeric",
+                  inputClassName: "font-mono",
+                })}
+                {field("bankName", "Bank name", null, {
+                  placeholder: "HDFC Bank",
+                })}
+                {field("branch", "Branch", null, {
+                  placeholder: "Indiranagar",
+                })}
+                {field("ifscCode", "IFSC code", null, {
+                  placeholder: "HDFC0001234",
+                  inputClassName: "font-mono uppercase",
+                })}
+                {field("upiId", "UPI ID", null, { placeholder: "name@upi" })}
+              </div>
+            </div>
+
+            <div>
+              <p className="mb-2 text-[12px] font-bold uppercase tracking-wider text-slate-400">
+                Identity & business
+              </p>
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                {field("panNumber", "PAN number", null, {
+                  placeholder: "ABCDE1234F",
+                  inputClassName: "font-mono uppercase",
+                })}
+                {field("aadharNumber", "Aadhaar number", null, {
+                  placeholder: "0000 0000 0000",
+                  inputMode: "numeric",
+                  inputClassName: "font-mono",
+                })}
+                {field("gstNumber", "GST number", null, {
+                  placeholder: "22AAAAA0000A1Z5",
+                  inputClassName: "font-mono uppercase",
+                })}
+                {field(
+                  "incorporationNumber",
+                  "Incorporation certificate no.",
+                  null,
+                  {
+                    placeholder: "U12345KA2026PTC000000",
+                    inputClassName: "font-mono uppercase",
+                  },
+                )}
+              </div>
+            </div>
+
+            <div>
+              <p className="mb-2 text-[12px] font-bold uppercase tracking-wider text-slate-400">
+                Documents · {docsDone}/{KYC_DOCS.length} uploaded
+              </p>
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                {KYC_DOCS.map((d) => {
+                  const done = kycData[DOC_FLAG[d.field]];
+                  const busy = uploadingDoc === d.field;
+                  return (
+                    <label
+                      key={d.field}
+                      className={`flex cursor-pointer items-center gap-3 rounded-xl border-2 p-2.5 transition ${
+                        done
+                          ? "border-green-500/40 bg-green-500/5"
+                          : `${t.inner} ${isDark ? "hover:border-white/30" : "hover:border-[#001F3F]/40"}`
+                      } ${busy ? "pointer-events-none opacity-70" : ""}`}
+                    >
+                      <span
+                        className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${done ? "bg-green-500/10 text-green-600" : t.chipNavy}`}
+                      >
+                        {busy ? (
+                          <Loader2 size={14} className="animate-spin" />
+                        ) : done ? (
+                          <CheckCircle2 size={14} />
+                        ) : (
+                          <FileUp size={14} />
+                        )}
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span
+                          className={`block truncate text-[14px] font-black ${t.heading}`}
+                        >
+                          {d.label}
+                        </span>
+                        <span
+                          className={`block text-[12px] ${done ? "text-green-600" : t.muted}`}
+                        >
+                          {busy
+                            ? "Uploading…"
+                            : done
+                              ? "Uploaded · tap to replace"
+                              : "Tap to upload"}
+                        </span>
+                      </span>
+                      <input
+                        type="file"
+                        className="hidden"
+                        accept=".jpg,.jpeg,.png,.pdf"
+                        onChange={(e) => handleDocumentUpload(e, d.field)}
+                      />
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={handleSaveKyc}
+              disabled={savingKyc}
+              className={`${btnBase} h-11 w-full px-6 sm:w-auto ${t.btnPrimary}`}
+            >
+              {savingKyc ? (
+                <Loader2 size={14} className="animate-spin" />
+              ) : (
+                <ShieldCheck size={14} />
+              )}
+              {savingKyc ? "Saving…" : "Save KYC details"}
+            </button>
+          </div>
+        </SectionCard>
+
+        {/* danger zone */}
+        <section className="overflow-hidden rounded-2xl border-2 border-red-500/30">
+          <div className="flex items-center gap-3 border-b-2 border-red-500/20 bg-red-500/10 px-4 py-3">
+            <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-red-600 text-white">
+              <Trash2 size={14} />
+            </span>
+            <div>
+              <h2 className="text-[14px] font-black uppercase tracking-tight text-red-600">
+                Delete account
+              </h2>
+              <p className={`text-[12px] ${t.muted}`}>
+                Your account and all garage data will be removed for good.
+              </p>
+            </div>
+          </div>
+          <div
+            className={`flex flex-col gap-2 p-4 sm:flex-row ${isDark ? "bg-[#001F3F]" : "bg-white"}`}
+          >
+            <input
+              value={confirmText}
+              onChange={(e) => setConfirmText(e.target.value)}
+              placeholder="Type DELETE to confirm"
+              aria-label="Type DELETE to confirm"
+              className={`h-11 min-w-0 flex-1 rounded-xl border-2 px-3.5 font-mono text-[14px] font-semibold outline-none transition ${t.input}`}
+            />
+            <button
+              type="button"
+              onClick={handleDeleteAccount}
+              disabled={confirmText.trim() !== "DELETE" || deleting}
+              className={`${btnBase} h-11 bg-red-600 px-5 text-white hover:bg-red-700`}
+            >
+              {deleting ? (
+                <Loader2 size={14} className="animate-spin" />
+              ) : (
+                <Trash2 size={14} />
+              )}
+              {deleting ? "Deleting…" : "Delete my account"}
+            </button>
+          </div>
+        </section>
       </div>
     </div>
   );

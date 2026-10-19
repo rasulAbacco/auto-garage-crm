@@ -5,19 +5,60 @@ import {
   X,
   ShieldCheck,
   AlertCircle,
+  CheckCircle2,
   FileCheck,
   UploadCloud,
   Loader2,
   Info,
   ArrowRight,
   ArrowLeft,
-  CreditCard,
   Lock,
-  Sparkles,
-  CheckCircle2,
+  BadgeCheck,
+  IdCard,
+  CreditCard,
+  Building2,
+  Receipt,
 } from "lucide-react";
+import { useTheme } from "../contexts/ThemeContext";
+import { tk, btnBase } from "../pages/clients/components/clientUi";
 
 const API_URL = import.meta.env.VITE_API_BASE_URL;
+const FEE = 199;
+
+const DOCS = [
+  {
+    id: "aadhar",
+    title: "Owner's Aadhaar card",
+    placeholder: "12-digit Aadhaar number",
+    icon: IdCard,
+    flag: "hasAadharDocument",
+    required: true,
+  },
+  {
+    id: "pan",
+    title: "Owner's PAN card",
+    placeholder: "10-character PAN",
+    icon: CreditCard,
+    flag: "hasPanDocument",
+    required: true,
+  },
+  {
+    id: "garageReg",
+    title: "Garage registration",
+    placeholder: "Registration / licence number",
+    icon: Building2,
+    flag: "hasGarageRegDocument",
+    required: true,
+  },
+  {
+    id: "gst",
+    title: "GST certificate",
+    placeholder: "15-character GSTIN",
+    icon: Receipt,
+    flag: "hasGstDocument",
+    required: false,
+  },
+];
 
 export default function GarageVerificationModal({
   isOpen,
@@ -25,12 +66,14 @@ export default function GarageVerificationModal({
   verification,
   onRefreshState,
 }) {
-  const [currentStep, setCurrentStep] = useState(1); // Steps: 1 = Info, 2 = Draft Uploads, 3 = Payment / Resubmit
+  const { isDark } = useTheme();
+  const t = tk(isDark);
+
+  const [currentStep, setCurrentStep] = useState(1); // 1 = overview, 2 = documents, 3 = pay / resubmit
   const [submittingData, setSubmittingData] = useState(false);
   const [modalMessage, setModalMessage] = useState({ type: "", text: "" });
   const [razorpayLoaded, setRazorpayLoaded] = useState(false);
 
-  // 📝 Local Forms Text Input States
   const [docNumbers, setDocNumbers] = useState({
     pan: verification?.panNumber || "",
     aadhar: verification?.aadharNumber || "",
@@ -38,7 +81,7 @@ export default function GarageVerificationModal({
     gst: verification?.gstNumber || "",
   });
 
-  // 📂 Local Frontend Memory State for Document Drafts (Committed only on successful checkout)
+  // files are kept here and only sent after payment / on resubmit
   const [draftFiles, setDraftFiles] = useState({
     aadhar: null,
     pan: null,
@@ -46,7 +89,6 @@ export default function GarageVerificationModal({
     gst: null,
   });
 
-  // Inject Razorpay checkout script if absent from runtime
   useEffect(() => {
     if (!isOpen) return;
     if (document.getElementById("razorpay-js")) {
@@ -61,7 +103,6 @@ export default function GarageVerificationModal({
     document.body.appendChild(script);
   }, [isOpen]);
 
-  // Sync state cleanly if verification properties refresh via layout tracking
   useEffect(() => {
     if (verification) {
       setDocNumbers({
@@ -70,90 +111,60 @@ export default function GarageVerificationModal({
         garageReg: verification.garageRegNumber || "",
         gst: verification.gstNumber || "",
       });
-
-      // If user has already paid or been rejected, fast-forward directly to the upload/revision area
-      if (verification.status !== "NOT_ORDERED" && currentStep === 1) {
+      if (verification.status !== "NOT_ORDERED" && currentStep === 1)
         setCurrentStep(2);
-      }
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [verification]);
 
   if (!isOpen) return null;
 
-  // Stashes selection values inside localized memory state without firing early API hits
-  const handleLocalFileSelection = (e, type) => {
-    const targetFile = e.target.files[0];
-    if (!targetFile) return;
-
-    setDraftFiles((prev) => ({
-      ...prev,
-      [type]: targetFile,
-    }));
-
-    setModalMessage({
-      type: "success",
-      text: `${targetFile.name} added to staging layout successfully.`,
-    });
+  const close = () => {
+    if (submittingData) return;
+    setModalMessage({ type: "", text: "" });
+    onClose();
   };
 
-  // Dispatch single combined execution string containing all parameters and file objects together
+  const handleLocalFileSelection = (e, type) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setDraftFiles((prev) => ({ ...prev, [type]: file }));
+    setModalMessage({ type: "success", text: `${file.name} added.` });
+  };
+
   const commitDataToProductionBackend = async (paymentDetails = null) => {
     setSubmittingData(true);
-    setModalMessage({
-      type: "",
-      text: "Synchronizing security parameters and streaming assets...",
-    });
+    setModalMessage({ type: "info", text: "Uploading your documents…" });
 
-    const bundleFormData = new FormData();
-
-    // Map verification signatures if finalizing initial checkout tracks
+    const fd = new FormData();
     if (paymentDetails) {
-      bundleFormData.append(
-        "razorpay_payment_id",
-        paymentDetails.razorpay_payment_id,
-      );
-      bundleFormData.append(
-        "razorpay_order_id",
-        paymentDetails.razorpay_order_id,
-      );
-      bundleFormData.append(
-        "razorpay_signature",
-        paymentDetails.razorpay_signature,
-      );
+      fd.append("razorpay_payment_id", paymentDetails.razorpay_payment_id);
+      fd.append("razorpay_order_id", paymentDetails.razorpay_order_id);
+      fd.append("razorpay_signature", paymentDetails.razorpay_signature);
     }
-
-    // Append identification strings keys
-    bundleFormData.append("panNumber", docNumbers.pan);
-    bundleFormData.append("aadharNumber", docNumbers.aadhar);
-    bundleFormData.append("garageRegNumber", docNumbers.garageReg);
-    bundleFormData.append("gstNumber", docNumbers.gst);
-
-    // Append fresh binary drafts if updated by user
-    if (draftFiles.pan) bundleFormData.append("panDocument", draftFiles.pan);
-    if (draftFiles.aadhar)
-      bundleFormData.append("aadharDocument", draftFiles.aadhar);
+    fd.append("panNumber", docNumbers.pan.trim().toUpperCase());
+    fd.append("aadharNumber", docNumbers.aadhar.replace(/\s+/g, ""));
+    fd.append("garageRegNumber", docNumbers.garageReg.trim());
+    fd.append("gstNumber", docNumbers.gst.trim().toUpperCase());
+    if (draftFiles.pan) fd.append("panDocument", draftFiles.pan);
+    if (draftFiles.aadhar) fd.append("aadharDocument", draftFiles.aadhar);
     if (draftFiles.garageReg)
-      bundleFormData.append("garageRegDocument", draftFiles.garageReg);
-    if (draftFiles.gst) bundleFormData.append("gstDocument", draftFiles.gst);
+      fd.append("garageRegDocument", draftFiles.garageReg);
+    if (draftFiles.gst) fd.append("gstDocument", draftFiles.gst);
 
     try {
       const token = localStorage.getItem("token");
-
-      // Determine strategy endpoint based on payment history status
-      const isReuploadPath =
-        verification?.status === "REJECTED" ||
-        verification?.status === "UNDER_REVIEW" ||
-        verification?.status === "PAID_PENDING_DOCS";
-      const targetUrl = isReuploadPath
-        ? `${API_URL}/api/garage-verification/resubmit-documents`
-        : `${API_URL}/api/garage-verification/confirm-payment-and-upload`;
-
-      const methodType = isReuploadPath ? "PUT" : "POST";
-
+      const isReupload = [
+        "REJECTED",
+        "UNDER_REVIEW",
+        "PAID_PENDING_DOCS",
+      ].includes(verification?.status);
       await axios({
-        method: methodType,
-        url: targetUrl,
-        data: bundleFormData,
+        method: isReupload ? "PUT" : "POST",
+        url: isReupload
+          ? `${API_URL}/api/garage-verification/resubmit-documents`
+          : `${API_URL}/api/garage-verification/confirm-payment-and-upload`,
+        data: fd,
         headers: {
           Authorization: `Bearer ${token}`,
           "Content-Type": "multipart/form-data",
@@ -162,17 +173,15 @@ export default function GarageVerificationModal({
 
       setModalMessage({
         type: "success",
-        text: "Garage verification details submitted successfully! Status moved to Under Review.",
+        text: "Submitted! Your garage is now under review – we'll update the badge once it's checked.",
       });
-
-      await onRefreshState();
+      await onRefreshState?.();
       setTimeout(() => onClose(), 1500);
     } catch (error) {
       setModalMessage({
         type: "error",
         text:
-          error.response?.data?.message ||
-          "Server transmission synchronization failed.",
+          error.response?.data?.message || "Upload failed. Please try again.",
       });
     } finally {
       setSubmittingData(false);
@@ -180,18 +189,18 @@ export default function GarageVerificationModal({
   };
 
   const executePaymentCheckout = async () => {
-    if (!razorpayLoaded) {
-      return alert(
-        "System Syncing: Payment gateway framework is initializing.",
-      );
+    if (!razorpayLoaded || !window.Razorpay) {
+      setModalMessage({
+        type: "error",
+        text: "Payment window is still loading. Please try again in a moment.",
+      });
+      return;
     }
-
     setSubmittingData(true);
     setModalMessage({ type: "", text: "" });
 
     try {
       const token = localStorage.getItem("token");
-
       const res = await fetch(
         `${API_URL}/api/payments/create-verification-order`,
         {
@@ -200,335 +209,381 @@ export default function GarageVerificationModal({
             "Content-Type": "application/json",
             Authorization: `Bearer ${token}`,
           },
-          body: JSON.stringify({ amount: 199 }),
+          body: JSON.stringify({ amount: FEE }),
         },
       );
-
       const data = await res.json();
       if (!res.ok)
-        throw new Error(
-          data.message || "Failed to establish transaction context",
-        );
+        throw new Error(data.message || "Could not start the payment");
 
       const rzp = new window.Razorpay({
         key: data.razorpayKey,
         amount: data.order.amount,
         currency: "INR",
         name: "MotorDesk",
-        description: "Verified Garage Badge Activation",
+        description: "Verified Garage badge",
         order_id: data.order.id,
-        theme: { color: "#4f46e5" },
+        theme: { color: "#001F3F" },
         handler: async (response) => {
-          // Pass transaction parameters down to compile the multipart save payload directly
           await commitDataToProductionBackend(response);
         },
         modal: { escape: false, backdropclose: false },
       });
-
       rzp.open();
     } catch (error) {
       setModalMessage({
         type: "error",
-        text: error.message || "Initialization error setup loop",
+        text: error.message || "Could not start the payment",
       });
     } finally {
       setSubmittingData(false);
     }
   };
 
-  // Helper validation: locks Step 2 transition until all mandatory targets are populated with values/files
-  const isDraftFormFilled =
-    (verification?.hasAadharDocument || draftFiles.aadhar) &&
-    docNumbers.aadhar.trim().length >= 12 &&
-    (verification?.hasPanDocument || draftFiles.pan) &&
-    docNumbers.pan.trim().length >= 10 &&
-    (verification?.hasGarageRegDocument || draftFiles.garageReg) &&
-    docNumbers.garageReg.trim().length > 0;
-
   const isPaidUser =
     verification?.status !== "NOT_ORDERED" &&
     verification?.status !== undefined;
   const isRejectedState = verification?.status === "REJECTED";
 
+  const docReady = (d) => {
+    const hasFile = verification?.[d.flag] || draftFiles[d.id];
+    const num = docNumbers[d.id].replace(/\s+/g, "");
+    if (d.id === "aadhar") return hasFile && num.length >= 12;
+    if (d.id === "pan") return hasFile && num.length >= 10;
+    if (d.id === "garageReg") return hasFile && num.length > 0;
+    return true;
+  };
+  const isDraftFormFilled = DOCS.filter((d) => d.required).every(docReady);
+  const readyCount = DOCS.filter((d) => d.required && docReady(d)).length;
+
+  const steps = [
+    { step: 1, text: "Overview" },
+    { step: 2, text: "Documents" },
+    { step: 3, text: isPaidUser ? "Resubmit" : "Pay & submit" },
+  ];
+
+  const msgCls =
+    modalMessage.type === "success"
+      ? "border-green-500/30 bg-green-500/10 text-green-600"
+      : modalMessage.type === "error"
+        ? "border-red-500/30 bg-red-500/10 text-red-500"
+        : `${t.inner} ${t.body}`;
+
   return (
-    <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 backdrop-blur-sm bg-slate-950/40 animate-in fade-in duration-200">
-      <div className="relative w-full max-w-2xl bg-white border border-slate-200 rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
-        {/* Header Section */}
-        <div className="px-6 py-5 border-b border-slate-100 bg-slate-50/50 space-y-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="p-2.5 bg-indigo-50 border border-indigo-100 text-indigo-600 rounded-xl">
-                <ShieldCheck className="w-5 h-5" strokeWidth={2.5} />
-              </div>
-              <div>
-                <h3 className="text-base font-black text-slate-900 tracking-tight">
-                  Garage Verification Suite
-                </h3>
-                <p className="text-xs text-slate-400 font-medium mt-0.5">
-                  Establish a verified partner configuration profile
-                </p>
-              </div>
+    <div
+      className="fixed inset-0 z-[110] flex items-end justify-center bg-[#000814]/60 backdrop-blur-sm sm:items-center sm:p-4"
+      onClick={close}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        className={`flex max-h-[92vh] w-full max-w-2xl flex-col overflow-hidden rounded-t-2xl border-2 sm:rounded-2xl ${t.card}`}
+      >
+        {/* header */}
+        <div className="bg-gradient-to-br from-[#001F3F] to-[#000814] px-4 pb-4 pt-4 text-white sm:px-5">
+          <div className="flex items-start gap-3">
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white text-[#001F3F]">
+              <ShieldCheck size={18} />
+            </span>
+            <div className="min-w-0 flex-1">
+              <h3 className="text-[14px] font-black uppercase tracking-tight">
+                Garage{" "}
+                <span className="font-light lowercase italic">
+                  verification
+                </span>
+              </h3>
+              <p className="text-[12px] text-white/60">
+                Get the Verified badge on your garage profile
+              </p>
             </div>
             <button
-              onClick={() => {
-                onClose();
-                setModalMessage({ type: "", text: "" });
-              }}
-              className="p-2 hover:bg-slate-100 text-slate-400 hover:text-slate-700 rounded-xl transition-all"
+              type="button"
+              onClick={close}
+              aria-label="Close"
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border-2 border-white/10 text-slate-200 hover:bg-white/10"
             >
-              <X className="w-5 h-5" />
+              <X size={14} />
             </button>
           </div>
 
-          {/* Tracker Progress Line */}
-          <div className="grid grid-cols-3 gap-2 relative pt-2">
-            {[
-              { step: 1, text: "Overview" },
-              { step: 2, text: "Draft Files Setup" },
-              {
-                step: 3,
-                text: isPaidUser ? "Submit Revisions" : "Payment & Finalize",
-              },
-            ].map((node) => (
-              <div key={node.step} className="flex flex-col gap-1.5">
-                <div
-                  className={`h-1 rounded-full transition-all duration-300 ${
-                    currentStep >= node.step ? "bg-indigo-600" : "bg-slate-100"
-                  }`}
-                />
-                <span
-                  className={`text-[10px] font-extrabold uppercase tracking-wider ${
-                    currentStep === node.step
-                      ? "text-indigo-600"
-                      : "text-slate-400"
-                  }`}
-                >
-                  0{node.step}. {node.text}
-                </span>
-              </div>
-            ))}
-          </div>
+          {/* stepper */}
+          <ol className="mt-4 grid grid-cols-3 gap-2">
+            {steps.map((s) => {
+              const done = currentStep > s.step;
+              const now = currentStep === s.step;
+              return (
+                <li key={s.step} className="min-w-0">
+                  <div
+                    className={`h-1 rounded-sm ${done || now ? "bg-white" : "bg-white/15"}`}
+                  />
+                  <p
+                    className={`mt-1.5 flex items-center gap-1 truncate text-[12px] font-black uppercase tracking-wider ${now ? "text-white" : done ? "text-white/70" : "text-white/40"}`}
+                  >
+                    {done ? (
+                      <CheckCircle2 size={12} className="shrink-0" />
+                    ) : (
+                      <span className="shrink-0">0{s.step}</span>
+                    )}
+                    <span className="truncate">{s.text}</span>
+                  </p>
+                </li>
+              );
+            })}
+          </ol>
         </div>
 
-        {/* Alerts Center */}
+        {/* message */}
         {modalMessage.text && (
-          <div className="px-6 pt-4">
+          <div className="px-4 pt-3 sm:px-5">
             <div
-              className={`p-4 rounded-xl border flex items-start gap-2.5 text-xs font-semibold ${
-                modalMessage.type === "success"
-                  ? "bg-emerald-50 border-emerald-200 text-emerald-800"
-                  : "bg-rose-50 border-rose-200 text-rose-800"
-              }`}
+              className={`flex items-start gap-2 rounded-xl border-2 px-3 py-2.5 text-[14px] font-semibold ${msgCls}`}
             >
-              <AlertCircle
-                className={`w-4 h-4 shrink-0 ${modalMessage.type === "success" ? "text-emerald-600" : "text-rose-600"}`}
-              />
+              {modalMessage.type === "info" ? (
+                <Loader2 size={16} className="mt-0.5 shrink-0 animate-spin" />
+              ) : modalMessage.type === "success" ? (
+                <CheckCircle2 size={16} className="mt-0.5 shrink-0" />
+              ) : (
+                <AlertCircle size={16} className="mt-0.5 shrink-0" />
+              )}
               <span>{modalMessage.text}</span>
             </div>
           </div>
         )}
 
-        {/* Wizard Panel Switching Shell */}
-        <div className="flex-1 overflow-y-auto p-6">
-          {/* STEP 1: INFORMATIONAL PARAMETERS OVERVIEW */}
+        {/* body */}
+        <div className="flex-1 overflow-y-auto p-4 sm:p-5">
           {currentStep === 1 && (
-            <div className="space-y-6 animate-in fade-in duration-200">
-              <div className="p-5 rounded-2xl bg-gradient-to-br from-indigo-50/50 via-white to-blue-50/30 border border-indigo-100 shadow-sm flex gap-4 items-start">
-                <div className="p-3 bg-indigo-600 text-white rounded-xl shadow-md shadow-indigo-600/10 shrink-0">
-                  <Sparkles className="w-6 h-6" />
-                </div>
-                <div className="space-y-1">
-                  <h4 className="text-base font-black text-slate-900 tracking-tight">
-                    Unlock the Verified Garage Badge
-                  </h4>
-                  <p className="text-sm text-slate-500 font-medium leading-relaxed">
-                    Instantly display a premium verification shield across
-                    booking engines, customer portals, and corporate summaries
-                    to step up garage visibility metric tracking by up to 85%.
+            <div className="space-y-4">
+              <div
+                className={`flex items-start gap-3 rounded-xl border-2 p-3 ${t.inner}`}
+              >
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-green-500/10 text-green-600">
+                  <BadgeCheck size={18} />
+                </span>
+                <div>
+                  <p className={`text-[14px] font-black ${t.heading}`}>
+                    Why get verified?
+                  </p>
+                  <p className={`text-[14px] ${t.muted}`}>
+                    Customers see a Verified badge on your garage in the
+                    MotorDesk app and on your invoices, so they trust you
+                    faster.
                   </p>
                 </div>
               </div>
 
-              <div className="space-y-3">
-                <span className="text-xs font-extrabold uppercase text-slate-400 tracking-wider block">
-                  Requirements Overview
-                </span>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {[
-                    "Aadhaar Card of Owner",
-                    "PAN Card of Owner",
-                    "Garage Registration Proof",
-                    "GST Certificate (Optional)",
-                  ].map((reqStr, index) => (
-                    <div
-                      key={index}
-                      className="p-3.5 bg-slate-50 border border-slate-200/60 rounded-xl flex items-center gap-3 font-semibold text-xs text-slate-700"
-                    >
-                      <div className="w-1.5 h-1.5 rounded-full bg-indigo-500" />
-                      {reqStr}
-                    </div>
-                  ))}
+              <div>
+                <p className="mb-2 text-[12px] font-bold uppercase tracking-wider text-slate-400">
+                  You'll need
+                </p>
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  {DOCS.map((d) => {
+                    const Icon = d.icon;
+                    return (
+                      <div
+                        key={d.id}
+                        className={`flex items-center gap-2.5 rounded-xl border-2 p-2.5 ${t.inner}`}
+                      >
+                        <span
+                          className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${t.chipNavy}`}
+                        >
+                          <Icon size={14} />
+                        </span>
+                        <span className={`text-[14px] font-bold ${t.heading}`}>
+                          {d.title}
+                        </span>
+                        {!d.required && (
+                          <span
+                            className={`ml-auto text-[12px] font-bold uppercase ${t.muted}`}
+                          >
+                            Optional
+                          </span>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
 
-              <div className="p-4 bg-amber-50/50 border border-amber-200 rounded-2xl flex gap-3">
-                <Info className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-                <p className="text-xs text-slate-600 font-medium leading-relaxed">
-                  Activation entails a single **₹199 one-time deployment
-                  charge**. No continuous subscription costs map onto
-                  verification processing tracks.
+              <div className="flex items-start gap-2 rounded-xl border-2 border-amber-500/30 bg-amber-500/10 p-3">
+                <Info size={16} className="mt-0.5 shrink-0 text-amber-600" />
+                <p className={`text-[14px] ${t.body}`}>
+                  One-time fee of <b className={t.heading}>₹{FEE}</b>. No
+                  monthly charge.
                 </p>
               </div>
             </div>
           )}
 
-          {/* STEP 2: METADATA CHANNELS & MEMORY DRAFT DROPZONE FILE SLOTS */}
           {currentStep === 2 && (
-            <div className="space-y-5 animate-in fade-in duration-200">
+            <div className="space-y-3">
               {verification?.adminNotes && (
-                <div className="p-4 bg-rose-50 border border-rose-200 text-xs font-bold text-rose-700 rounded-xl">
-                  ⚠️ Administrative Revision Notice: {verification.adminNotes}
+                <div className="flex items-start gap-2 rounded-xl border-2 border-red-500/30 bg-red-500/10 px-3 py-2.5 text-[14px] font-semibold text-red-500">
+                  <AlertCircle size={16} className="mt-0.5 shrink-0" />
+                  <span>
+                    <b>Please fix:</b> {verification.adminNotes}
+                  </span>
                 </div>
               )}
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {[
-                  {
-                    id: "aadhar",
-                    title: "Aadhaar Card of Owner",
-                    placeholder: "12-digit Aadhaar Number",
-                    dbFlag: verification?.hasAadharDocument,
-                    currentDraft: draftFiles.aadhar,
-                  },
-                  {
-                    id: "pan",
-                    title: "PAN Card of Owner",
-                    placeholder: "10-digit Alphanumeric PAN",
-                    dbFlag: verification?.hasPanDocument,
-                    currentDraft: draftFiles.pan,
-                  },
-                  {
-                    id: "garageReg",
-                    title: "Garage Registration Certificate",
-                    placeholder: "Registration / License Code",
-                    dbFlag: verification?.hasGarageRegDocument,
-                    currentDraft: draftFiles.garageReg,
-                  },
-                  {
-                    id: "gst",
-                    title: "GST Copy (Optional)",
-                    placeholder: "15-digit GSTIN Code",
-                    dbFlag: verification?.hasGstDocument,
-                    currentDraft: draftFiles.gst,
-                  },
-                ].map((doc) => (
-                  <div
-                    key={doc.id}
-                    className="p-4 bg-white border border-slate-200 rounded-2xl flex flex-col justify-between space-y-4 hover:border-slate-300 transition-all"
-                  >
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs font-bold text-slate-800 tracking-tight">
-                          {doc.title}
+              <p
+                className={`text-[12px] font-bold uppercase tracking-wider ${t.muted}`}
+              >
+                {readyCount} of 3 required documents ready · JPG, PNG or PDF
+              </p>
+
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                {DOCS.map((d) => {
+                  const Icon = d.icon;
+                  const saved = verification?.[d.flag];
+                  const draft = draftFiles[d.id];
+                  const locked = saved && !isRejectedState;
+                  const ready = docReady(d) && (saved || draft);
+                  return (
+                    <div
+                      key={d.id}
+                      className={`space-y-2.5 rounded-xl border-2 p-3 ${ready ? "!border-green-500/40" : ""} ${t.inner}`}
+                    >
+                      <div className="flex items-center gap-2">
+                        <Icon size={14} className="shrink-0 text-slate-400" />
+                        <span
+                          className={`min-w-0 flex-1 truncate text-[14px] font-black ${t.heading}`}
+                        >
+                          {d.title}
                         </span>
-                        {(doc.dbFlag || doc.currentDraft) && (
+                        {(saved || draft) && (
                           <span
-                            className={`inline-flex items-center gap-0.5 text-[9px] font-black px-1.5 py-0.5 rounded border ${
-                              doc.currentDraft
-                                ? "bg-amber-50 border-amber-200 text-amber-700"
-                                : "bg-emerald-50 border-emerald-200 text-emerald-700"
+                            className={`inline-flex shrink-0 items-center gap-1 rounded-md border px-1.5 py-px text-[12px] font-black uppercase tracking-wider ${
+                              draft
+                                ? "border-amber-500/30 bg-amber-500/10 text-amber-600"
+                                : "border-green-500/30 bg-green-500/10 text-green-600"
                             }`}
                           >
-                            <FileCheck className="w-3 h-3" />{" "}
-                            {doc.currentDraft
-                              ? "Staged Draft"
-                              : "Saved on Server"}
+                            <FileCheck size={12} /> {draft ? "Added" : "Saved"}
+                          </span>
+                        )}
+                        {!d.required && !saved && !draft && (
+                          <span
+                            className={`text-[12px] font-bold uppercase ${t.muted}`}
+                          >
+                            Optional
                           </span>
                         )}
                       </div>
+
                       <input
                         type="text"
-                        value={docNumbers[doc.id]}
-                        disabled={doc.dbFlag && !isRejectedState} // Allow text changes if admin rejects row parameters
+                        value={docNumbers[d.id]}
+                        disabled={locked}
                         onChange={(e) =>
-                          setDocNumbers((prev) => ({
-                            ...prev,
-                            [doc.id]: e.target.value,
+                          setDocNumbers((p) => ({
+                            ...p,
+                            [d.id]: e.target.value,
                           }))
                         }
-                        className="w-full px-3 py-2 text-xs font-semibold text-slate-700 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:border-indigo-500 focus:outline-none transition-all disabled:opacity-60 disabled:cursor-not-allowed"
-                        placeholder={doc.placeholder}
+                        placeholder={d.placeholder}
+                        autoCapitalize={
+                          d.id === "pan" || d.id === "gst"
+                            ? "characters"
+                            : undefined
+                        }
+                        inputMode={d.id === "aadhar" ? "numeric" : undefined}
+                        className={`h-10 w-full rounded-xl border-2 px-3 font-mono text-[14px] font-semibold uppercase outline-none transition disabled:cursor-not-allowed disabled:opacity-60 ${t.input}`}
                       />
-                    </div>
 
-                    <div className="relative">
                       <input
                         type="file"
-                        id={`modal-file-${doc.id}`}
-                        disabled={
-                          submittingData || (doc.dbFlag && !isRejectedState)
-                        } // Unlock files if explicitly rejected
-                        onChange={(e) => handleLocalFileSelection(e, doc.id)}
+                        id={`modal-file-${d.id}`}
+                        disabled={submittingData || locked}
+                        onChange={(e) => handleLocalFileSelection(e, d.id)}
                         className="hidden"
                         accept=".jpg,.jpeg,.png,.pdf"
                       />
                       <label
-                        htmlFor={`modal-file-${doc.id}`}
-                        className={`w-full flex items-center justify-center gap-2 py-2 px-3 rounded-xl border border-dashed text-xs font-bold transition-all ${
-                          doc.dbFlag && !isRejectedState
-                            ? "bg-slate-50 border-slate-200 text-slate-400 cursor-not-allowed"
-                            : "bg-indigo-50/20 border-indigo-200 text-indigo-600 hover:bg-indigo-50/50 cursor-pointer"
+                        htmlFor={`modal-file-${d.id}`}
+                        className={`flex h-10 w-full items-center justify-center gap-2 rounded-xl border-2 border-dashed px-3 text-[12px] font-black uppercase tracking-wider transition ${
+                          locked
+                            ? `cursor-not-allowed opacity-60 ${t.line} ${t.muted}`
+                            : `cursor-pointer ${isDark ? "border-white/20 text-white hover:border-white/50" : "border-[#CBD5E1] text-[#001F3F] hover:border-[#001F3F]"}`
                         }`}
                       >
-                        <UploadCloud className="w-3.5 h-3.5" />
-                        <span>
-                          {doc.dbFlag && !isRejectedState
-                            ? "Asset Saved"
-                            : doc.currentDraft
-                              ? "Replace Staged Draft"
-                              : "Stage Document File"}
+                        {locked ? (
+                          <Lock size={14} />
+                        ) : (
+                          <UploadCloud size={14} />
+                        )}
+                        <span className="truncate">
+                          {locked
+                            ? "Saved on server"
+                            : draft
+                              ? draft.name
+                              : "Choose file"}
                         </span>
                       </label>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           )}
 
-          {/* STEP 3: FINANCIAL WRAP-UP OR REVISION SUBMISSION EXECUTION */}
           {currentStep === 3 && (
-            <div className="space-y-6 text-center py-4 animate-in fade-in duration-200 max-w-sm mx-auto">
-              <div className="w-16 h-16 rounded-2xl bg-indigo-50 border border-indigo-100 text-indigo-600 flex items-center justify-center mx-auto shadow-sm">
-                <CreditCard className="w-8 h-8" />
-              </div>
-
-              <div className="space-y-1">
-                <h4 className="text-xl font-black text-slate-900 tracking-tight">
-                  {isPaidUser
-                    ? "Push Revision Changes"
-                    : "Finalize Trust Upgrade"}
+            <div className="mx-auto max-w-sm space-y-4 py-2 text-center">
+              <span
+                className={`mx-auto flex h-14 w-14 items-center justify-center rounded-2xl ${t.chipNavy}`}
+              >
+                {isPaidUser ? <UploadCloud size={22} /> : <Lock size={22} />}
+              </span>
+              <div>
+                <h4
+                  className={`text-[16px] font-black uppercase tracking-tight ${t.heading}`}
+                >
+                  {isPaidUser ? (
+                    <>
+                      Send{" "}
+                      <span className="font-light lowercase italic">
+                        for review
+                      </span>
+                    </>
+                  ) : (
+                    <>
+                      Pay{" "}
+                      <span className="font-light lowercase italic">
+                        & submit
+                      </span>
+                    </>
+                  )}
                 </h4>
-                <p className="text-xs font-medium text-slate-400">
+                <p className={`text-[14px] ${t.muted}`}>
                   {isPaidUser
-                    ? "Your changes will immediately re-trigger administrative compliance analysis strings."
-                    : "Secure serialization configuration endpoint mapping initialization"}
+                    ? "Your updated documents will be checked again."
+                    : "After payment your documents are uploaded and sent for review."}
                 </p>
               </div>
 
               {!isPaidUser && (
-                <div className="p-5 border-2 border-slate-100 bg-slate-50/60 rounded-3xl space-y-4">
-                  <div className="flex justify-between items-center text-xs font-bold text-slate-500 uppercase tracking-wider">
-                    <span>Allocation Node</span>
-                    <span className="text-slate-800">Verification Badge</span>
+                <div
+                  className={`overflow-hidden rounded-xl border-2 text-left ${t.line}`}
+                >
+                  <div
+                    className={`flex items-center justify-between px-4 py-2.5 text-[14px] ${t.body}`}
+                  >
+                    <span>Verified Garage badge</span>
+                    <span className="font-mono font-bold">₹{FEE}.00</span>
                   </div>
-                  <div className="h-px bg-slate-200/60" />
-                  <div className="flex justify-between items-end">
-                    <span className="text-xs font-bold text-slate-500 uppercase tracking-wider pb-1">
-                      Total Due
+                  <div
+                    className={`flex items-center justify-between border-t-2 px-4 py-2.5 ${t.line} ${t.cardHead}`}
+                  >
+                    <span
+                      className={`text-[12px] font-black uppercase tracking-wider ${t.heading}`}
+                    >
+                      Total · one-time
                     </span>
-                    <span className="text-4xl font-black text-slate-900 tracking-tight">
-                      ₹199
+                    <span
+                      className={`font-mono text-[16px] font-black ${t.heading}`}
+                    >
+                      ₹{FEE}
                     </span>
                   </div>
                 </div>
@@ -536,75 +591,76 @@ export default function GarageVerificationModal({
 
               {isPaidUser ? (
                 <button
-                  onClick={() => commitDataToProductionBackend(null)} // Call directly without signature tracking params for revision modifications
+                  type="button"
+                  onClick={() => commitDataToProductionBackend(null)}
                   disabled={submittingData || !isDraftFormFilled}
-                  className="w-full py-3.5 bg-slate-900 hover:bg-black text-white font-bold text-xs uppercase tracking-wider rounded-xl shadow-lg active:scale-[0.99] disabled:opacity-50 transition-all flex items-center justify-center gap-2"
+                  className={`${btnBase} h-11 w-full shadow-lg ${t.btnPrimary}`}
                 >
                   {submittingData ? (
-                    <>
-                      <Loader2 className="w-4 h-4 animate-spin" /> Committing
-                      Changes...
-                    </>
+                    <Loader2 size={14} className="animate-spin" />
                   ) : (
-                    <>
-                      <CheckCircle2 className="w-4 h-4" /> Resubmit Review
-                      Profile
-                    </>
+                    <CheckCircle2 size={14} />
                   )}
+                  {submittingData ? "Sending…" : "Resubmit for review"}
                 </button>
               ) : (
                 <button
+                  type="button"
                   onClick={executePaymentCheckout}
                   disabled={submittingData}
-                  className="w-full py-3.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs uppercase tracking-wider rounded-xl shadow-lg shadow-indigo-600/10 active:scale-[0.99] disabled:opacity-50 transition-all flex items-center justify-center gap-2"
+                  className={`${btnBase} h-11 w-full shadow-lg ${t.btnPrimary}`}
                 >
                   {submittingData ? (
-                    <>
-                      <Loader2 className="w-4 h-4 animate-spin" /> Processing
-                      Transmission...
-                    </>
+                    <Loader2 size={14} className="animate-spin" />
                   ) : (
-                    <>
-                      <Lock className="w-4 h-4" /> Pay ₹199 & Upload Staged
-                      Drafts
-                    </>
+                    <Lock size={14} />
                   )}
+                  {submittingData ? "Opening payment…" : `Pay ₹${FEE} & submit`}
                 </button>
               )}
+              <p
+                className={`flex items-center justify-center gap-1.5 text-[12px] ${t.muted}`}
+              >
+                <ShieldCheck size={12} className="text-green-500" /> Secure
+                payment by Razorpay
+              </p>
             </div>
           )}
         </div>
 
-        {/* Multi-Step Action Navigation Footer Controls */}
-        <div className="px-6 py-4 border-t border-slate-100 bg-slate-50/50 flex items-center justify-between flex-shrink-0">
+        {/* footer */}
+        <div
+          className={`flex items-center justify-between gap-2 border-t-2 px-4 py-3 sm:px-5 ${t.line}`}
+        >
           <button
+            type="button"
             onClick={() => {
               setModalMessage({ type: "", text: "" });
-              setCurrentStep((prev) => Math.max(1, prev - 1));
+              setCurrentStep((p) => Math.max(1, p - 1));
             }}
             disabled={currentStep === 1 || submittingData}
-            className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-500 hover:text-slate-900 disabled:opacity-30 disabled:pointer-events-none transition"
+            className={`${btnBase} h-10 border-2 px-4 ${t.btnGhost} disabled:invisible`}
           >
-            <ArrowLeft className="w-4 h-4" /> Back
+            <ArrowLeft size={14} /> Back
           </button>
 
           {currentStep === 1 && (
             <button
+              type="button"
               onClick={() => setCurrentStep(2)}
-              className="px-4 py-2 bg-slate-900 hover:bg-black text-white rounded-xl text-xs font-bold uppercase tracking-wider shadow transition flex items-center gap-1.5"
+              className={`${btnBase} h-10 px-4 ${t.btnPrimary}`}
             >
-              Continue <ArrowRight className="w-4 h-4" />
+              Continue <ArrowRight size={14} />
             </button>
           )}
-
           {currentStep === 2 && (
             <button
+              type="button"
               onClick={() => setCurrentStep(3)}
               disabled={!isDraftFormFilled}
-              className="px-4 py-2 bg-slate-900 hover:bg-black text-white rounded-xl text-xs font-bold uppercase tracking-wider shadow transition flex items-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed"
+              className={`${btnBase} h-10 px-4 ${t.btnPrimary}`}
             >
-              {isPaidUser ? "Review Revisions" : "Proceed to Payment"}{" "}
-              <ArrowRight className="w-4 h-4" />
+              {isPaidUser ? "Review" : "Next: payment"} <ArrowRight size={14} />
             </button>
           )}
         </div>

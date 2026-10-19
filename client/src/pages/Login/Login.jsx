@@ -1,14 +1,19 @@
-import { Capacitor } from "@capacitor/core";
+// client/src/pages/Login/Login.jsx
+import { Navigate } from "react-router-dom";
 import LoginWeb from "./LoginWeb";
 import LoginAndroid from "./LoginAndroid";
+import {
+  isNativeApp,
+  hasUsableToken,
+  getDashboardPath,
+} from "../../utils/authStorage";
 
 export default function Login() {
-  const platform = Capacitor.getPlatform();
-  console.log("PLATFORM:", Capacitor.getPlatform());
-
-  if (platform === "android") {
-    return <LoginAndroid />;
+  // Already signed in → never show the login screen again
+  if (hasUsableToken()) {
+    return <Navigate to={getDashboardPath()} replace />;
   }
 
-  return <LoginWeb />;
+  // Android AND iOS both use the mobile login screen
+  return isNativeApp() ? <LoginAndroid /> : <LoginWeb />;
 }

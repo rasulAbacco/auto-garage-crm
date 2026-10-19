@@ -1,62 +1,55 @@
 // client/src/components/Dashboard/SubscriptionChart.jsx
-
-import React, { useMemo } from 'react';
+import React, { useMemo } from "react";
 import {
-    PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer
-} from 'recharts';
+  PieChart,
+  Pie,
+  Cell,
+  Tooltip,
+  Legend,
+  ResponsiveContainer,
+} from "recharts";
+import { getChartTheme, EmptyChart } from "./chartTheme";
 
 const SubscriptionChart = ({ data = {}, isDark }) => {
-    const safeData = {
-        basic: data.basic || 0,
-        standard: data.standard || 0,
-        premium: data.premium || 0
-    };
+  const c = useMemo(() => getChartTheme(isDark), [isDark]);
 
-    const chartColors = useMemo(() => ({
-        tooltipBg: isDark ? '#1F2937' : 'white',
-        text: isDark ? '#F9FAFB' : '#111827',
-        basic: '#6B7280',
-        standard: '#3B82F6',
-        premium: '#8B5CF6',
-    }), [isDark]);
+  const pieData = [
+    { name: "Basic", value: Number(data?.basic) || 0, color: c.muted },
+    { name: "Standard", value: Number(data?.standard) || 0, color: c.primary },
+    { name: "Premium", value: Number(data?.premium) || 0, color: c.warning },
+  ];
+  const total = pieData.reduce((s, r) => s + r.value, 0);
 
-    const pieData = [
-        { name: 'Basic', value: safeData.basic, color: chartColors.basic },
-        { name: 'Standard', value: safeData.standard, color: chartColors.standard },
-        { name: 'Premium', value: safeData.premium, color: chartColors.premium },
-    ];
-
+  if (!total) {
     return (
-        <ResponsiveContainer width="100%" height={250}>
-            <PieChart>
-                <Pie
-                    data={pieData}
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={60}
-                    outerRadius={90}
-                    paddingAngle={5}
-                    dataKey="value"
-                >
-                    {pieData.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={entry.color} />
-                    ))}
-                </Pie>
-                <Tooltip
-                    contentStyle={{
-                        backgroundColor: chartColors.tooltipBg,
-                        border: 'none',
-                        borderRadius: '12px',
-                        boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)',
-                        color: chartColors.text
-                    }}
-                />
-                <Legend />
-            </PieChart>
-        </ResponsiveContainer>
+      <EmptyChart
+        text="No subscription data yet"
+        height={230}
+        isDark={isDark}
+      />
     );
+  }
+
+  return (
+    <ResponsiveContainer width="100%" height={230}>
+      <PieChart>
+        <Pie
+          data={pieData}
+          dataKey="value"
+          innerRadius="55%"
+          outerRadius="80%"
+          paddingAngle={4}
+          stroke="none"
+        >
+          {pieData.map((entry, i) => (
+            <Cell key={i} fill={entry.color} />
+          ))}
+        </Pie>
+        <Tooltip contentStyle={c.tooltip} itemStyle={{ color: c.text }} />
+        <Legend iconType="circle" iconSize={8} wrapperStyle={c.legend} />
+      </PieChart>
+    </ResponsiveContainer>
+  );
 };
 
 export default React.memo(SubscriptionChart);
-
-

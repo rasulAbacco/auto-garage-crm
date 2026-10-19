@@ -1,4 +1,5 @@
-import React, { useEffect, useState, useMemo } from "react";
+// client/src/pages/billing/BillingForm.jsx  (Car CRM – create / edit invoice)
+import React, { useEffect, useState, useMemo, useRef } from "react";
 import { useLocation, useNavigate, useParams, Link } from "react-router-dom";
 import {
   FiFileText,
@@ -6,36 +7,52 @@ import {
   FiUser,
   FiTool,
   FiSave,
-  FiX,
   FiArrowLeft,
   FiHash,
-  FiPercent,
-  FiTag,
   FiAlertCircle,
   FiCreditCard,
-  FiCheckCircle,
   FiPlus,
+  FiTrash2,
+  FiSearch,
+  FiEye,
+  FiLoader,
+  FiPackage,
+  FiX,
+  FiEdit3,
 } from "react-icons/fi";
-import { MdOutlineCurrencyRupee } from "react-icons/md";
+import { FaRupeeSign } from "react-icons/fa";
+import { Toaster, toast } from "react-hot-toast";
 import { useTheme } from "../../contexts/ThemeContext";
+import PartAutocomplete from "../services/PartAutocomplete";
+import {
+  SectionCard,
+  FieldLabel,
+  PageHeading,
+  Plate,
+  tk,
+  btnBase,
+} from "../clients/components/clientUi";
+import {
+  num,
+  rowTotal,
+  calcTotals,
+  numberToWords,
+  money,
+} from "./billingUtils";
 
 const API_URL = import.meta.env.VITE_API_BASE_URL;
 
-/* =========================
-   Helpers
-========================= */
-
-const getAuthToken = () =>
-  localStorage.getItem("token") || localStorage.getItem("authToken");
-
 const fetchWithAuth = async (url, options = {}) => {
-  const token = getAuthToken();
-  const headers = {
-    "Content-Type": "application/json",
-    Authorization: `Bearer ${token}`,
-    ...options.headers,
-  };
-  const response = await fetch(url, { ...options, headers });
+  const token =
+    localStorage.getItem("token") || localStorage.getItem("authToken");
+  const response = await fetch(url, {
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+      ...options.headers,
+    },
+  });
   if (response.status === 401) {
     localStorage.removeItem("token");
     localStorage.removeItem("authToken");
@@ -53,168 +70,20 @@ const generateTempInvoiceNumber = () => {
   return `INV-${dateStr}-${random}`;
 };
 
-const num = (v) => (Number.isFinite(+v) ? +v : 0);
-
-const calculateRowTotal = (row) => {
-  const base = num(row.quantity) * num(row.unitPrice);
-  const cgst = (base * num(row.cgstRate)) / 100;
-  const sgst = (base * num(row.sgstRate)) / 100;
-  return base + cgst + sgst;
-};
-
-const calculateGrandTotal = (items = []) =>
-  items.reduce((sum, row) => sum + calculateRowTotal(row), 0);
-
-const calculateTaxBreakdown = (items = []) => {
-  let partsAmount = 0;
-  let laborAmount = 0;
-  let partsCgst = 0;
-  let partsSgst = 0;
-  let laborCgst = 0;
-  let laborSgst = 0;
-
-  items.forEach((row) => {
-    const base = num(row.quantity) * num(row.unitPrice);
-    const cgst = (base * num(row.cgstRate)) / 100;
-    const sgst = (base * num(row.sgstRate)) / 100;
-
-    if (row.type === "part") {
-      partsAmount += base;
-      partsCgst += cgst;
-      partsSgst += sgst;
-    } else {
-      laborAmount += base;
-      laborCgst += cgst;
-      laborSgst += sgst;
-    }
-  });
-
-  return {
-    partsAmount,
-    laborAmount,
-    partsCgst,
-    partsSgst,
-    laborCgst,
-    laborSgst,
-  };
-};
-
-const numberToWords = (num) => {
-  if (num === 0) return "Zero";
-
-  const ones = [
-    "",
-    "One",
-    "Two",
-    "Three",
-    "Four",
-    "Five",
-    "Six",
-    "Seven",
-    "Eight",
-    "Nine",
-    "Ten",
-    "Eleven",
-    "Twelve",
-    "Thirteen",
-    "Fourteen",
-    "Fifteen",
-    "Sixteen",
-    "Seventeen",
-    "Eighteen",
-    "Nineteen",
-  ];
-
-  const tens = [
-    "",
-    "",
-    "Twenty",
-    "Thirty",
-    "Forty",
-    "Fifty",
-    "Sixty",
-    "Seventy",
-    "Eighty",
-    "Ninety",
-  ];
-
-  const thousands = ["", "Thousand", "Million", "Billion"];
-
-  const convertHundreds = (n) => {
-    let result = "";
-
-    if (n >= 100) {
-      result += ones[Math.floor(n / 100)] + " Hundred ";
-      n %= 100;
-    }
-
-    if (n >= 20) {
-      result += tens[Math.floor(n / 10)] + " ";
-      n %= 10;
-    }
-
-    if (n > 0) {
-      result += ones[n] + " ";
-    }
-
-    return result.trim();
-  };
-
-  let words = "";
-  let i = 0;
-
-  while (num > 0) {
-    if (num % 1000 !== 0) {
-      const hundreds = convertHundreds(num % 1000);
-      words = hundreds + " " + thousands[i] + " " + words;
-    }
-    num = Math.floor(num / 1000);
-    i++;
-  }
-
-  return words.trim() + " Only";
-};
-
-/* =========================
-   Initial Form State
-========================= */
+const emptyRow = (type = "part") => ({
+  type,
+  name: "",
+  quantity: 1,
+  unitPrice: "",
+  cgstRate: "",
+  sgstRate: "",
+});
+const toDateInput = (d) => (d ? String(d).slice(0, 10) : "");
+const listOf = (d) => (Array.isArray(d) ? d : d?.data || d?.clients || []);
 
 const getInitialFormState = (isEditMode, preSelectedClientId, invoiceData) => {
   const today = new Date().toISOString().split("T")[0];
-
-  if (isEditMode && invoiceData) {
-    return {
-      invoiceNumber: invoiceData.invoiceNumber || generateTempInvoiceNumber(),
-      date: invoiceData.date || today,
-      customerId: invoiceData.clientId || preSelectedClientId || "",
-      vehicle: invoiceData.vehicle || "",
-      mechanic: invoiceData.mechanic || "",
-      description: invoiceData.description || "",
-      partsCost: invoiceData.partsCost || 0,
-      partsGst: invoiceData.partsGst || 0,
-      laborCost: invoiceData.laborCost || 0,
-      laborGst: invoiceData.laborGst || 0,
-      taxes: invoiceData.taxes || 0,
-      discounts: invoiceData.discounts || 0,
-      netAmount: invoiceData.netAmount || 0,
-      discountAmount: invoiceData.discountAmount || 0,
-      amountAfterDiscount: invoiceData.amountAfterDiscount || 0,
-      roundedAmount: invoiceData.roundedAmount || invoiceData.total || 0,
-      roundOffAmount: invoiceData.roundOffAmount || 0,
-      total: invoiceData.total || 0,
-      paymentMode: invoiceData.paymentMode || "",
-      status: invoiceData.status || "Pending",
-      dueDate: invoiceData.dueDate || "",
-      notes: invoiceData.notes || "",
-      serviceType: invoiceData.serviceType || "",
-      serviceCategory: invoiceData.serviceCategory || "",
-      serviceSubCategory: invoiceData.serviceSubCategory || "",
-      serviceNotes: invoiceData.serviceNotes || "",
-      costItems: invoiceData.invoiceCostItems || [],
-    };
-  }
-
-  return {
+  const base = {
     invoiceNumber: generateTempInvoiceNumber(),
     date: today,
     customerId: preSelectedClientId || "",
@@ -243,11 +112,42 @@ const getInitialFormState = (isEditMode, preSelectedClientId, invoiceData) => {
     serviceNotes: "",
     costItems: [],
   };
+  if (!(isEditMode && invoiceData)) return base;
+  return {
+    ...base,
+    invoiceNumber: invoiceData.invoiceNumber || base.invoiceNumber,
+    date: toDateInput(invoiceData.date || invoiceData.createdAt) || today,
+    customerId:
+      invoiceData.clientId ||
+      invoiceData.client?.id ||
+      preSelectedClientId ||
+      "",
+    vehicle: invoiceData.vehicle || "",
+    mechanic: invoiceData.mechanic || "",
+    description: invoiceData.description || "",
+    partsCost: invoiceData.partsCost || 0,
+    partsGst: invoiceData.partsGst || 0,
+    laborCost: invoiceData.laborCost || 0,
+    laborGst: invoiceData.laborGst || 0,
+    taxes: invoiceData.taxes || 0,
+    discounts:
+      invoiceData.discounts ??
+      invoiceData.discount ??
+      invoiceData.discountAmount ??
+      0,
+    paymentMode: invoiceData.paymentMode || "",
+    status: invoiceData.status || "Pending",
+    dueDate: toDateInput(invoiceData.dueDate),
+    notes: invoiceData.notes || "",
+    serviceType: invoiceData.serviceType || "",
+    serviceCategory: invoiceData.serviceCategory || "",
+    serviceSubCategory: invoiceData.serviceSubCategory || "",
+    serviceNotes: invoiceData.serviceNotes || "",
+    costItems: (invoiceData.invoiceCostItems || []).map(
+      ({ id, invoiceId, createdAt, updatedAt, ...r }) => r,
+    ),
+  };
 };
-
-/* =========================
-   Component
-========================= */
 
 export default function BillingForm() {
   const { id } = useParams();
@@ -255,131 +155,225 @@ export default function BillingForm() {
   const location = useLocation();
   const navigate = useNavigate();
   const { isDark } = useTheme();
+  const t = tk(isDark);
+  const formRef = useRef(null);
+  const topRef = useRef(null);
 
-  const preSelectedClientId = location.state?.clientId || "";
+  const preSelectedClientId =
+    location.state?.clientId || location.state?.customerId || "";
   const serviceId = location.state?.serviceId;
-
-  const [invoiceData, setInvoiceData] = useState(null);
-  const [clients, setClients] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
-  const [userProfile, setUserProfile] = useState(null);
   const restoreForm = location.state?.restoreForm;
   const invoiceDraft = location.state?.invoiceDraft;
   const autoSubmit = location.state?.autoSubmit;
+  // remember that we came back from the preview (history state is cleared right after)
+  const restoredRef = useRef(Boolean(restoreForm && invoiceDraft));
 
   const [form, setForm] = useState(() =>
     getInitialFormState(isEditMode, preSelectedClientId, null),
   );
+  const [clients, setClients] = useState([]);
+  const [clientObj, setClientObj] = useState(null);
+  const [clientQuery, setClientQuery] = useState("");
+  const [clientOpen, setClientOpen] = useState(false);
+  const [clientResults, setClientResults] = useState([]);
+  const clientBoxRef = useRef(null);
+  const [inventory, setInventory] = useState([]);
+  const [userProfile, setUserProfile] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [loadingInvoice, setLoadingInvoice] = useState(
+    isEditMode && !restoredRef.current,
+  );
+  const [error, setError] = useState(null);
 
+  const set = (patch) => setForm((p) => ({ ...p, ...patch }));
+
+  /* ---------- load ---------- */
   useEffect(() => {
     fetchWithAuth(`${API_URL}/api/clients?page=1&limit=200`)
       .then((r) => r.json())
-      .then((d) => setClients(d.data || d || []))
+      .then((d) => setClients(listOf(d)))
       .catch(() => setError("Failed to load clients"));
-  }, []);
-
-  const selectedClient = clients.find(
-    (c) => String(c.id) === String(form.customerId),
-  );
-
-  useEffect(() => {
     fetchWithAuth(`${API_URL}/api/user/profile`)
       .then((r) => r.json())
       .then(setUserProfile)
       .catch(() => {});
+    fetchWithAuth(`${API_URL}/api/car-inventory`)
+      .then((r) => r.json())
+      .then((d) => setInventory(Array.isArray(d) ? d : []))
+      .catch(() => {});
   }, []);
 
+  // selected client object (fetch it if it's not in the first 200)
   useEffect(() => {
-    if (!isEditMode || !id) return;
+    if (!form.customerId) return setClientObj(null);
+    const found = clients.find((c) => String(c.id) === String(form.customerId));
+    if (found) return setClientObj(found);
+    if (clientObj && String(clientObj.id) === String(form.customerId)) return;
+    fetchWithAuth(`${API_URL}/api/clients/${form.customerId}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((c) => c && setClientObj(c))
+      .catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form.customerId, clients]);
 
+  // client search
+  useEffect(() => {
+    if (!clientOpen) return;
+    const q = clientQuery.trim().toLowerCase();
+    const local = (
+      q
+        ? clients.filter((c) =>
+            [c.fullName, c.regNumber, c.phone]
+              .filter(Boolean)
+              .some((v) => String(v).toLowerCase().includes(q)),
+          )
+        : clients
+    ).slice(0, 20);
+    setClientResults(local);
+    if (!q) return;
+    const h = setTimeout(() => {
+      fetchWithAuth(
+        `${API_URL}/api/clients?limit=20&q=${encodeURIComponent(clientQuery.trim())}`,
+      )
+        .then((r) => (r.ok ? r.json() : null))
+        .then((d) => {
+          if (!d) return;
+          setClientResults((prev) => {
+            const seen = new Set(prev.map((c) => c.id));
+            return [...prev, ...listOf(d).filter((c) => !seen.has(c.id))].slice(
+              0,
+              20,
+            );
+          });
+        })
+        .catch(() => {});
+    }, 300);
+    return () => clearTimeout(h);
+  }, [clientQuery, clientOpen, clients]);
+
+  useEffect(() => {
+    const onDown = (e) => {
+      if (clientBoxRef.current && !clientBoxRef.current.contains(e.target))
+        setClientOpen(false);
+    };
+    document.addEventListener("mousedown", onDown);
+    return () => document.removeEventListener("mousedown", onDown);
+  }, []);
+
+  // edit mode
+  useEffect(() => {
+    if (!isEditMode || restoredRef.current) return;
     fetchWithAuth(`${API_URL}/api/invoices/${id}`)
-      .then((r) => r.json())
-      .then((data) => {
-        setInvoiceData(data);
+      .then(async (r) => {
+        const data = await r.json();
+        if (!r.ok) throw new Error(data.message || "Failed to load invoice");
         setForm(getInitialFormState(true, preSelectedClientId, data));
+        if (data.client) setClientObj(data.client);
       })
-      .catch(() => setError("Failed to load invoice data"));
+      .catch((e) => setError(e.message || "Failed to load invoice data"))
+      .finally(() => setLoadingInvoice(false));
   }, [isEditMode, id, preSelectedClientId]);
 
+  // coming back from the proforma preview
   useEffect(() => {
-    if (restoreForm && invoiceDraft) {
-      setForm(invoiceDraft);
-    }
-  }, [restoreForm, invoiceDraft]);
+    if (!restoredRef.current) return;
+    const { client, userProfile: _u, ...draft } = invoiceDraft;
+    setForm((prev) => ({ ...prev, ...draft })); // keep defaults for any missing fields
+    if (client) setClientObj(client);
+    // clear history state so a refresh doesn't re-submit
+    navigate(location.pathname, { replace: true, state: {} });
+    if (autoSubmit) setTimeout(() => formRef.current?.requestSubmit(), 50);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
+  // service → invoice
   useEffect(() => {
-    if (autoSubmit && restoreForm && invoiceDraft) {
-      setTimeout(() => {
-        document.querySelector("form")?.requestSubmit();
-      }, 0);
-    }
-  }, [autoSubmit, restoreForm, invoiceDraft]);
-
-  /* =========================
-     Service → Invoice Context Refactor
-  ========================= */
-  useEffect(() => {
-    if (!serviceId || isEditMode) return;
-
+    if (!serviceId || isEditMode || restoredRef.current) return;
     fetchWithAuth(`${API_URL}/api/services/${serviceId}/billing`)
       .then((r) => r.json())
-      .then((data) =>
+      .then((data) => {
         setForm((prev) => ({
           ...prev,
-          customerId: data.client.id,
-          vehicle: `${data.client.vehicleMake} ${data.client.vehicleModel}`,
+          customerId: data.client?.id || prev.customerId,
+          vehicle: [data.client?.vehicleMake, data.client?.vehicleModel]
+            .filter(Boolean)
+            .join(" "),
           serviceType: data.category?.name || "",
           serviceCategory: data.category?.name || "",
           mechanic: data.assignedMechanic || "",
-          // 🔄 UPDATED: Maps multiple sub-services and joins them cleanly using commas
-          serviceSubCategory:
-            data.subServices && data.subServices.length > 0
-              ? data.subServices.map((sub) => sub.name).join(", ")
-              : "",
+          serviceSubCategory: data.subServices?.length
+            ? data.subServices.map((s) => s.name).join(", ")
+            : "",
           serviceNotes: data.notes || "",
+          discounts: num(data.discount) > 0 ? data.discount : prev.discounts,
           partsCost: 0,
           laborCost: 0,
           costItems: data.costItems || [],
-        })),
-      )
+        }));
+        if (data.client) setClientObj(data.client);
+      })
       .catch(() => setError("Failed to load service billing data"));
   }, [serviceId, isEditMode]);
 
-  /* =========================
-     Totals Calculation Block
-  ========================= */
-  useEffect(() => {
-    const netAmount = calculateGrandTotal(form.costItems);
-    const discountAmount = Number(form.discounts || 0);
-    const amountAfterDiscount = netAmount - discountAmount;
-    const roundedAmount = Math.floor(amountAfterDiscount);
-    const roundOffAmount = amountAfterDiscount - roundedAmount;
+  /* ---------- totals (derived) ---------- */
+  const tot = useMemo(
+    () => calcTotals(form.costItems, form.discounts),
+    [form.costItems, form.discounts],
+  );
+  const totalsPatch = {
+    netAmount: tot.netAmount,
+    discountAmount: tot.discountAmount,
+    amountAfterDiscount: tot.amountAfterDiscount,
+    roundedAmount: tot.roundedAmount,
+    roundOffAmount: tot.roundOffAmount,
+  };
 
+  /* ---------- items ---------- */
+  const updateCostItem = (index, patch) =>
     setForm((p) => ({
       ...p,
-      netAmount,
-      discountAmount,
-      amountAfterDiscount,
-      roundedAmount,
-      roundOffAmount,
+      costItems: p.costItems.map((r, i) =>
+        i === index ? { ...r, ...patch } : r,
+      ),
     }));
-  }, [form.costItems, form.discounts]);
+  const addCostItem = (type) =>
+    setForm((p) => ({ ...p, costItems: [...p.costItems, emptyRow(type)] }));
+  const removeCostItem = (index) =>
+    setForm((p) => ({
+      ...p,
+      costItems: p.costItems.filter((_, i) => i !== index),
+    }));
+
+  /* ---------- submit / preview ---------- */
+  const fail = (msg) => {
+    setError(msg);
+    toast.error(msg);
+    topRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (!form.customerId) return fail("Please select a customer.");
+    if (
+      !form.costItems.some(
+        (r) => String(r.name || "").trim() || num(r.unitPrice) > 0,
+      )
+    )
+      return fail("Add at least one item.");
     setLoading(true);
     setError(null);
-
     try {
+      const { client, userProfile: _u, ...clean } = form;
       const payload = {
-        ...form,
+        ...clean,
+        ...totalsPatch,
         clientId: Number(form.customerId),
-        grandTotal: Number(form.roundedAmount),
-        totalAmount: Number(form.roundedAmount),
-        costItems: form.costItems,
+        grandTotal: Number(tot.roundedAmount),
+        totalAmount: Number(tot.roundedAmount),
+        costItems: form.costItems
+          .filter((r) => String(r.name || "").trim() || num(r.unitPrice) > 0)
+          .map(({ itemCode, inventoryId, ...r }) => r), // frontend-only inventory link
       };
-
       const res = await fetchWithAuth(
         isEditMode
           ? `${API_URL}/api/invoices/${id}`
@@ -389,697 +383,742 @@ export default function BillingForm() {
           body: JSON.stringify(payload),
         },
       );
-
-      const data = await res.json();
-      navigate(`/billing/${data.invoice.id}`);
-    } catch {
-      setError("Failed to save invoice");
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.message || "Failed to save invoice");
+      const newId = data?.invoice?.id ?? data?.id ?? id;
+      toast.success(isEditMode ? "Invoice updated" : "Invoice created");
+      navigate(newId ? `/billing/${newId}` : "/billing");
+    } catch (err) {
+      fail(err.message || "Failed to save invoice");
     } finally {
       setLoading(false);
     }
   };
 
-  const updateCostItem = (index, field, value) => {
-    const updated = [...form.costItems];
-    updated[index][field] = value;
-    setForm((p) => ({ ...p, costItems: updated }));
-  };
-
-  const addCostItem = () => {
-    setForm((p) => ({
-      ...p,
-      costItems: [
-        ...p.costItems,
-        {
-          type: "part",
-          name: "",
-          quantity: 1,
-          unitPrice: "",
-          cgstRate: "",
-          sgstRate: "",
+  const openPreview = () => {
+    if (!form.customerId)
+      return fail("Please select a customer before previewing.");
+    navigate("/billing/preview", {
+      state: {
+        invoiceDraft: {
+          ...form,
+          ...totalsPatch,
+          client: clientObj || null,
+          userProfile,
         },
-      ],
-    }));
+      },
+    });
   };
 
-  const removeCostItem = (index) => {
-    setForm((p) => ({
-      ...p,
-      costItems: p.costItems.filter((_, i) => i !== index),
-    }));
-  };
+  /* ---------- render ---------- */
+  if (loadingInvoice)
+    return (
+      <div className="flex min-h-[60vh] flex-col items-center justify-center gap-3 lg:ml-16">
+        <FiLoader className={`animate-spin ${t.heading}`} size={24} />
+        <p className={`text-[14px] font-semibold ${t.muted}`}>
+          Loading invoice…
+        </p>
+      </div>
+    );
 
-  const taxBreakdown = calculateTaxBreakdown(form.costItems);
+  const inputCls = `h-11 w-full rounded-xl border-2 px-3.5 text-[14px] font-semibold outline-none transition ${t.input} ${
+    isDark ? "[&>option]:bg-[#000814] [color-scheme:dark]" : ""
+  }`;
+  const smallInput = `h-10 w-full rounded-xl border-2 px-3 text-[14px] font-semibold outline-none transition ${t.input}`;
+  const textArea = `w-full resize-none rounded-xl border-2 px-3.5 py-2.5 text-[14px] font-medium outline-none transition ${t.input}`;
+  const seg = (on) =>
+    `h-8 flex-1 rounded-lg text-[12px] font-black uppercase tracking-wider transition ${
+      on
+        ? t.chipNavy
+        : isDark
+          ? "text-slate-400 hover:text-white"
+          : "text-slate-500 hover:text-[#001F3F]"
+    }`;
+  const label = (txt) => (
+    <span className="mb-1 block text-[12px] font-bold uppercase tracking-wider text-slate-400 xl:hidden">
+      {txt}
+    </span>
+  );
 
-  return (
-    <div
-      className={`min-h-screen p-1 lg:ml-16 ${
-        isDark ? "text-gray-100" : "bg-gray-50 text-gray-900"
-      }`}
-    >
-      <div className="max-w-5xl mx-auto">
-        {/* Header */}
-        <div className="flex items-center justify-between mb-6">
-          <h1 className="text-3xl font-bold">
-            {isEditMode ? "Edit Invoice" : "Create Invoice"}
-          </h1>
-          <Link
-            to="/billing"
-            className="flex items-center gap-2 text-blue-600 hover:text-blue-700"
-          >
-            <FiArrowLeft /> Back to Billing
-          </Link>
+  const taxLine = (name, tax, base) =>
+    base > 0 &&
+    tax > 0 && (
+      <div className="flex justify-between gap-2" key={name}>
+        <span className={t.muted}>
+          {name} @ {((tax / base) * 100).toFixed(2)}% on {money(base)}
+        </span>
+        <span className={`font-bold ${t.heading}`}>{money(tax)}</span>
+      </div>
+    );
+
+  const summary = (
+    <div className={`overflow-hidden rounded-2xl border-2 ${t.card}`}>
+      <div
+        className={`flex items-center gap-3 border-b-2 px-4 py-3 ${t.cardHead}`}
+      >
+        <div
+          className={`flex h-8 w-8 items-center justify-center rounded-xl ${t.chipNavy}`}
+        >
+          <FaRupeeSign size={14} />
         </div>
-
-        {/* Error Alert */}
-        {error && (
-          <div className="mb-6 p-4 bg-red-100 border border-red-400 rounded-lg flex items-center gap-2">
-            <FiAlertCircle className="text-red-600" />
-            <span className="text-red-700">{error}</span>
+        <h2
+          className={`flex-1 text-[14px] font-black uppercase tracking-tight ${t.heading}`}
+        >
+          Grand total
+        </h2>
+      </div>
+      <div className="space-y-3 p-4 text-[14px]">
+        <div className="space-y-1.5 text-[12px]">
+          {taxLine("CGST (parts)", tot.partsCgst, tot.partsAmount)}
+          {taxLine("SGST (parts)", tot.partsSgst, tot.partsAmount)}
+          {taxLine("CGST (labour)", tot.laborCgst, tot.laborAmount)}
+          {taxLine("SGST (labour)", tot.laborSgst, tot.laborAmount)}
+          {tot.tax === 0 && <p className={t.muted}>No GST added</p>}
+        </div>
+        <div className={`space-y-1.5 border-t-2 pt-3 ${t.line}`}>
+          <div className="flex justify-between">
+            <span className={t.muted}>Net amount</span>
+            <span className={`font-bold ${t.heading}`}>
+              {money(tot.netAmount)}
+            </span>
           </div>
-        )}
-
-        {/* Form */}
-        <form onSubmit={handleSubmit} className="space-y-6">
-          {/* Invoice Header */}
-          <div
-            className={`rounded-xl shadow-lg p-6 ${
-              isDark ? "bg-gray-800" : "bg-white"
-            }`}
-          >
-            <div className="grid md:grid-cols-2 gap-6">
-              <Input
-                label="Invoice Number"
-                icon={<FiHash />}
-                value={form.invoiceNumber}
-                readOnly
-              />
-              <Input
-                label="Invoice Date"
-                type="date"
-                icon={<FiCalendar />}
-                value={form.date}
-                onChange={(e) => setForm({ ...form, date: e.target.value })}
-              />
-            </div>
-
-            {/* Customer Selection */}
-            <div className="md:col-span-2">
-              <div className="mt-4">
-                <label className="block font-semibold mb-2 flex items-center gap-2">
-                  <FiUser /> Customer
-                </label>
-                <select
-                  name="customerId"
-                  value={form.customerId}
-                  onChange={(e) =>
-                    setForm({ ...form, customerId: e.target.value })
-                  }
-                  required
-                  className={`w-full p-3 rounded-lg border ${
-                    isDark
-                      ? "bg-gray-700 border-gray-600"
-                      : "bg-gray-50 border-gray-300"
-                  }`}
-                >
-                  <option value="">Select Customer</option>
-                  {clients.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.fullName} ({c.regNumber})
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {preSelectedClientId && (
-                <div className="mt-2 text-sm text-blue-600 flex items-center gap-2">
-                  <FiUser className="mr-1" />
-                  Pre-selected customer from previous page
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Service Details */}
-          <div
-            className={`rounded-xl shadow-lg p-6 ${
-              isDark ? "bg-gray-800" : "bg-white"
-            }`}
-          >
-            <h2 className="text-xl font-bold mb-4">Service Details</h2>
-
-            <div className="grid md:grid-cols-2 gap-6">
-              <Input
-                label="Service Type"
-                icon={<FiTool />}
-                name="serviceType"
-                value={form.serviceType}
-                onChange={(e) =>
-                  setForm({ ...form, serviceType: e.target.value })
-                }
-              />
-              <Input
-                label="Service Category"
-                icon={<FiTag />}
-                name="serviceCategory"
-                value={form.serviceCategory}
-                onChange={(e) =>
-                  setForm({ ...form, serviceCategory: e.target.value })
-                }
-              />
-              <Input
-                label="Service Sub-Category"
-                icon={<FiTag />}
-                name="serviceSubCategory"
-                value={form.serviceSubCategory}
-                onChange={(e) =>
-                  setForm({ ...form, serviceSubCategory: e.target.value })
-                }
-              />
-              <Input
-                label="Vehicle"
-                icon={<FiTag />}
-                name="vehicle"
-                value={form.vehicle}
-                onChange={(e) => setForm({ ...form, vehicle: e.target.value })}
-              />
-              <Input
-                label="Mechanic"
-                icon={<FiUser />}
-                name="mechanic"
-                value={form.mechanic}
-                onChange={(e) => setForm({ ...form, mechanic: e.target.value })}
-              />
-            </div>
-
-            <div className="md:col-span-2 mt-4">
-              <div>
-                <label className="block font-semibold mb-2 flex items-center gap-2">
-                  <FiFileText /> Service Notes
-                </label>
-                <textarea
-                  name="serviceNotes"
-                  value={form.serviceNotes}
-                  onChange={(e) =>
-                    setForm({ ...form, serviceNotes: e.target.value })
-                  }
-                  rows={3}
-                  className={`w-full p-3 rounded-lg border resize-none ${
-                    isDark
-                      ? "bg-gray-700 border-gray-600"
-                      : "bg-gray-50 border-gray-300"
-                  }`}
-                />
-              </div>
-            </div>
-          </div>
-
-          {/* Cost Breakdown */}
-          <div
-            className={`rounded-xl shadow-lg p-6 ${
-              isDark ? "bg-gray-800" : "bg-white"
-            }`}
-          >
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-xl font-bold">Cost Breakdown</h2>
-              <span className="text-sm text-gray-500">
-                Total: ₹{calculateGrandTotal(form.costItems).toFixed(2)}
-              </span>
-            </div>
-
-            <div className="space-y-4">
-              {form.costItems.map((row, i) => {
-                const itemTotal = calculateRowTotal(row);
-
-                return (
-                  <div
-                    key={i}
-                    className={`rounded-lg border p-4 ${
-                      isDark
-                        ? "bg-gray-900 border-gray-700"
-                        : "bg-gray-50 border-gray-200"
-                    }`}
-                  >
-                    <div className="grid grid-cols-1 md:grid-cols-6 gap-4">
-                      {/* Type */}
-                      <div>
-                        <label className="block text-sm font-medium mb-1">
-                          Type
-                        </label>
-                        <select
-                          value={row.type}
-                          onChange={(e) =>
-                            updateCostItem(i, "type", e.target.value)
-                          }
-                          className={`w-full p-2 border rounded-lg ${
-                            isDark
-                              ? "bg-gray-700 border-gray-600 text-white"
-                              : "bg-white border-gray-300"
-                          }`}
-                        >
-                          <option value="part">Part</option>
-                          <option value="labor">Labor</option>
-                        </select>
-                      </div>
-
-                      {/* Name or Mechanic */}
-                      <div>
-                        <label className="block text-sm font-medium mb-1">
-                          {row.type === "part" ? "Part Name" : "Mechanic"}
-                        </label>
-                        <input
-                          value={row.name}
-                          onChange={(e) =>
-                            updateCostItem(i, "name", e.target.value)
-                          }
-                          placeholder={
-                            row.type === "part" ? "Head Light" : "Mechanic name"
-                          }
-                          className={`w-full p-2 border rounded-lg ${
-                            isDark
-                              ? "bg-gray-700 border-gray-600 text-white"
-                              : "bg-white border-gray-300"
-                          }`}
-                        />
-                      </div>
-
-                      {/* Quantity */}
-                      <div>
-                        <label className="block text-sm font-medium mb-1">
-                          {row.type === "part" ? "Quantity" : "Total Labors"}
-                        </label>
-                        <input
-                          type="number"
-                          value={row.quantity}
-                          onChange={(e) =>
-                            updateCostItem(i, "quantity", e.target.value)
-                          }
-                          className={`w-full p-2 border rounded-lg ${
-                            isDark
-                              ? "bg-gray-700 border-gray-600 text-white"
-                              : "bg-white border-gray-300"
-                          }`}
-                        />
-                      </div>
-
-                      {/* Unit Price */}
-                      <div>
-                        <label className="block text-sm font-medium mb-1">
-                          {row.type === "part" ? "Unit Price" : "Labor Cost"}{" "}
-                          (₹)
-                        </label>
-                        <input
-                          type="number"
-                          value={row.unitPrice}
-                          onChange={(e) =>
-                            updateCostItem(i, "unitPrice", e.target.value)
-                          }
-                          className={`w-full p-2 border rounded-lg ${
-                            isDark
-                              ? "bg-gray-700 border-gray-600 text-white"
-                              : "bg-white border-gray-300"
-                          }`}
-                        />
-                      </div>
-
-                      {/* CGST */}
-                      <div>
-                        <label className="block text-sm font-medium mb-1">
-                          CGST (%)
-                        </label>
-                        <input
-                          type="number"
-                          value={row.cgstRate}
-                          onChange={(e) =>
-                            updateCostItem(i, "cgstRate", e.target.value)
-                          }
-                          className={`w-full p-2 border rounded-lg ${
-                            isDark
-                              ? "bg-gray-700 border-gray-600 text-white"
-                              : "bg-white border-gray-300"
-                          }`}
-                        />
-                      </div>
-
-                      {/* SGST */}
-                      <div>
-                        <label className="block text-sm font-medium mb-1">
-                          SGST (%)
-                        </label>
-                        <input
-                          type="number"
-                          value={row.sgstRate}
-                          onChange={(e) =>
-                            updateCostItem(i, "sgstRate", e.target.value)
-                          }
-                          className={`w-full p-2 border rounded-lg ${
-                            isDark
-                              ? "bg-gray-700 border-gray-600 text-white"
-                              : "bg-white border-gray-300"
-                          }`}
-                        />
-                      </div>
-                    </div>
-
-                    <div className="flex justify-between mt-3 pt-3 border-t border-gray-200 dark:border-gray-700">
-                      <span className="font-medium">Total</span>
-                      <span className="font-bold text-green-600">
-                        ₹{itemTotal.toFixed(2)}
-                      </span>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-
-            <div className="mt-4">
-              <button
-                type="button"
-                onClick={addCostItem}
-                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-semibold"
-              >
-                <FiPlus /> Add Cost Item
-              </button>
-            </div>
-          </div>
-
-          {/* Payment Details */}
-          <div
-            className={`rounded-xl shadow-lg p-6 ${
-              isDark ? "bg-gray-800" : "bg-white"
-            }`}
-          >
-            <h2 className="text-xl font-bold mb-4">Payment Details</h2>
-
-            <div className="grid md:grid-cols-2 gap-6">
-              <div>
-                <label className="block font-semibold mb-2 flex items-center gap-2">
-                  <MdOutlineCurrencyRupee /> Discount
-                </label>
-                <input
-                  type="number"
-                  name="discounts"
-                  value={form.discounts}
-                  onChange={(e) =>
-                    setForm({ ...form, discounts: e.target.value })
-                  }
-                  className={`w-full p-3 rounded-lg border ${
-                    isDark
-                      ? "bg-gray-700 border-gray-600"
-                      : "bg-gray-50 border-gray-300"
-                  }`}
-                  placeholder="0.00"
-                />
-              </div>
-            </div>
-
-            <div className="grid md:grid-cols-3 gap-6 mt-4">
-              <div>
-                <label className="block font-semibold mb-2 flex items-center gap-2">
-                  <FiCreditCard /> Payment Mode
-                </label>
-                <select
-                  name="paymentMode"
-                  value={form.paymentMode}
-                  onChange={(e) =>
-                    setForm({ ...form, paymentMode: e.target.value })
-                  }
-                  className={`w-full p-3 rounded-lg border ${
-                    isDark
-                      ? "bg-gray-700 border-gray-600"
-                      : "bg-gray-50 border-gray-300"
-                  }`}
-                >
-                  <option value="">Select Payment Mode</option>
-                  <option value="Cash">Cash</option>
-                  <option value="Card">Card</option>
-                  <option value="UPI">UPI</option>
-                  <option value="Bank Transfer">Bank Transfer</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block font-semibold mb-2 flex items-center gap-2">
-                  <FiCheckCircle /> Payment Status
-                </label>
-                <select
-                  name="status"
-                  value={form.status}
-                  onChange={(e) => setForm({ ...form, status: e.target.value })}
-                  className={`w-full p-3 rounded-lg border ${
-                    isDark
-                      ? "bg-gray-700 border-gray-600"
-                      : "bg-gray-50 border-gray-300"
-                  }`}
-                >
-                  <option value="Pending">Pending</option>
-                  <option value="Paid">Paid</option>
-                  <option value="Partially Paid">Partially Paid</option>
-                  <option value="Overdue">Overdue</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block font-semibold mb-2 flex items-center gap-2">
-                  <FiCalendar /> Due Date
-                </label>
-                <input
-                  type="date"
-                  name="dueDate"
-                  value={form.dueDate}
-                  onChange={(e) =>
-                    setForm({ ...form, dueDate: e.target.value })
-                  }
-                  className={`w-full p-3 rounded-lg border ${
-                    isDark
-                      ? "bg-gray-700 border-gray-600"
-                      : "bg-gray-50 border-gray-300"
-                  }`}
-                />
-              </div>
-            </div>
-          </div>
-
-          {/* Grand Total Calculation Display */}
-          <div
-            className={`rounded-xl shadow-lg p-6 ${
-              isDark
-                ? "bg-gradient-to-r from-gray-700 to-gray-600"
-                : "bg-gradient-to-r from-gray-50 to-gray-100"
-            }`}
-          >
-            <div className="flex items-center justify-between">
-              <div className="w-full">
-                <h3 className="text-lg font-semibold mb-4">
-                  Grand Total Calculation
-                </h3>
-
-                <div className="space-y-2 text-sm">
-                  {taxBreakdown.partsAmount > 0 && (
-                    <>
-                      <div className="flex justify-between">
-                        <span>
-                          CGST(Parts) @{" "}
-                          {taxBreakdown.partsCgst > 0
-                            ? (
-                                (taxBreakdown.partsCgst /
-                                  taxBreakdown.partsAmount) *
-                                100
-                              ).toFixed(2)
-                            : 0}
-                          % on Amount {taxBreakdown.partsAmount.toFixed(2)}
-                        </span>
-                        <span>₹{taxBreakdown.partsCgst.toFixed(2)}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span>
-                          SGST(Parts) @{" "}
-                          {taxBreakdown.partsSgst > 0
-                            ? (
-                                (taxBreakdown.partsSgst /
-                                  taxBreakdown.partsAmount) *
-                                100
-                              ).toFixed(2)
-                            : 0}
-                          % on Amount {taxBreakdown.partsAmount.toFixed(2)}
-                        </span>
-                        <span>₹{taxBreakdown.partsSgst.toFixed(2)}</span>
-                      </div>
-                    </>
-                  )}
-
-                  {taxBreakdown.laborAmount > 0 && (
-                    <>
-                      <div className="flex justify-between">
-                        <span>
-                          CGST(Labor) @{" "}
-                          {taxBreakdown.laborCgst > 0
-                            ? (
-                                (taxBreakdown.laborCgst /
-                                  taxBreakdown.laborAmount) *
-                                100
-                              ).toFixed(2)
-                            : 0}
-                          % on Amount {taxBreakdown.laborAmount.toFixed(2)}
-                        </span>
-                        <span>₹{taxBreakdown.laborCgst.toFixed(2)}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span>
-                          SGST(Labor) @{" "}
-                          {taxBreakdown.laborSgst > 0
-                            ? (
-                                (taxBreakdown.laborSgst /
-                                  taxBreakdown.laborAmount) *
-                                100
-                              ).toFixed(2)
-                            : 0}
-                          % on Amount {taxBreakdown.laborAmount.toFixed(2)}
-                        </span>
-                        <span>₹{taxBreakdown.laborSgst.toFixed(2)}</span>
-                      </div>
-                    </>
-                  )}
-
-                  <div className="border-t pt-2 flex justify-between font-medium dark:border-gray-600">
-                    <span>Net Amount</span>
-                    <span>₹{form.netAmount.toFixed(2)}</span>
-                  </div>
-
-                  <div className="flex justify-between">
-                    <span>Discount</span>
-                    <span>- ₹{form.discountAmount.toFixed(2)}</span>
-                  </div>
-
-                  <div className="border-t pt-2 flex justify-between font-medium dark:border-gray-600">
-                    <span>Amount After Discount</span>
-                    <span>₹{form.amountAfterDiscount.toFixed(2)}</span>
-                  </div>
-
-                  <div className="flex justify-between">
-                    <span>Round off</span>
-                    <span>- ₹{form.roundOffAmount.toFixed(2)}</span>
-                  </div>
-
-                  <div className="border-t pt-2 flex justify-between font-bold text-lg dark:border-gray-600">
-                    <span>Amount Payable</span>
-                    <span className="text-green-500">
-                      ₹{form.roundedAmount.toFixed(2)}
-                    </span>
-                  </div>
-
-                  <div className="border-t pt-2 flex justify-between font-bold dark:border-gray-600">
-                    <span>Total Amount (In figure)</span>
-                    <span>₹{form.roundedAmount.toFixed(2)}</span>
-                  </div>
-
-                  <div className="border-t pt-2 flex justify-between font-bold dark:border-gray-600">
-                    <span>Total Amount (In Words)</span>
-                    <span>{numberToWords(Math.round(form.roundedAmount))}</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Notes */}
-          <div
-            className={`rounded-xl shadow-lg p-6 ${
-              isDark ? "bg-gray-800" : "bg-white"
-            }`}
-          >
-            <h2 className="text-xl font-bold mb-4">Additional Notes</h2>
-            <textarea
-              name="notes"
-              value={form.notes}
-              onChange={(e) => setForm({ ...form, notes: e.target.value })}
-              rows={3}
-              className={`w-full p-3 rounded-lg border resize-none ${
-                isDark
-                  ? "bg-gray-700 border-gray-600"
-                  : "bg-gray-50 border-gray-300"
-              }`}
+          <div>
+            <FieldLabel label="Discount (₹)" isDark={isDark} />
+            <input
+              type="number"
+              min="0"
+              inputMode="decimal"
+              value={form.discounts}
+              onChange={(e) => set({ discounts: e.target.value })}
+              placeholder="0.00"
+              className={smallInput}
             />
           </div>
-
-          {/* Actions */}
-          <div className="flex justify-end gap-4">
-            <button
-              type="button"
-              onClick={() => navigate(-1)}
-              className="px-6 py-3 border border-gray-300 rounded-lg hover:bg-gray-100 font-medium transition-colors"
-            >
-              Cancel
-            </button>
-
-            <button
-              type="button"
-              onClick={() =>
-                navigate("/billing/preview", {
-                  state: {
-                    invoiceDraft: {
-                      ...form,
-                      client: selectedClient || null,
-                      userProfile,
-                    },
-                  },
-                })
-              }
-              className="px-6 py-3 bg-gray-600 text-white rounded-lg hover:bg-gray-700 font-medium transition-colors"
-            >
-              Preview Invoice
-            </button>
-
-            <button
-              type="submit"
-              disabled={loading}
-              className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-semibold transition-colors shadow-md"
-            >
-              {loading
-                ? "Processing..."
-                : isEditMode
-                  ? "Update Invoice"
-                  : "Create Invoice"}
-            </button>
+          <div className="flex justify-between">
+            <span className={t.muted}>After discount</span>
+            <span className={`font-bold ${t.heading}`}>
+              {money(tot.amountAfterDiscount)}
+            </span>
           </div>
-        </form>
+          <div className="flex justify-between">
+            <span className={t.muted}>Round off</span>
+            <span className={`font-bold ${t.heading}`}>
+              − {money(tot.roundOffAmount)}
+            </span>
+          </div>
+        </div>
+        <div className={`rounded-xl border-2 p-3 ${t.inner}`}>
+          <div className="flex items-end justify-between">
+            <span className="text-[12px] font-black uppercase tracking-[0.2em] text-slate-400">
+              Payable
+            </span>
+            <span className={`text-[16px] font-black ${t.heading}`}>
+              {money(tot.roundedAmount)}
+            </span>
+          </div>
+          <p className={`mt-1 text-[12px] italic ${t.muted}`}>
+            Rupees {numberToWords(tot.roundedAmount)}
+          </p>
+        </div>
+        <div className="hidden flex-col gap-2 lg:flex">
+          <button
+            type="button"
+            onClick={openPreview}
+            className={`${btnBase} h-11 border-2 ${t.btnGhost}`}
+          >
+            <FiEye size={14} /> Preview proforma
+          </button>
+          <button
+            type="submit"
+            disabled={loading}
+            className={`${btnBase} h-11 ${t.btnPrimary} shadow-xl`}
+          >
+            {loading ? (
+              <FiLoader size={14} className="animate-spin" />
+            ) : (
+              <FiSave size={14} />
+            )}
+            {loading
+              ? "Saving…"
+              : isEditMode
+                ? "Update invoice"
+                : "Create invoice"}
+          </button>
+        </div>
       </div>
     </div>
   );
-}
-
-/* =========================
-   Input Component
-========================= */
-
-function Input({
-  label,
-  icon,
-  type = "text",
-  value,
-  onChange,
-  readOnly = false,
-  name,
-}) {
-  const { isDark } = useTheme();
 
   return (
-    <div>
-      <label className="block font-semibold mb-2 flex items-center gap-2 text-sm">
-        {icon} {label}
-      </label>
-      <input
-        type={type}
-        name={name}
-        value={value}
-        onChange={onChange}
-        readOnly={readOnly}
-        className={`w-full p-3 rounded-lg border text-sm ${
-          isDark
-            ? "bg-gray-700 border-gray-600 text-white"
-            : "bg-gray-50 border-gray-300 text-gray-900"
-        } outline-none`}
+    <div className="min-h-screen lg:ml-16" ref={topRef}>
+      <Toaster
+        position="top-right"
+        toastOptions={{ style: { fontSize: 14 } }}
       />
+      <form
+        ref={formRef}
+        onSubmit={handleSubmit}
+        className="mx-auto max-w-7xl space-y-4 pb-28 sm:space-y-5 lg:pb-8"
+      >
+        <div className="space-y-3">
+          <Link
+            to="/billing"
+            className={`inline-flex items-center gap-1.5 text-[12px] font-black uppercase tracking-[0.15em] ${t.muted} ${
+              isDark ? "hover:text-white" : "hover:text-[#001F3F]"
+            }`}
+          >
+            <FiArrowLeft size={14} /> Billing
+          </Link>
+          <PageHeading
+            isDark={isDark}
+            badge={
+              isEditMode
+                ? "Editing invoice"
+                : serviceId
+                  ? `From service #${serviceId}`
+                  : "New invoice"
+            }
+            title={isEditMode ? "Edit" : "Create"}
+            accent="invoice."
+            subtitle={
+              clientObj
+                ? `Invoice for ${clientObj.fullName}`
+                : "Pick the customer, check the items, then generate."
+            }
+          />
+        </div>
+
+        {error && (
+          <div className="flex items-start justify-between gap-3 rounded-xl border-2 border-red-500/30 bg-red-500/10 px-4 py-3 text-[14px] font-semibold text-red-500">
+            <span className="flex items-start gap-2">
+              <FiAlertCircle size={16} className="mt-0.5 shrink-0" /> {error}
+            </span>
+            <button
+              type="button"
+              onClick={() => setError(null)}
+              aria-label="Dismiss"
+            >
+              <FiX size={14} />
+            </button>
+          </div>
+        )}
+
+        <div className="grid grid-cols-1 gap-4 sm:gap-5 lg:grid-cols-[minmax(0,1fr)_340px]">
+          <div className="min-w-0 space-y-4 sm:space-y-5">
+            {/* 01 invoice & customer */}
+            <SectionCard
+              isDark={isDark}
+              icon={FiFileText}
+              step="01"
+              title="Invoice & customer"
+              subtitle="Number, date and who is paying"
+            >
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <div>
+                  <FieldLabel
+                    icon={<FiHash size={12} />}
+                    label="Invoice number"
+                    isDark={isDark}
+                  />
+                  <input
+                    value={form.invoiceNumber}
+                    readOnly
+                    className={`${inputCls} cursor-default font-mono opacity-80`}
+                  />
+                </div>
+                <div>
+                  <FieldLabel
+                    icon={<FiCalendar size={12} />}
+                    label="Invoice date"
+                    isDark={isDark}
+                  />
+                  <input
+                    type="date"
+                    value={form.date}
+                    onChange={(e) => set({ date: e.target.value })}
+                    className={inputCls}
+                  />
+                </div>
+              </div>
+
+              <div className="mt-4">
+                {clientObj ? (
+                  <div
+                    className={`flex flex-wrap items-center gap-3 rounded-xl border-2 p-3 ${t.inner}`}
+                  >
+                    <div
+                      className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-[16px] font-black ${t.chipNavy}`}
+                    >
+                      {clientObj.fullName?.charAt(0)?.toUpperCase() || "C"}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p
+                        className={`truncate text-[14px] font-black ${t.heading}`}
+                      >
+                        {clientObj.fullName}
+                      </p>
+                      <p className={`truncate text-[12px] ${t.muted}`}>
+                        {[clientObj.vehicleMake, clientObj.vehicleModel]
+                          .filter(Boolean)
+                          .join(" ") || "Vehicle"}
+                        {clientObj.phone ? ` · ${clientObj.phone}` : ""}
+                      </p>
+                    </div>
+                    <Plate value={clientObj.regNumber} />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        set({ customerId: "" });
+                        setClientObj(null);
+                        setClientOpen(true);
+                      }}
+                      className={`${btnBase} h-9 border-2 px-3 ${t.btnGhost}`}
+                    >
+                      Change
+                    </button>
+                  </div>
+                ) : (
+                  <div className="relative" ref={clientBoxRef}>
+                    <FieldLabel
+                      icon={<FiUser size={12} />}
+                      label="Customer"
+                      required
+                      isDark={isDark}
+                    />
+                    <div className="relative">
+                      <FiSearch
+                        className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400"
+                        size={16}
+                      />
+                      <input
+                        value={clientQuery}
+                        onChange={(e) => {
+                          setClientQuery(e.target.value);
+                          setClientOpen(true);
+                        }}
+                        onFocus={() => setClientOpen(true)}
+                        placeholder="Search by name, reg number or phone"
+                        autoComplete="off"
+                        className={`${inputCls} pl-10`}
+                      />
+                    </div>
+                    {clientOpen && (
+                      <div
+                        className={`absolute z-40 mt-1 max-h-64 w-full overflow-y-auto rounded-xl border-2 shadow-2xl ${t.menu}`}
+                      >
+                        {clientResults.length ? (
+                          clientResults.map((c) => (
+                            <button
+                              type="button"
+                              key={c.id}
+                              onMouseDown={(e) => e.preventDefault()}
+                              onClick={() => {
+                                set({
+                                  customerId: c.id,
+                                  vehicle:
+                                    form.vehicle ||
+                                    [c.vehicleMake, c.vehicleModel]
+                                      .filter(Boolean)
+                                      .join(" "),
+                                });
+                                setClientObj(c);
+                                setClientQuery("");
+                                setClientOpen(false);
+                              }}
+                              className={`flex w-full items-center justify-between gap-2 px-3 py-2.5 text-left text-[14px] ${t.option}`}
+                            >
+                              <span className="min-w-0">
+                                <span className="block truncate font-bold">
+                                  {c.fullName}
+                                </span>
+                                <span
+                                  className={`block truncate text-[12px] ${t.muted}`}
+                                >
+                                  {[c.vehicleMake, c.vehicleModel]
+                                    .filter(Boolean)
+                                    .join(" ")}
+                                  {c.phone ? ` · ${c.phone}` : ""}
+                                </span>
+                              </span>
+                              <Plate value={c.regNumber} size="sm" />
+                            </button>
+                          ))
+                        ) : (
+                          <div className={`px-3 py-3 text-[14px] ${t.muted}`}>
+                            No customer found.{" "}
+                            <Link
+                              to="/clients/new"
+                              className="font-bold underline"
+                            >
+                              Add new client
+                            </Link>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </SectionCard>
+
+            {/* 02 service details */}
+            <SectionCard
+              isDark={isDark}
+              icon={FiTool}
+              step="02"
+              title="Service details"
+              subtitle="What shows on the invoice header"
+            >
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                {[
+                  ["serviceType", "Service type", "e.g. General service"],
+                  ["serviceCategory", "Category", "e.g. Periodic maintenance"],
+                  [
+                    "serviceSubCategory",
+                    "Work included",
+                    "e.g. Oil change, alignment",
+                  ],
+                  ["vehicle", "Vehicle", "Make & model"],
+                  ["mechanic", "Mechanic", "Who did the work"],
+                ].map(([key, lbl, ph]) => (
+                  <div key={key}>
+                    <FieldLabel label={lbl} isDark={isDark} />
+                    <input
+                      value={form[key] || ""}
+                      onChange={(e) => set({ [key]: e.target.value })}
+                      placeholder={ph}
+                      className={inputCls}
+                    />
+                  </div>
+                ))}
+              </div>
+              <div className="mt-4">
+                <FieldLabel label="Service notes" isDark={isDark} />
+                <textarea
+                  rows={3}
+                  value={form.serviceNotes}
+                  onChange={(e) => set({ serviceNotes: e.target.value })}
+                  className={textArea}
+                />
+              </div>
+            </SectionCard>
+
+            {/* 03 items */}
+            <SectionCard
+              isDark={isDark}
+              icon={FiPackage}
+              step="03"
+              title="Parts & labour"
+              subtitle="Items billed on this invoice"
+              right={
+                <span className={`text-[12px] font-bold ${t.muted}`}>
+                  {money(tot.netAmount)}
+                </span>
+              }
+            >
+              {form.costItems.length > 0 && (
+                <div className="mb-2 hidden grid-cols-12 gap-2 px-1 text-[12px] font-black uppercase tracking-wider text-slate-400 xl:grid">
+                  <span className="col-span-2">Type</span>
+                  <span className="col-span-4">Item</span>
+                  <span className="col-span-1">Qty</span>
+                  <span className="col-span-2">Price</span>
+                  <span className="col-span-1">CGST%</span>
+                  <span className="col-span-1">SGST%</span>
+                  <span className="col-span-1 text-right">Total</span>
+                </div>
+              )}
+
+              <div className="space-y-2">
+                {form.costItems.length === 0 && (
+                  <div
+                    className={`rounded-xl border-2 border-dashed px-4 py-8 text-center text-[14px] ${t.inner} ${t.muted}`}
+                  >
+                    No items yet — add a part or labour below.
+                  </div>
+                )}
+                {form.costItems.map((row, i) => (
+                  <div
+                    key={i}
+                    className={`rounded-xl border-2 p-3 xl:p-2 ${t.inner}`}
+                  >
+                    <div className="grid grid-cols-6 gap-2 xl:grid-cols-12 xl:items-start">
+                      <div className="col-span-4 xl:col-span-2">
+                        {label("Type")}
+                        <div
+                          className={`flex h-10 rounded-xl border-2 p-1 ${isDark ? "border-white/10" : "border-[#CBD5E1] bg-white"}`}
+                        >
+                          <button
+                            type="button"
+                            className={seg(row.type !== "labor")}
+                            onClick={() => updateCostItem(i, { type: "part" })}
+                          >
+                            Part
+                          </button>
+                          <button
+                            type="button"
+                            className={seg(row.type === "labor")}
+                            onClick={() => updateCostItem(i, { type: "labor" })}
+                          >
+                            Labour
+                          </button>
+                        </div>
+                      </div>
+                      <div className="col-span-2 flex justify-end xl:hidden">
+                        <button
+                          type="button"
+                          onClick={() => removeCostItem(i)}
+                          aria-label="Remove item"
+                          className="mt-5 flex h-10 w-10 items-center justify-center rounded-xl border-2 border-red-500/30 text-red-500 hover:bg-red-500/10"
+                        >
+                          <FiTrash2 size={14} />
+                        </button>
+                      </div>
+                      <div className="col-span-6 xl:col-span-4">
+                        {label(
+                          row.type === "labor" ? "Labour / mechanic" : "Part",
+                        )}
+                        {row.type === "labor" ? (
+                          <input
+                            value={row.name}
+                            onChange={(e) =>
+                              updateCostItem(i, { name: e.target.value })
+                            }
+                            placeholder="e.g. Engine labour"
+                            className={smallInput}
+                          />
+                        ) : (
+                          <PartAutocomplete
+                            value={row.name}
+                            isDark={isDark}
+                            inventory={inventory}
+                            selectedCode={row.itemCode}
+                            onTextChange={(text) =>
+                              updateCostItem(i, { name: text, itemCode: null })
+                            }
+                            onSelect={(item) =>
+                              updateCostItem(i, {
+                                name: item.itemName,
+                                unitPrice: item.sellingPrice ?? "",
+                                itemCode: item.itemCode,
+                              })
+                            }
+                          />
+                        )}
+                      </div>
+                      <div className="col-span-2 xl:col-span-1">
+                        {label("Qty")}
+                        <input
+                          type="number"
+                          min="1"
+                          inputMode="numeric"
+                          value={row.quantity}
+                          onChange={(e) =>
+                            updateCostItem(i, { quantity: e.target.value })
+                          }
+                          className={smallInput}
+                        />
+                      </div>
+                      <div className="col-span-4 xl:col-span-2">
+                        {label("Unit price")}
+                        <input
+                          type="number"
+                          min="0"
+                          inputMode="decimal"
+                          placeholder="0.00"
+                          value={row.unitPrice}
+                          onChange={(e) =>
+                            updateCostItem(i, { unitPrice: e.target.value })
+                          }
+                          className={smallInput}
+                        />
+                      </div>
+                      <div className="col-span-2 xl:col-span-1">
+                        {label("CGST %")}
+                        <input
+                          type="number"
+                          min="0"
+                          inputMode="decimal"
+                          placeholder="0"
+                          value={row.cgstRate}
+                          onChange={(e) =>
+                            updateCostItem(i, { cgstRate: e.target.value })
+                          }
+                          className={smallInput}
+                        />
+                      </div>
+                      <div className="col-span-2 xl:col-span-1">
+                        {label("SGST %")}
+                        <input
+                          type="number"
+                          min="0"
+                          inputMode="decimal"
+                          placeholder="0"
+                          value={row.sgstRate}
+                          onChange={(e) =>
+                            updateCostItem(i, { sgstRate: e.target.value })
+                          }
+                          className={smallInput}
+                        />
+                      </div>
+                      <div className="col-span-2 flex items-center justify-end gap-1 xl:col-span-1 xl:h-10">
+                        <div className="text-right">
+                          <span className="block text-[12px] font-bold uppercase tracking-wider text-slate-400 xl:hidden">
+                            Total
+                          </span>
+                          <span
+                            className={`text-[14px] font-black ${t.heading}`}
+                          >
+                            {money(rowTotal(row))}
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => removeCostItem(i)}
+                          aria-label="Remove item"
+                          className="ml-1 hidden h-8 w-8 shrink-0 items-center justify-center rounded-lg text-red-500 hover:bg-red-500/10 xl:flex"
+                        >
+                          <FiTrash2 size={14} />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => addCostItem("part")}
+                  className={`${btnBase} h-9 px-3 ${t.btnPrimary}`}
+                >
+                  <FiPlus size={14} /> Add part
+                </button>
+                <button
+                  type="button"
+                  onClick={() => addCostItem("labor")}
+                  className={`${btnBase} h-9 border-2 px-3 ${t.btnGhost}`}
+                >
+                  <FiPlus size={14} /> Add labour
+                </button>
+              </div>
+            </SectionCard>
+
+            {/* 04 payment */}
+            <SectionCard
+              isDark={isDark}
+              icon={FiCreditCard}
+              step="04"
+              title="Payment"
+              subtitle="Mode, status and due date"
+            >
+              <div className="space-y-4">
+                <div>
+                  <FieldLabel label="Payment mode" isDark={isDark} />
+                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                    {["Cash", "Card", "UPI", "Bank Transfer"].map((m) => (
+                      <button
+                        key={m}
+                        type="button"
+                        onClick={() =>
+                          set({ paymentMode: form.paymentMode === m ? "" : m })
+                        }
+                        className={`h-10 rounded-xl border-2 text-[12px] font-black uppercase tracking-wider transition ${
+                          form.paymentMode === m
+                            ? `border-transparent ${t.chipNavy}`
+                            : t.btnGhost
+                        }`}
+                      >
+                        {m}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <div>
+                    <FieldLabel label="Payment status" isDark={isDark} />
+                    <select
+                      value={form.status}
+                      onChange={(e) => set({ status: e.target.value })}
+                      className={`${inputCls} cursor-pointer`}
+                    >
+                      <option value="Pending">Pending</option>
+                      <option value="Paid">Paid</option>
+                      <option value="Partially Paid">Partially paid</option>
+                      <option value="Overdue">Overdue</option>
+                    </select>
+                  </div>
+                  <div>
+                    <FieldLabel label="Due date" isDark={isDark} />
+                    <input
+                      type="date"
+                      value={form.dueDate}
+                      min={form.date || undefined}
+                      onChange={(e) => set({ dueDate: e.target.value })}
+                      className={inputCls}
+                    />
+                  </div>
+                </div>
+                <div>
+                  <FieldLabel
+                    icon={<FiEdit3 size={12} />}
+                    label="Notes on invoice"
+                    isDark={isDark}
+                  />
+                  <textarea
+                    rows={3}
+                    value={form.notes}
+                    onChange={(e) => set({ notes: e.target.value })}
+                    placeholder="Warranty, thank-you note, bank details…"
+                    className={textArea}
+                  />
+                </div>
+              </div>
+            </SectionCard>
+
+            <div className="lg:hidden">{summary}</div>
+          </div>
+
+          <aside className="hidden lg:block">
+            <div className="sticky top-20">{summary}</div>
+          </aside>
+        </div>
+
+        {/* sticky bar – phone/tablet */}
+        <div
+          className={`fixed inset-x-0 z-30 border-t-2 p-3 backdrop-blur lg:hidden ${isDark ? "border-white/5 bg-[#000814]/95" : "border-[#CBD5E1] bg-white/95"}`}
+          style={{ bottom: "calc(66px + env(safe-area-inset-bottom))" }}
+        >
+          <div className="mx-auto flex max-w-xl items-center gap-2">
+            <div className="min-w-0 flex-1">
+              <p className="text-[12px] font-bold uppercase tracking-wider text-slate-400">
+                Payable
+              </p>
+              <p className={`truncate text-[16px] font-black ${t.heading}`}>
+                {money(tot.roundedAmount)}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={openPreview}
+              className={`${btnBase} h-11 border-2 px-3 ${t.btnGhost}`}
+              aria-label="Preview"
+            >
+              <FiEye size={14} />
+            </button>
+            <button
+              type="submit"
+              disabled={loading}
+              className={`${btnBase} h-11 px-4 ${t.btnPrimary} shadow-xl`}
+            >
+              {loading ? (
+                <FiLoader size={14} className="animate-spin" />
+              ) : (
+                <FiSave size={14} />
+              )}
+              {loading ? "Saving…" : isEditMode ? "Update" : "Create"}
+            </button>
+          </div>
+        </div>
+      </form>
     </div>
   );
 }

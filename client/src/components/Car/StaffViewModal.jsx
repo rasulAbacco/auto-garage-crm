@@ -1,225 +1,260 @@
-// StaffViewModal.jsx
+// client/src/components/Car/StaffViewModal.jsx
 import React from "react";
-import { X, TrendingUp, TrendingDown, User, Briefcase } from "lucide-react";
+import {
+  TrendingUp,
+  TrendingDown,
+  Briefcase,
+  Phone,
+  Mail,
+  Calendar,
+  Edit3,
+  CheckCircle2,
+  ShieldAlert,
+  UserX,
+  User,
+} from "lucide-react";
 import { useTheme } from "../../contexts/ThemeContext";
+import {
+  tk,
+  btnBase,
+  Modal,
+  Avatar,
+  fmtDate,
+  inr,
+  n,
+  staffCode,
+} from "./staffUi";
 
-export default function StaffViewModal({ staff, onClose }) {
+export default function StaffViewModal({ staff, onClose, onEdit }) {
   const { isDark } = useTheme();
+  const t = tk(isDark);
 
-  // =========================
-  // ESTIMATED CALCULATIONS
-  // (NO MONTHLY DATA HERE)
-  // =========================
-  const baseSalary = staff.baseSalary || 0;
-  const bonusDefault = staff.bonusDefault || 0;
-  const extraDeductionsDefault = staff.extraDeductionsDefault || 0;
-  const advanceAmount = staff.advanceAmount || 0; // Fallback to 0 if not present
+  // Estimated from the staff defaults (no monthly data here)
+  const baseSalary = n(staff.baseSalary);
+  const bonusDefault = n(staff.bonusDefault);
+  const extraDeductionsDefault = n(staff.extraDeductionsDefault);
+  const advanceAmount = n(staff.advanceAmount);
+  const deductionPerLeave = n(staff.deductionPerLeave);
 
   const totalEarnings = baseSalary + bonusDefault;
   const totalDeductions = extraDeductionsDefault;
   const estimatedNetSalary = totalEarnings - totalDeductions;
   const yearlyProjection = estimatedNetSalary * 12;
 
-  // Helper row
-  const DetailRow = ({
-    label,
-    value,
-    isNegative = false,
-    highlightColor = "",
-  }) => (
-    <div className="flex justify-between items-center py-2 border-b border-dashed border-slate-200 dark:border-slate-700 last:border-0">
+  const Row = ({ label, value, tone }) => (
+    <div
+      className={`flex items-center justify-between gap-3 border-b border-dashed py-2 last:border-0 ${t.line}`}
+    >
+      <span className={`text-[14px] ${t.muted}`}>{label}</span>
       <span
-        className={`text-sm ${isDark ? "text-slate-400" : "text-slate-500"}`}
-      >
-        {label}
-      </span>
-      <span
-        className={`text-sm font-medium ${
-          highlightColor
-            ? highlightColor
-            : isNegative
-              ? isDark
-                ? "text-rose-400"
-                : "text-rose-600"
-              : isDark
-                ? "text-slate-100"
-                : "text-slate-900"
+        className={`font-mono text-[14px] font-bold ${
+          tone === "neg"
+            ? "text-red-500"
+            : tone === "warn"
+              ? "text-amber-500"
+              : t.heading
         }`}
       >
-        {isNegative ? "- " : ""}₹{value.toLocaleString()}
+        {value}
       </span>
     </div>
   );
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-      <div
-        className={`w-full max-w-2xl rounded-2xl shadow-2xl border overflow-hidden flex flex-col max-h-[90vh] ${
-          isDark ? "bg-slate-900 border-slate-800" : "bg-white border-slate-200"
-        }`}
-      >
-        {/* Header */}
-        <div
-          className={`relative p-6 border-b ${
-            isDark
-              ? "bg-slate-800/50 border-slate-800"
-              : "bg-slate-50 border-slate-100"
-          }`}
-        >
-          <button
-            onClick={onClose}
-            className={`absolute top-4 right-4 p-2 rounded-full ${
-              isDark
-                ? "text-slate-400 hover:bg-slate-700"
-                : "text-slate-400 hover:bg-white"
-            }`}
+  const login = staff.login;
+  const accessPill = !login ? (
+    <span
+      className={`inline-flex items-center gap-1 rounded-lg border px-2 py-0.5 text-[12px] font-black uppercase tracking-wider ${t.inner} ${t.muted}`}
+    >
+      <UserX size={12} /> No login
+    </span>
+  ) : login.isActive ? (
+    <span className="inline-flex items-center gap-1 rounded-lg border border-green-500/30 bg-green-500/10 px-2 py-0.5 text-[12px] font-black uppercase tracking-wider text-green-600">
+      <CheckCircle2 size={12} /> Login active
+    </span>
+  ) : (
+    <span className="inline-flex items-center gap-1 rounded-lg border border-red-500/30 bg-red-500/10 px-2 py-0.5 text-[12px] font-black uppercase tracking-wider text-red-500">
+      <ShieldAlert size={12} /> Login off
+    </span>
+  );
+
+  const Info = ({ icon: Icon, label, value, href }) => (
+    <div
+      className={`flex min-w-0 items-center gap-2 rounded-xl border-2 px-3 py-2 ${t.inner}`}
+    >
+      <Icon size={14} className="shrink-0 text-slate-400" />
+      <div className="min-w-0">
+        <p className="text-[12px] font-bold uppercase tracking-wider text-slate-400">
+          {label}
+        </p>
+        {href && value ? (
+          <a
+            href={href}
+            className={`block truncate text-[14px] font-bold ${t.heading} hover:underline`}
           >
-            <X size={20} />
-          </button>
-
-          <div className="flex items-center gap-4">
-            <div
-              className={`w-14 h-14 rounded-full flex items-center justify-center text-indigo-600 ${
-                isDark ? "bg-indigo-900/30" : "bg-indigo-100"
-              }`}
-            >
-              <User size={28} />
-            </div>
-            <div>
-              <h2
-                className={`text-xl font-bold ${
-                  isDark ? "text-slate-100" : "text-slate-900"
-                }`}
-              >
-                {staff.name}
-              </h2>
-              <div className="flex items-center gap-2 mt-1">
-                <span
-                  className={`inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded ${
-                    isDark
-                      ? "bg-slate-700 text-slate-300"
-                      : "bg-slate-200 text-slate-600"
-                  }`}
-                >
-                  <Briefcase size={12} />
-                  {staff.role || "Staff"}
-                </span>
-                <span
-                  className={`text-xs font-medium px-2 py-0.5 rounded ${
-                    staff.login?.isActive
-                      ? "bg-emerald-100 text-emerald-700"
-                      : "bg-rose-100 text-rose-700"
-                  }`}
-                >
-                  {staff.login?.isActive ? "Active" : "Inactive"}
-                </span>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Body */}
-        <div className="p-6 overflow-y-auto">
-          <div
-            className={`rounded-xl border overflow-hidden ${
-              isDark ? "border-slate-700" : "border-slate-200"
-            }`}
-          >
-            <div className="grid grid-cols-1 md:grid-cols-2 divide-y md:divide-y-0 md:divide-x">
-              {/* Earnings */}
-              <div
-                className={`p-5 ${isDark ? "bg-slate-800/20" : "bg-slate-50"}`}
-              >
-                <div className="flex items-center gap-2 mb-4 text-xs font-bold uppercase text-emerald-600">
-                  <TrendingUp size={14} /> Earnings (Defaults)
-                </div>
-                <DetailRow label="Base Salary" value={baseSalary} />
-                <DetailRow label="Monthly Bonus" value={bonusDefault} />
-
-                <div className="flex justify-between pt-3 mt-3 border-t dark:border-slate-700">
-                  <span className="text-sm font-semibold">Total Earnings</span>
-                  <span className="text-base font-bold text-emerald-600">
-                    ₹{totalEarnings.toLocaleString()}
-                  </span>
-                </div>
-              </div>
-
-              {/* Deductions & Loans */}
-              <div className={`p-5 ${isDark ? "bg-slate-900" : "bg-white"}`}>
-                <div className="flex items-center gap-2 mb-4 text-xs font-bold uppercase text-rose-600">
-                  <TrendingDown size={14} /> Deductions & Balances
-                </div>
-                {/* 🔄 MOVED TO TOP: Outstanding Loan balance sits cleanly at the top of the block */}
-                <DetailRow
-                  label="Outstanding Loan"
-                  value={advanceAmount}
-                  highlightColor={
-                    advanceAmount > 0
-                      ? isDark
-                        ? "text-amber-400"
-                        : "text-amber-600"
-                      : ""
-                  }
-                />
-                <DetailRow
-                  label="Extra Deductions"
-                  value={extraDeductionsDefault}
-                  isNegative
-                />
-
-                <div className="flex justify-between pt-3 mt-3 border-t dark:border-slate-700">
-                  <span className="text-sm font-semibold">
-                    Total Deductions
-                  </span>
-                  <span className="text-base font-bold text-rose-600">
-                    - ₹{totalDeductions.toLocaleString()}
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            {/* Footer Highlight */}
-            <div className="p-5 bg-indigo-600 text-white flex justify-between items-center">
-              <div>
-                <p className="text-xs uppercase text-indigo-200 font-semibold mb-1">
-                  Estimated Monthly Salary
-                </p>
-                <p className="text-3xl font-bold">
-                  ₹{estimatedNetSalary.toLocaleString()}
-                </p>
-              </div>
-              <div className="text-right hidden sm:block">
-                <p className="text-xs uppercase text-indigo-200 font-semibold mb-1">
-                  Projected Yearly
-                </p>
-                <p className="text-lg font-medium opacity-90">
-                  ₹{yearlyProjection.toLocaleString()}
-                </p>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Footer */}
-        <div
-          className={`p-4 border-t flex justify-end ${
-            isDark
-              ? "border-slate-800 bg-slate-800/50"
-              : "border-slate-100 bg-slate-50"
-          }`}
-        >
-          <button
-            onClick={onClose}
-            className={`px-6 py-2 border rounded-lg font-medium text-sm ${
-              isDark
-                ? "bg-slate-700 text-slate-100 border-slate-600 hover:bg-slate-600"
-                : "bg-white text-slate-700 border-slate-300 hover:bg-slate-50"
-            }`}
-          >
-            Close View
-          </button>
-        </div>
+            {value}
+          </a>
+        ) : (
+          <p className={`truncate text-[14px] font-bold ${t.heading}`}>
+            {value || "—"}
+          </p>
+        )}
       </div>
     </div>
+  );
+
+  return (
+    <Modal
+      isDark={isDark}
+      open
+      onClose={onClose}
+      icon={User}
+      title="Staff profile"
+      subtitle={`${staff.name} · ${staffCode(staff.id)}`}
+      maxW="max-w-2xl"
+      footer={
+        <div
+          className={`grid gap-2 ${onEdit ? "grid-cols-2 sm:flex sm:justify-end" : "sm:flex sm:justify-end"}`}
+        >
+          <button
+            type="button"
+            onClick={onClose}
+            className={`${btnBase} h-10 border-2 px-5 ${t.btnGhost}`}
+          >
+            Close
+          </button>
+          {onEdit && (
+            <button
+              type="button"
+              onClick={onEdit}
+              className={`${btnBase} h-10 px-5 ${t.btnPrimary}`}
+            >
+              <Edit3 size={14} /> Edit
+            </button>
+          )}
+        </div>
+      }
+    >
+      <div className="space-y-4 p-4 sm:p-5">
+        {/* identity */}
+        <div className="flex items-center gap-3">
+          <Avatar name={staff.name} isDark={isDark} size="lg" />
+          <div className="min-w-0">
+            <h2
+              className={`truncate text-[16px] font-black uppercase tracking-tight ${t.heading}`}
+            >
+              {staff.name}
+            </h2>
+            <div className="mt-1 flex flex-wrap items-center gap-1.5">
+              <span
+                className={`inline-flex items-center gap-1 rounded-lg border px-2 py-0.5 text-[12px] font-bold ${t.inner} ${t.body}`}
+              >
+                <Briefcase size={12} /> {staff.role || "Staff"}
+              </span>
+              {accessPill}
+            </div>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+          <Info
+            icon={Phone}
+            label="Phone"
+            value={staff.phone}
+            href={staff.phone ? `tel:${staff.phone}` : undefined}
+          />
+          <Info
+            icon={Mail}
+            label="Login email"
+            value={login?.email}
+            href={login?.email ? `mailto:${login.email}` : undefined}
+          />
+          <Info
+            icon={Calendar}
+            label="Joined"
+            value={fmtDate(staff.createdAt || staff.joinDate)}
+          />
+        </div>
+
+        {/* pay breakdown */}
+        <div className={`overflow-hidden rounded-2xl border-2 ${t.line}`}>
+          <div className="grid grid-cols-1 sm:grid-cols-2">
+            <div className={`p-4 ${t.inner} border-0`}>
+              <p className="mb-2 flex items-center gap-1.5 text-[12px] font-black uppercase tracking-wider text-green-600">
+                <TrendingUp size={14} /> Earnings (defaults)
+              </p>
+              <Row label="Base salary" value={inr(baseSalary)} />
+              <Row label="Monthly bonus" value={inr(bonusDefault)} />
+              <div
+                className={`mt-2 flex items-center justify-between border-t-2 pt-2 ${t.line}`}
+              >
+                <span className={`text-[14px] font-black ${t.heading}`}>
+                  Total earnings
+                </span>
+                <span className="font-mono text-[14px] font-black text-green-600">
+                  {inr(totalEarnings)}
+                </span>
+              </div>
+            </div>
+
+            <div
+              className={`border-t-2 p-4 sm:border-l-2 sm:border-t-0 ${t.line}`}
+            >
+              <p className="mb-2 flex items-center gap-1.5 text-[12px] font-black uppercase tracking-wider text-red-500">
+                <TrendingDown size={14} /> Deductions & balances
+              </p>
+              <Row
+                label="Outstanding advance"
+                value={inr(advanceAmount)}
+                tone={advanceAmount > 0 ? "warn" : undefined}
+              />
+              <Row
+                label="Extra deductions"
+                value={`− ${inr(extraDeductionsDefault)}`}
+                tone="neg"
+              />
+              <Row label="Per leave day" value={inr(deductionPerLeave)} />
+              <div
+                className={`mt-2 flex items-center justify-between border-t-2 pt-2 ${t.line}`}
+              >
+                <span className={`text-[14px] font-black ${t.heading}`}>
+                  Total deductions
+                </span>
+                <span className="font-mono text-[14px] font-black text-red-500">
+                  − {inr(totalDeductions)}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* highlight */}
+          <div
+            className={`flex items-center justify-between gap-3 px-4 py-3 ${
+              isDark ? "bg-white text-[#001F3F]" : "bg-[#001F3F] text-white"
+            }`}
+          >
+            <div>
+              <p className="text-[12px] font-bold uppercase tracking-[0.15em] opacity-70">
+                Est. monthly salary
+              </p>
+              <p className="font-mono text-[16px] font-black">
+                {inr(estimatedNetSalary)}
+              </p>
+            </div>
+            <div className="text-right">
+              <p className="text-[12px] font-bold uppercase tracking-[0.15em] opacity-70">
+                Yearly
+              </p>
+              <p className="font-mono text-[14px] font-bold opacity-90">
+                {inr(yearlyProjection)}
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <p className={`text-[12px] ${t.muted}`}>
+          Leave deductions are added when you prepare each month's payroll.
+        </p>
+      </div>
+    </Modal>
   );
 }

@@ -15,6 +15,7 @@ import {
   FiChevronLeft,
 } from "react-icons/fi";
 import { useTheme } from "../../contexts/ThemeContext";
+import { API_URL, getDashboardPath } from "../../utils/authStorage";
 
 const LOGO_PATH = "/Logos/transLogo.png";
 
@@ -68,7 +69,7 @@ export default function LoginAndroid() {
       let loginUrl = "";
       let payload = {};
 
-      const BASE_URL = import.meta.env.VITE_API_BASE_URL;
+      const BASE_URL = API_URL;
 
       // ================= STAFF LOGIN =================
       if (loginMode === "staff") {
@@ -107,11 +108,16 @@ export default function LoginAndroid() {
 
       const response = await fetch(loginUrl, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+          "ngrok-skip-browser-warning": "true",
+          "X-Client": "mobile", // 📱 server issues a long-lived app session
+        },
         body: JSON.stringify(payload),
       });
 
-      const data = await response.json();
+      const data = await response.json().catch(() => ({}));
 
       if (!response.ok) {
         setError(data.message || "Invalid login");
@@ -123,9 +129,11 @@ export default function LoginAndroid() {
       localStorage.setItem("token", data.token);
       localStorage.setItem("user", JSON.stringify(data.user));
       localStorage.setItem("crmType", crmType);
+      localStorage.setItem("lastCrmType", crmType);
+      if (data.user?.id != null) localStorage.setItem("userId", data.user.id);
 
-      // Navigate
-      navigate(`/${crmType}-dashboard`);
+      // Navigate (replace → back button won't return to login)
+      navigate(getDashboardPath(), { replace: true });
     } catch (err) {
       console.error("Login error:", err);
       setError("Server error. Try again.");
@@ -142,18 +150,12 @@ export default function LoginAndroid() {
     >
       {/* --- Terminal Mobile Header --- */}
       <div
-        className={`w-full py-4 px-5 border-b flex justify-between items-center ${
+        className={`w-full py-4 px-5 border-b flex justify-end items-center ${
           isDark
             ? "border-white/5 bg-[#001F3F]/30"
             : "border-slate-100 bg-[#F8FAFC]"
         }`}
       >
-        <button
-          onClick={() => navigate("/")}
-          className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.2em] text-slate-400"
-        >
-          <FiChevronLeft size={16} /> Home
-        </button>
         <div className="flex items-center gap-2">
           <FiActivity className="text-green-500" size={14} />
           <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest italic">

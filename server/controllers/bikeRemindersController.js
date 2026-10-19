@@ -1,6 +1,50 @@
 import prisma from "../models/prismaClient.js";
 import { getOwnerUserId } from "../utils/getAdminId.js";
 
+/* -----------------------------------------------------
+   Helpers
+----------------------------------------------------- */
+
+// Fields returned for the bike on every reminder
+const bikeSelect = {
+  id: true,
+  ownerName: true,
+  phone: true,
+  bikeBrand: true,
+  bikeModel: true,
+  regNumber: true,
+};
+
+// 15-day and 7-day alert times, calculated from the service date
+const alertDates = (serviceDate) => {
+  const remind15At = new Date(serviceDate);
+  remind15At.setDate(remind15At.getDate() - 15);
+  const remind7At = new Date(serviceDate);
+  remind7At.setDate(remind7At.getDate() - 7);
+  return { remind15At, remind7At };
+};
+
+// Accepts the schema names and older names some screens still send
+const readBody = (body = {}) => ({
+  bikeId: body.bikeId ?? body.bikeClientId,
+  serviceDate: body.serviceDate ?? body.remindDate,
+  note: body.note ?? body.message,
+});
+
+const parseDate = (value) => {
+  if (!value) return null;
+  const d = new Date(value);
+  return Number.isNaN(d.getTime()) ? null : d;
+};
+
+const findOwnBike = (bikeId, ownerUserId) =>
+  prisma.bike.findFirst({ where: { id: Number(bikeId), ownerUserId } });
+
+const findOwnReminder = (id, ownerUserId) =>
+  prisma.bikeReminder.findFirst({
+    where: { id: Number(id), bike: { ownerUserId } },
+  });
+
 /* =====================================================
    GET ALL BIKE REMINDERS
    GET /api/bike-reminders
@@ -9,38 +53,18 @@ export const getBikeReminders = async (req, res) => {
   try {
     const ownerUserId = getOwnerUserId(req.user);
 
-    // ✅ UPDATED: Filter via Bike relationship (Clean Architecture)
     const reminders = await prisma.bikeReminder.findMany({
-      where: {
-        bike: {
-          ownerUserId: ownerUserId,
-        },
-      },
-      include: {
-        bike: {
-          select: {
-            id: true,
-            ownerName: true,
-            bikeModel: true,
-            regNumber: true,
-          },
-        },
-      },
-      // ✅ UPDATED: Order by serviceDate ascending
+      where: { bike: { ownerUserId } },
+      include: { bike: { select: bikeSelect } },
       orderBy: { serviceDate: "asc" },
     });
 
-    res.json({
-      success: true,
-      total: reminders.length,
-      data: reminders,
-    });
+    res.json({ success: true, total: reminders.length, data: reminders });
   } catch (error) {
     console.error("getBikeReminders error:", error);
-    res.status(500).json({
-      success: false,
-      message: "Error fetching bike reminders",
-    });
+    res
+      .status(500)
+      .json({ success: false, message: "Error fetching bike reminders" });
   }
 };
 
@@ -50,178 +74,137 @@ export const getBikeReminders = async (req, res) => {
 ===================================================== */
 export const getBikeReminderById = async (req, res) => {
   try {
-    const id = Number(req.params.id);
     const ownerUserId = getOwnerUserId(req.user);
 
-    // ✅ UPDATED: Filter via Bike relationship
     const reminder = await prisma.bikeReminder.findFirst({
-      where: {
-        id: id,
-        bike: {
-          ownerUserId: ownerUserId,
-        },
-      },
-      include: {
-        bike: {
-          select: {
-            id: true,
-            ownerName: true,
-            bikeModel: true,
-            regNumber: true,
-          },
-        },
-      },
+      where: { id: Number(req.params.id), bike: { ownerUserId } },
+      include: { bike: { select: bikeSelect } },
     });
 
     if (!reminder) {
-      return res.status(404).json({
-        success: false,
-        message: "Bike reminder not found",
-      });
+      return res
+        .status(404)
+        .json({ success: false, message: "Bike reminder not found" });
     }
 
-    res.json({
-      success: true,
-      data: reminder,
-    });
+    res.json({ success: true, data: reminder });
   } catch (error) {
     console.error("getBikeReminderById error:", error);
-    res.status(500).json({
-      success: false,
-      message: "Error fetching bike reminder",
-    });
+    res
+      .status(500)
+      .json({ success: false, message: "Error fetching bike reminder" });
   }
 };
 
 /* =====================================================
    CREATE BIKE REMINDER
    POST /api/bike-reminders
+   Body: { bikeId, serviceDate, note? }
 ===================================================== */
 export const createBikeReminder = async (req, res) => {
   try {
-    // ✅ UPDATED: Destructure new fields
-    const { bikeId, serviceDate, note } = req.body;
+    const { bikeId, serviceDate, note } = readBody(req.body);
 
-    if (!bikeId || !serviceDate) {
-      return res.status(400).json({
-        success: false,
-        message: "bikeId and serviceDate are required",
-      });
+    if (!bikeId) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Please select a bike" });
+    }
+    const serviceDateObj = parseDate(serviceDate);
+    if (!serviceDateObj) {
+      return res
+        .status(400)
+        .json({
+          success: false,
+          message: "Please choose a valid service date",
+        });
     }
 
-    const parsedBikeId = Number(bikeId);
-    if (isNaN(parsedBikeId)) {
-      return res.status(400).json({ message: "Invalid bikeId" });
-    }
-
-    const serviceDateObj = new Date(serviceDate);
-
-    // ✅ UPDATED: Auto calculate reminders (15 days and 7 days before)
-    const remind15At = new Date(serviceDateObj);
-    remind15At.setDate(remind15At.getDate() - 15);
-
-    const remind7At = new Date(serviceDateObj);
-    remind7At.setDate(remind7At.getDate() - 7);
-
-    // 🔐 Bike ownership check (Simplified)
-    const bike = await prisma.bike.findFirst({
-      where: {
-        id: parsedBikeId,
-        ownerUserId: getOwnerUserId(req.user),
-      },
-    });
-
+    const ownerUserId = getOwnerUserId(req.user);
+    const bike = await findOwnBike(bikeId, ownerUserId);
     if (!bike) {
-      return res.status(403).json({
-        success: false,
-        message: "Unauthorized bike access",
-      });
+      return res
+        .status(403)
+        .json({ success: false, message: "Bike not found in your garage" });
     }
 
-    // ✅ UPDATED: Create with new schema fields
     const reminder = await prisma.bikeReminder.create({
       data: {
-        bikeId: parsedBikeId,
+        bikeId: bike.id,
         userId: req.user.id,
         serviceDate: serviceDateObj,
-        note: note || null,
-        remind15At,
-        remind7At,
+        note: note?.trim() || null,
+        ...alertDates(serviceDateObj),
       },
-      include: {
-        bike: true,
-      },
+      include: { bike: { select: bikeSelect } },
     });
 
-    res.status(201).json({
-      success: true,
-      data: reminder,
-    });
+    res
+      .status(201)
+      .json({ success: true, message: "Reminder created", data: reminder });
   } catch (error) {
     console.error("createBikeReminder error:", error);
-    res.status(500).json({
-      success: false,
-      message: "Error creating bike reminder",
-    });
+    res
+      .status(500)
+      .json({ success: false, message: "Error creating bike reminder" });
   }
 };
 
 /* =====================================================
    UPDATE BIKE REMINDER
    PUT /api/bike-reminders/:id
+   Body: any of { bikeId, serviceDate, note }
 ===================================================== */
 export const updateBikeReminder = async (req, res) => {
   try {
-    const id = Number(req.params.id);
     const ownerUserId = getOwnerUserId(req.user);
+    const existing = await findOwnReminder(req.params.id, ownerUserId);
 
-    // ✅ UPDATED: Check existence via Bike relationship
-    const exists = await prisma.bikeReminder.findFirst({
-      where: {
-        id: id,
-        bike: {
-          ownerUserId: ownerUserId,
-        },
-      },
-    });
-
-    if (!exists) {
-      return res.status(404).json({
-        success: false,
-        message: "Bike reminder not found",
-      });
+    if (!existing) {
+      return res
+        .status(404)
+        .json({ success: false, message: "Bike reminder not found" });
     }
 
-    // ✅ UPDATED: Handle new fields (serviceDate, note)
-    const { serviceDate, note } = req.body;
+    const { bikeId, serviceDate, note } = readBody(req.body);
+    const data = {};
 
-    let updatedData = {
-      note,
-    };
+    if (note !== undefined) data.note = note?.trim() || null;
 
-    // If serviceDate changes, recalc reminders and reset sent flags
-    if (serviceDate) {
-      const newServiceDate = new Date(serviceDate);
+    if (bikeId !== undefined && Number(bikeId) !== existing.bikeId) {
+      const bike = await findOwnBike(bikeId, ownerUserId);
+      if (!bike) {
+        return res
+          .status(403)
+          .json({ success: false, message: "Bike not found in your garage" });
+      }
+      data.bikeId = bike.id;
+    }
 
-      const remind15At = new Date(newServiceDate);
-      remind15At.setDate(remind15At.getDate() - 15);
-
-      const remind7At = new Date(newServiceDate);
-      remind7At.setDate(remind7At.getDate() - 7);
-
-      updatedData.serviceDate = newServiceDate;
-      updatedData.remind15At = remind15At;
-      updatedData.remind7At = remind7At;
-      updatedData.sent15 = false; // Reset tracking
-      updatedData.sent7 = false; // Reset tracking
+    if (serviceDate !== undefined) {
+      const newDate = parseDate(serviceDate);
+      if (!newDate) {
+        return res
+          .status(400)
+          .json({
+            success: false,
+            message: "Please choose a valid service date",
+          });
+      }
+      // Date changed → recalculate alerts and allow them to be sent again
+      if (newDate.getTime() !== new Date(existing.serviceDate).getTime()) {
+        Object.assign(data, alertDates(newDate), {
+          serviceDate: newDate,
+          sent15: false,
+          sent7: false,
+        });
+      }
     }
 
     const updated = await prisma.bikeReminder.update({
-      where: { id },
-      data: updatedData,
-      include: {
-        bike: true,
-      },
+      where: { id: existing.id },
+      data,
+      include: { bike: { select: bikeSelect } },
     });
 
     res.json({
@@ -231,10 +214,9 @@ export const updateBikeReminder = async (req, res) => {
     });
   } catch (error) {
     console.error("updateBikeReminder error:", error);
-    res.status(500).json({
-      success: false,
-      message: "Error updating bike reminder",
-    });
+    res
+      .status(500)
+      .json({ success: false, message: "Error updating bike reminder" });
   }
 };
 
@@ -244,39 +226,22 @@ export const updateBikeReminder = async (req, res) => {
 ===================================================== */
 export const deleteBikeReminder = async (req, res) => {
   try {
-    const id = Number(req.params.id);
     const ownerUserId = getOwnerUserId(req.user);
-
-    // ✅ UPDATED: Check existence via Bike relationship
-    const reminder = await prisma.bikeReminder.findFirst({
-      where: {
-        id: id,
-        bike: {
-          ownerUserId: ownerUserId,
-        },
-      },
-    });
+    const reminder = await findOwnReminder(req.params.id, ownerUserId);
 
     if (!reminder) {
-      return res.status(404).json({
-        success: false,
-        message: "Bike reminder not found",
-      });
+      return res
+        .status(404)
+        .json({ success: false, message: "Bike reminder not found" });
     }
 
-    await prisma.bikeReminder.delete({
-      where: { id: reminder.id },
-    });
+    await prisma.bikeReminder.delete({ where: { id: reminder.id } });
 
-    res.json({
-      success: true,
-      message: "Bike reminder deleted successfully",
-    });
+    res.json({ success: true, message: "Bike reminder deleted successfully" });
   } catch (error) {
     console.error("deleteBikeReminder error:", error);
-    res.status(500).json({
-      success: false,
-      message: "Error deleting bike reminder",
-    });
+    res
+      .status(500)
+      .json({ success: false, message: "Error deleting bike reminder" });
   }
 };

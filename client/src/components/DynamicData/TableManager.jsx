@@ -1,4 +1,14 @@
 import { useState } from "react";
+import {
+  Table2,
+  Plus,
+  PencilLine,
+  Trash2,
+  Check,
+  X,
+  ChevronRight,
+} from "lucide-react";
+import { tk, btnBase, ConfirmDialog } from "./dynamicUi";
 
 const TableManager = ({
   tables = [],
@@ -9,232 +19,247 @@ const TableManager = ({
   onDelete,
   isDark,
 }) => {
+  const t = tk(isDark);
   const [newTableName, setNewTableName] = useState("");
   const [editId, setEditId] = useState(null);
   const [editName, setEditName] = useState("");
+  const [deleteTable, setDeleteTable] = useState(null);
+  const [deleting, setDeleting] = useState(false);
+
+  const create = () => {
+    const name = newTableName.trim();
+    if (!name) return;
+    onCreate(name);
+    setNewTableName("");
+  };
+
+  const saveRename = (id) => {
+    const name = editName.trim();
+    if (name) onRename(id, name);
+    setEditId(null);
+  };
+
+  const confirmDelete = async () => {
+    if (!deleteTable) return;
+    setDeleting(true);
+    try {
+      await onDelete(deleteTable.id);
+      setDeleteTable(null);
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  // keep the input focused when pressing Save / Cancel (stops onBlur closing the editor first)
+  const keepFocus = (e) => e.preventDefault();
+
+  const iconBtn = (danger) =>
+    `flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border-2 transition ${
+      danger
+        ? isDark
+          ? "border-white/10 text-slate-300 hover:border-red-500/40 hover:bg-red-500/10 hover:text-red-400"
+          : "border-[#CBD5E1] text-slate-500 hover:border-red-300 hover:bg-red-50 hover:text-red-600"
+        : t.btnGhost
+    }`;
 
   return (
-    <div
-      className={`rounded-2xl p-3 md:p-5 transition-colors shadow-sm border ${
-        isDark ? "bg-gray-800 border-gray-700" : "bg-white border-slate-200"
-      }`}
+    <section
+      className={`min-w-0 overflow-hidden rounded-2xl border-2 ${t.card}`}
     >
-      {/* HEADER SECTION */}
-      <div className="flex items-center justify-between mb-6 px-1">
-        <h2
-          className={`text-lg md:text-xl font-bold tracking-tight ${
-            isDark ? "text-white" : "text-slate-900"
-          }`}
-        >
-          Available Tables
-        </h2>
+      {/* header */}
+      <div
+        className={`flex items-center gap-3 border-b-2 px-3 py-3 sm:px-4 ${t.cardHead}`}
+      >
         <span
-          className={`text-[10px] md:text-xs font-black px-2.5 py-1 rounded-full uppercase tracking-wider ${
-            isDark
-              ? "bg-gray-700 text-gray-400 border border-gray-600"
-              : "bg-slate-100 text-slate-500 border border-slate-200"
-          }`}
+          className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-xl ${t.chipNavy}`}
         >
-          {tables.length} Total
+          <Table2 size={14} />
+        </span>
+        <div className="min-w-0 flex-1">
+          <h2
+            className={`truncate text-[14px] font-black uppercase tracking-tight ${t.heading}`}
+          >
+            Your <span className="font-light lowercase italic">tables</span>
+          </h2>
+          <p className={`text-[12px] font-medium leading-snug ${t.muted}`}>
+            Tap a table to open it
+          </p>
+        </div>
+        <span
+          className={`shrink-0 rounded-lg border px-2 py-0.5 text-[12px] font-black uppercase tracking-wider ${t.inner} ${t.body}`}
+        >
+          {tables.length}
+          <span className="hidden min-[380px]:inline"> total</span>
         </span>
       </div>
 
-      {/* CREATE SECTION - Responsive Stack */}
-      <div
-        className={`flex flex-col sm:flex-row gap-3 mb-8 p-3 rounded-xl border-2 border-dashed ${
-          isDark
-            ? "bg-gray-900/40 border-gray-700"
-            : "bg-slate-50/50 border-slate-200"
-        }`}
-      >
-        <input
-          className={`flex-1 px-4 py-2.5 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 transition-all text-sm font-medium ${
-            isDark
-              ? "bg-gray-900 border-gray-700 text-white placeholder:text-gray-600"
-              : "bg-white border-slate-300 text-slate-800 placeholder:text-slate-400"
-          }`}
-          placeholder="New table name..."
-          value={newTableName}
-          onChange={(e) => setNewTableName(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && newTableName) {
-              onCreate(newTableName);
-              setNewTableName("");
-            }
-          }}
-        />
-        <button
-          className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 text-white px-6 py-2.5 rounded-xl font-bold text-sm transition-all active:scale-95 shadow-lg shadow-blue-500/20"
-          onClick={() => {
-            if (!newTableName) return;
-            onCreate(newTableName);
-            setNewTableName("");
-          }}
-        >
-          Create
-        </button>
+      <div className="space-y-3 p-3 sm:p-4">
+        {/* create */}
+        <div className="flex min-w-0 gap-2">
+          <input
+            className={`h-10 min-w-0 flex-1 rounded-xl border-2 px-3.5 text-[14px] font-semibold outline-none transition ${t.input}`}
+            placeholder="New table name…"
+            value={newTableName}
+            onChange={(e) => setNewTableName(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && create()}
+            aria-label="New table name"
+          />
+          <button
+            type="button"
+            onClick={create}
+            disabled={!newTableName.trim()}
+            aria-label="Create table"
+            className={`${btnBase} h-10 shrink-0 px-3 sm:px-4 ${t.btnPrimary}`}
+          >
+            <Plus size={14} />{" "}
+            <span className="hidden min-[380px]:inline">Create</span>
+          </button>
+        </div>
+
+        {/* list */}
+        <div className="space-y-2">
+          {tables.map((tb) => {
+            const selected = selectedTableId === tb.id;
+            const editing = editId === tb.id;
+            return (
+              <div
+                key={tb.id}
+                onClick={() => !editing && onSelect(tb.id)}
+                className={`group flex min-w-0 cursor-pointer items-center gap-2 rounded-xl border-2 p-2 pl-3 transition ${
+                  selected
+                    ? isDark
+                      ? "border-white/40 bg-white/10"
+                      : "border-[#001F3F] bg-[#F8FAFC]"
+                    : `${t.inner} ${isDark ? "hover:border-white/20" : "hover:border-[#001F3F]/40"}`
+                }`}
+              >
+                {editing ? (
+                  <>
+                    <input
+                      autoFocus
+                      className={`h-9 min-w-0 flex-1 rounded-lg border-2 px-3 text-[14px] font-bold outline-none ${t.input}`}
+                      value={editName}
+                      onClick={(e) => e.stopPropagation()}
+                      onChange={(e) => setEditName(e.target.value)}
+                      onBlur={() => setEditId(null)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") saveRename(tb.id);
+                        if (e.key === "Escape") setEditId(null);
+                      }}
+                      aria-label="Table name"
+                    />
+                    <button
+                      type="button"
+                      onMouseDown={keepFocus}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        saveRename(tb.id);
+                      }}
+                      className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-green-600 text-white hover:bg-green-700"
+                      aria-label="Save name"
+                    >
+                      <Check size={14} />
+                    </button>
+                    <button
+                      type="button"
+                      onMouseDown={keepFocus}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setEditId(null);
+                      }}
+                      className={iconBtn(false)}
+                      aria-label="Cancel rename"
+                    >
+                      <X size={14} />
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <Table2
+                      size={14}
+                      className={`shrink-0 ${selected ? (isDark ? "text-white" : "text-[#001F3F]") : "text-slate-400"}`}
+                    />
+                    <span
+                      className={`min-w-0 flex-1 truncate text-[14px] font-black ${selected ? t.heading : t.body}`}
+                    >
+                      {tb.name}
+                    </span>
+                    {selected && (
+                      <span
+                        className={`hidden shrink-0 rounded-md px-1.5 py-px text-[12px] font-black uppercase tracking-wider sm:inline ${t.chipNavy}`}
+                      >
+                        Open
+                      </span>
+                    )}
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setEditId(tb.id);
+                        setEditName(tb.name);
+                      }}
+                      className={iconBtn(false)}
+                      aria-label={`Rename ${tb.name}`}
+                      title="Rename"
+                    >
+                      <PencilLine size={14} />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setDeleteTable(tb);
+                      }}
+                      className={iconBtn(true)}
+                      aria-label={`Delete ${tb.name}`}
+                      title="Delete"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                    {!selected && (
+                      <ChevronRight
+                        size={14}
+                        className="hidden shrink-0 text-slate-400 sm:block"
+                      />
+                    )}
+                  </>
+                )}
+              </div>
+            );
+          })}
+
+          {tables.length === 0 && (
+            <div
+              className={`rounded-xl border-2 border-dashed px-4 py-10 text-center ${t.line}`}
+            >
+              <p
+                className={`text-[14px] font-black uppercase tracking-tight ${t.heading}`}
+              >
+                No tables yet
+              </p>
+              <p className={`mt-1 text-[14px] ${t.muted}`}>
+                Type a name above and press Create.
+              </p>
+            </div>
+          )}
+        </div>
       </div>
 
-      {/* TABLES LIST */}
-      <div className="space-y-3">
-        {tables.map((t) => (
-          <div
-            key={t.id}
-            onClick={() => onSelect(t.id)}
-            className={`group flex flex-col sm:flex-row sm:items-center justify-between p-3 rounded-xl transition-all border-2 cursor-pointer ${
-              selectedTableId === t.id
-                ? isDark
-                  ? "border-blue-500 bg-blue-500/10"
-                  : "border-blue-500 bg-blue-50/30"
-                : isDark
-                  ? "border-transparent bg-gray-700/40 hover:border-gray-600"
-                  : "border-transparent bg-slate-50/50 hover:border-slate-200"
-            }`}
-          >
-            {/* Table Name / Edit Input */}
-            <div className="flex-1 flex items-center min-w-0 mb-3 sm:mb-0">
-              {editId === t.id ? (
-                <input
-                  autoFocus
-                  className={`w-full border-2 px-3 py-1.5 rounded-lg outline-none font-bold text-sm ${
-                    isDark
-                      ? "bg-gray-900 border-blue-500 text-white"
-                      : "bg-white border-blue-500 text-slate-900"
-                  }`}
-                  value={editName}
-                  onClick={(e) => e.stopPropagation()}
-                  onChange={(e) => setEditName(e.target.value)}
-                  onBlur={() => setEditId(null)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      onRename(t.id, editName);
-                      setEditId(null);
-                    }
-                    if (e.key === "Escape") setEditId(null);
-                  }}
-                />
-              ) : (
-                <div className="flex items-center gap-3 overflow-hidden">
-                  <div
-                    className={`w-2 h-2 rounded-full shrink-0 ${selectedTableId === t.id ? "bg-blue-500 animate-pulse" : "bg-slate-300"}`}
-                  />
-                  <span
-                    className={`text-sm font-bold truncate transition-colors ${
-                      selectedTableId === t.id
-                        ? isDark
-                          ? "text-blue-400"
-                          : "text-blue-700"
-                        : isDark
-                          ? "text-gray-300"
-                          : "text-slate-600"
-                    }`}
-                  >
-                    {t.name}
-                  </span>
-                </div>
-              )}
-            </div>
-
-            {/* ACTION BUTTONS - Stays horizontal but spaces out on mobile */}
-            <div className="flex items-center justify-end gap-2 border-t sm:border-t-0 pt-2 sm:pt-0 border-slate-200/50">
-              {editId === t.id ? (
-                <div className="flex gap-2 w-full sm:w-auto">
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onRename(t.id, editName);
-                      setEditId(null);
-                    }}
-                    className="flex-1 sm:flex-none bg-emerald-600 text-white px-4 py-1.5 rounded-lg text-xs font-bold hover:bg-emerald-700 transition-colors"
-                  >
-                    Save
-                  </button>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setEditId(null);
-                    }}
-                    className={`flex-1 sm:flex-none px-4 py-1.5 rounded-lg text-xs font-bold transition-colors ${
-                      isDark
-                        ? "bg-gray-600 text-gray-300"
-                        : "bg-slate-200 text-slate-600"
-                    }`}
-                  >
-                    Cancel
-                  </button>
-                </div>
-              ) : (
-                <div className="flex items-center gap-1">
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setEditId(t.id);
-                      setEditName(t.name);
-                    }}
-                    className={`p-2.5 rounded-lg transition-all ${
-                      isDark
-                        ? "text-gray-400 hover:text-blue-400 hover:bg-gray-600"
-                        : "text-slate-400 hover:text-blue-600 hover:bg-white shadow-sm border border-transparent hover:border-slate-100"
-                    }`}
-                  >
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      className="h-4 w-4"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      stroke="currentColor"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2.5}
-                        d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"
-                      />
-                    </svg>
-                  </button>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      if (window.confirm("Delete this table?")) onDelete(t.id);
-                    }}
-                    className={`p-2.5 rounded-lg transition-all ${
-                      isDark
-                        ? "text-gray-400 hover:text-rose-400 hover:bg-gray-600"
-                        : "text-slate-400 hover:text-rose-500 hover:bg-white shadow-sm border border-transparent hover:border-slate-100"
-                    }`}
-                  >
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      className="h-4 w-4"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      stroke="currentColor"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2.5}
-                        d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-4v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-                      />
-                    </svg>
-                  </button>
-                </div>
-              )}
-            </div>
-          </div>
-        ))}
-
-        {tables.length === 0 && (
-          <div
-            className={`py-12 text-center border-2 border-dashed rounded-2xl ${isDark ? "border-gray-700 text-gray-500" : "border-slate-200 text-slate-400"}`}
-          >
-            <p className="text-sm font-bold opacity-60 italic">
-              No tables created yet.
-            </p>
-          </div>
-        )}
-      </div>
-    </div>
+      <ConfirmDialog
+        isDark={isDark}
+        open={Boolean(deleteTable)}
+        title="Delete table?"
+        message={
+          deleteTable
+            ? `"${deleteTable.name}" with all its columns and records will be deleted.`
+            : ""
+        }
+        confirmText="Delete"
+        busy={deleting}
+        onConfirm={confirmDelete}
+        onCancel={() => !deleting && setDeleteTable(null)}
+      />
+    </section>
   );
 };
 

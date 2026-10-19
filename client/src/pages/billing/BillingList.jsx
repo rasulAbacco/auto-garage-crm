@@ -1,36 +1,48 @@
-import React, { useState, useEffect, useMemo } from "react";
+// client/src/pages/billing/BillingList.jsx  (Car CRM – invoices)
+import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import {
   FiEye,
   FiTrash2,
   FiPlus,
-  FiDollarSign,
-  FiCalendar,
-  FiUser,
   FiFileText,
   FiCheckCircle,
   FiClock,
   FiAlertCircle,
   FiEdit,
   FiSearch,
+  FiX,
+  FiRefreshCw,
+  FiCalendar,
+  FiChevronRight,
 } from "react-icons/fi";
+import { FaRupeeSign } from "react-icons/fa";
+import { Toaster, toast } from "react-hot-toast";
 import { useTheme } from "../../contexts/ThemeContext";
+import {
+  PageHeading,
+  Plate,
+  ConfirmDialog,
+  tk,
+  btnBase,
+  fmtDate,
+} from "../clients/components/clientUi";
+import { money, num } from "./billingUtils";
 
 const API_URL = import.meta.env.VITE_API_BASE_URL;
 
-const getAuthToken = () =>
-  localStorage.getItem("token") || localStorage.getItem("authToken");
-
 const fetchWithAuth = async (url, options = {}) => {
-  const token = getAuthToken();
+  const token =
+    localStorage.getItem("token") || localStorage.getItem("authToken");
   if (!token) throw new Error("No authentication token found");
-
-  const headers = {
-    "Content-Type": "application/json",
-    Authorization: `Bearer ${token}`,
-    ...options.headers,
-  };
-  const response = await fetch(url, { ...options, headers });
+  const response = await fetch(url, {
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+      ...options.headers,
+    },
+  });
   if (response.status === 401) {
     localStorage.removeItem("token");
     localStorage.removeItem("authToken");
@@ -39,545 +51,546 @@ const fetchWithAuth = async (url, options = {}) => {
   return response;
 };
 
-// Helper component for Stat Cards in the header
-function StatHeader({ label, value, subValue, color, isDark }) {
-  return (
-    <div className="flex flex-col sm:flex-row sm:items-center justify-between p-4 rounded-lg border-b sm:border-b-0 sm:border-r border-gray-100 dark:border-gray-700 last:border-0">
-      <div>
-        <p
-          className={`text-xs font-bold uppercase tracking-wider ${
-            isDark ? "text-gray-400" : "text-gray-500"
-          }`}
-        >
-          {label}
-        </p>
-        <h3
-          className={`text-xl font-bold mt-1 ${isDark ? "text-white" : "text-gray-900"}`}
-        >
-          {value}
-        </h3>
-      </div>
-      {subValue && (
-        <span className={`text-sm font-medium mt-2 sm:mt-0 ${color}`}>
-          {subValue}
-        </span>
-      )}
-    </div>
-  );
-}
+const STATUS = {
+  paid: "bg-green-500/10 text-green-600 border-green-500/30",
+  pending: "bg-amber-500/10 text-amber-600 border-amber-500/30",
+  "partially paid": "bg-blue-500/10 text-blue-500 border-blue-500/30",
+  overdue: "bg-red-500/10 text-red-500 border-red-500/30",
+};
+const statusCls = (s) =>
+  STATUS[String(s || "").toLowerCase()] ||
+  "bg-slate-500/10 text-slate-500 border-slate-500/30";
+const FILTERS = [
+  { key: "all", label: "All" },
+  { key: "paid", label: "Paid" },
+  { key: "pending", label: "Pending" },
+  { key: "partially paid", label: "Partial" },
+  { key: "overdue", label: "Overdue" },
+];
+const invDate = (inv) => inv.date || inv.createdAt;
+const isOverdue = (inv) =>
+  inv.dueDate &&
+  String(inv.status).toLowerCase() !== "paid" &&
+  new Date(inv.dueDate) < new Date(new Date().toDateString());
 
 export default function BillingList() {
   const { isDark } = useTheme();
+  const t = tk(isDark);
   const navigate = useNavigate();
-
-  // Theme Configuration
-  const colors = useMemo(
-    () => ({
-      mainBg: isDark ? "#020617" : "#F8FAFC",
-      cardBg: isDark ? "#1E293B" : "#FFFFFF",
-      textPrimary: isDark ? "#F1F5F9" : "#0F172A",
-      textSecondary: isDark ? "#94A3B8" : "#64748B",
-      border: isDark ? "#334155" : "#E2E8F0",
-      hoverBg: isDark ? "#0F172A" : "#F1F5F9",
-      accent: "#3B82F6",
-    }),
-    [isDark],
-  );
 
   const [invoices, setInvoices] = useState([]);
   const [filterStatus, setFilterStatus] = useState("all");
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [stats, setStats] = useState({
-    total: 0,
-    paid: 0,
-    pending: 0,
-    overdue: 0,
-    totalAmount: 0,
-  });
+  const [toDelete, setToDelete] = useState(null);
+  const [deleting, setDeleting] = useState(false);
 
-  useEffect(() => {
-    const fetchInvoices = async () => {
-      try {
-        const res = await fetchWithAuth(`${API_URL}/api/invoices`);
-        const data = await res.json();
-        if (!res.ok)
-          throw new Error(data.message || "Failed to fetch invoices");
-        setInvoices(data);
-
-        const calculatedStats = data.reduce(
-          (acc, inv) => {
-            acc.total++;
-            acc.totalAmount += Number(inv.grandTotal || 0);
-            if (inv.status?.toLowerCase() === "paid") acc.paid++;
-            if (inv.status?.toLowerCase() === "pending") acc.pending++;
-            if (inv.status?.toLowerCase() === "overdue") acc.overdue++;
-            return acc;
-          },
-          { total: 0, paid: 0, pending: 0, overdue: 0, totalAmount: 0 },
-        );
-        setStats(calculatedStats);
-      } catch (err) {
-        setError(err.message);
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchInvoices();
+  const load = useCallback(async () => {
+    try {
+      setLoading(true);
+      setError("");
+      const res = await fetchWithAuth(`${API_URL}/api/invoices`);
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.message || "Failed to fetch invoices");
+      setInvoices(Array.isArray(data) ? data : data?.data || []);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  const stats = useMemo(
+    () =>
+      invoices.reduce(
+        (acc, inv) => {
+          const amt = num(inv.grandTotal);
+          const s = String(inv.status || "").toLowerCase();
+          acc.total += 1;
+          acc.totalAmount += amt;
+          if (s === "paid") {
+            acc.paid += 1;
+            acc.paidAmount += amt;
+          } else {
+            acc.unpaid += 1;
+            acc.unpaidAmount += amt;
+          }
+          return acc;
+        },
+        {
+          total: 0,
+          totalAmount: 0,
+          paid: 0,
+          paidAmount: 0,
+          unpaid: 0,
+          unpaidAmount: 0,
+        },
+      ),
+    [invoices],
+  );
+
+  const counts = useMemo(() => {
+    const c = { all: invoices.length };
+    invoices.forEach((i) => {
+      const k = String(i.status || "").toLowerCase();
+      c[k] = (c[k] || 0) + 1;
+    });
+    return c;
+  }, [invoices]);
+
   const filtered = useMemo(() => {
-    const term = query.toLowerCase();
+    const term = query.trim().toLowerCase();
     return invoices.filter((inv) => {
       const matchesQuery =
-        inv.invoiceNumber?.toLowerCase().includes(term) ||
-        inv.client?.fullName?.toLowerCase().includes(term) ||
-        inv.notes?.toLowerCase().includes(term);
+        !term ||
+        [
+          inv.invoiceNumber,
+          inv.client?.fullName,
+          inv.client?.phone,
+          inv.client?.regNumber,
+          inv.vehicle,
+          inv.notes,
+        ]
+          .filter(Boolean)
+          .some((v) => String(v).toLowerCase().includes(term));
       const matchesStatus =
         filterStatus === "all" ||
-        inv.status?.toLowerCase() === filterStatus.toLowerCase();
+        String(inv.status || "").toLowerCase() === filterStatus;
       return matchesQuery && matchesStatus;
     });
   }, [query, invoices, filterStatus]);
 
-  const handleDelete = async (id) => {
-    if (!window.confirm("Are you sure you want to delete this invoice?"))
-      return;
+  const confirmDelete = async () => {
+    const id = toDelete?.id;
+    if (!id) return;
     try {
+      setDeleting(true);
       const res = await fetchWithAuth(`${API_URL}/api/invoices/${id}`, {
         method: "DELETE",
       });
-      if (!res.ok) throw new Error("Failed to delete invoice");
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        throw new Error(d.message || "Failed to delete invoice");
+      }
       setInvoices((prev) => prev.filter((inv) => inv.id !== id));
+      toast.success("Invoice deleted");
     } catch (err) {
-      alert(err.message);
+      toast.error(err.message);
+    } finally {
+      setDeleting(false);
+      setToDelete(null);
     }
   };
 
-  const getStatusBadge = (status) => {
-    const s = status?.toLowerCase();
-    let style = {};
-    let label = status || "Unknown";
-
-    if (s === "paid") {
-      style = {
-        backgroundColor: isDark ? "rgba(16, 185, 129, 0.2)" : "#ECFDF5",
-        color: "#059669",
-        border: isDark
-          ? "1px solid rgba(16, 185, 129, 0.3)"
-          : "1px solid #D1FAE5",
-      };
-    } else if (s === "pending") {
-      style = {
-        backgroundColor: isDark ? "rgba(245, 158, 11, 0.2)" : "#FFFBEB",
-        color: "#D97706",
-        border: isDark
-          ? "1px solid rgba(245, 158, 11, 0.3)"
-          : "1px solid #FDE68A",
-      };
-    } else if (s === "overdue") {
-      style = {
-        backgroundColor: isDark ? "rgba(239, 68, 68, 0.2)" : "#FEF2F2",
-        color: "#DC2626",
-        border: isDark
-          ? "1px solid rgba(239, 68, 68, 0.3)"
-          : "1px solid #FECACA",
-      };
-    } else {
-      style = {
-        backgroundColor: isDark ? "rgba(148, 163, 184, 0.2)" : "#F3F4F6",
-        color: colors.textSecondary,
-        border: isDark
-          ? "1px solid rgba(148, 163, 184, 0.3)"
-          : "1px solid #E5E7EB",
-      };
-    }
-    return (
-      <span
-        className="px-2.5 py-1 rounded-full text-xs font-semibold uppercase"
-        style={style}
-      >
-        {label}
-      </span>
-    );
-  };
-
-  if (loading)
-    return (
-      <div
-        className="flex justify-center items-center h-screen"
-        style={{ backgroundColor: colors.mainBg }}
-      >
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-4 border-blue-600 border-t-transparent mx-auto mb-4"></div>
-          <p
-            className="text-lg font-medium"
-            style={{ color: colors.textPrimary }}
-          >
-            Loading Invoices...
-          </p>
-        </div>
-      </div>
-    );
-
-  if (error)
-    return (
-      <div
-        className="text-center p-8 rounded-xl"
-        style={{
-          color: "#DC2626",
-          backgroundColor: colors.cardBg,
-          border: `1px solid ${colors.border}`,
-        }}
-      >
-        Error: {error}
-      </div>
-    );
+  const iconBtn = `flex h-8 w-8 items-center justify-center rounded-lg border-2 transition ${t.btnGhost}`;
 
   return (
-    <div
-      className="lg:ml-16 min-h-screen p-4 sm:p-6 lg:p-8"
-      style={{ backgroundColor: colors.mainBg }}
-    >
-      <div className="mx-auto space-y-6">
-        {/* Page Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div>
-            <h1
-              className="text-2xl font-bold"
-              style={{ color: colors.textPrimary }}
+    <div className="min-h-screen lg:ml-20">
+      <Toaster
+        position="top-right"
+        toastOptions={{ style: { fontSize: 14 } }}
+      />
+      <div className="mx-auto max-w-[1600px] space-y-4 sm:space-y-5">
+        <PageHeading
+          isDark={isDark}
+          badge="Billing ledger"
+          title="Invoices"
+          accent="& payments."
+          subtitle="Your billing history, payments and what's still due."
+          right={
+            <Link
+              to="/billing/new"
+              className={`${btnBase} h-10 px-4 ${t.btnPrimary} shadow-lg`}
             >
-              Invoices
-            </h1>
-            <p className="text-sm mt-1" style={{ color: colors.textSecondary }}>
-              Manage your billing history and payments.
-            </p>
-          </div>
-          <Link
-            to="/billing/new"
-            className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-lg shadow-sm font-semibold text-sm transition-all hover:shadow-md"
-            style={{
-              backgroundColor: colors.accent,
-              color: "white",
-            }}
-          >
-            <FiPlus size={18} /> New Invoice
-          </Link>
-        </div>
+              <FiPlus size={14} /> New invoice
+            </Link>
+          }
+        />
 
-        {/* Stats Row */}
-        <div
-          className="rounded-xl border shadow-sm grid grid-cols-2 sm:grid-cols-4"
-          style={{ backgroundColor: colors.cardBg, borderColor: colors.border }}
-        >
-          <StatHeader
-            label="Total Invoices"
+        {/* stats */}
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <Stat
+            isDark={isDark}
+            icon={FiFileText}
+            label="Invoices"
             value={stats.total}
-            isDark={isDark}
           />
-          <StatHeader
-            label="Total Revenue"
-            value={`₹${stats.totalAmount.toLocaleString()}`}
+          <Stat
             isDark={isDark}
+            icon={FaRupeeSign}
+            label="Total billed"
+            value={money(stats.totalAmount)}
           />
-          <StatHeader
-            label="Paid"
-            value={stats.paid}
-            subValue={`₹${(stats.totalAmount * (stats.paid / stats.total || 0)).toFixed(0)}`}
-            color="text-green-500"
+          <Stat
             isDark={isDark}
+            icon={FiCheckCircle}
+            label={`Paid · ${stats.paid}`}
+            value={money(stats.paidAmount)}
+            tone="green"
           />
-          <StatHeader
-            label="Pending"
-            value={stats.pending + stats.overdue}
-            color="text-amber-500"
+          <Stat
             isDark={isDark}
+            icon={FiClock}
+            label={`Unpaid · ${stats.unpaid}`}
+            value={money(stats.unpaidAmount)}
+            tone="amber"
           />
         </div>
 
-        {/* Filters & Search */}
-        <div
-          className="rounded-xl border p-4 shadow-sm"
-          style={{ backgroundColor: colors.cardBg, borderColor: colors.border }}
-        >
-          <div className="flex flex-col sm:flex-row gap-4">
-            <div className="relative flex-1">
-              <FiSearch
-                className="absolute left-3 top-1/2 transform -translate-y-1/2 opacity-50"
-                size={18}
-                style={{ color: colors.textSecondary }}
-              />
-              <input
-                type="text"
-                placeholder="Search invoice, client name..."
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 text-sm rounded-lg border focus:outline-none focus:ring-2 focus:ring-blue-500 transition-shadow"
-                style={{
-                  backgroundColor: isDark ? "#0F172A" : "#FFFFFF",
-                  borderColor: colors.border,
-                  color: colors.textPrimary,
+        {/* search + status chips */}
+        <div className={`space-y-3 rounded-2xl border-2 p-3 sm:p-4 ${t.card}`}>
+          <div className="relative">
+            <FiSearch
+              className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400"
+              size={16}
+            />
+            <input
+              type="search"
+              placeholder="Search invoice no, client, phone, reg no…"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              className={`h-11 w-full rounded-xl border-2 pl-10 pr-3 text-[14px] font-semibold outline-none transition ${t.input}`}
+            />
+          </div>
+          <div className="flex gap-1.5 overflow-x-auto pb-0.5">
+            {FILTERS.map((f) => {
+              const on = filterStatus === f.key;
+              return (
+                <button
+                  key={f.key}
+                  onClick={() => setFilterStatus(f.key)}
+                  className={`flex h-8 shrink-0 items-center gap-1.5 rounded-lg border-2 px-3 text-[12px] font-black uppercase tracking-wider transition ${
+                    on ? `border-transparent ${t.chipNavy}` : `${t.btnGhost}`
+                  }`}
+                >
+                  {f.label}
+                  <span
+                    className={`rounded px-1 ${on ? (isDark ? "bg-[#001F3F]/10" : "bg-white/20") : isDark ? "bg-white/10" : "bg-slate-100"}`}
+                  >
+                    {counts[f.key] || 0}
+                  </span>
+                </button>
+              );
+            })}
+            {(query || filterStatus !== "all") && (
+              <button
+                onClick={() => {
+                  setQuery("");
+                  setFilterStatus("all");
                 }}
-              />
-            </div>
-            <select
-              value={filterStatus}
-              onChange={(e) => setFilterStatus(e.target.value)}
-              className="px-4 py-2 text-sm rounded-lg border focus:outline-none focus:ring-2 focus:ring-blue-500 min-w-[150px]"
-              style={{
-                backgroundColor: isDark ? "#0F172A" : "#FFFFFF",
-                borderColor: colors.border,
-                color: colors.textPrimary,
-              }}
-            >
-              <option value="all">All Status</option>
-              <option value="paid">Paid</option>
-              <option value="pending">Pending</option>
-              <option value="overdue">Overdue</option>
-            </select>
+                className="ml-auto inline-flex shrink-0 items-center gap-1 px-2 text-[12px] font-black uppercase tracking-wider text-red-500 hover:underline"
+              >
+                <FiX size={12} /> Clear
+              </button>
+            )}
           </div>
         </div>
 
-        {/* Table Container - Classic View */}
-        <div
-          className="rounded-xl border shadow-sm overflow-hidden"
-          style={{ backgroundColor: colors.cardBg, borderColor: colors.border }}
-        >
-          {filtered.length === 0 ? (
-            <div className="p-12 text-center">
-              <FiFileText
-                size={48}
-                className="mx-auto mb-4 opacity-20"
-                style={{ color: colors.textSecondary }}
-              />
-              <h3
-                className="text-lg font-medium mb-2"
-                style={{ color: colors.textPrimary }}
+        {error && (
+          <div className="flex items-center justify-between gap-3 rounded-xl border-2 border-red-500/30 bg-red-500/10 px-4 py-3 text-[14px] font-semibold text-red-500">
+            <span className="flex items-center gap-2">
+              <FiAlertCircle size={16} /> {error}
+            </span>
+            <button
+              onClick={load}
+              className="inline-flex items-center gap-1 text-[12px] font-black uppercase tracking-wider hover:underline"
+            >
+              <FiRefreshCw size={12} /> Retry
+            </button>
+          </div>
+        )}
+
+        <div className={`overflow-hidden rounded-2xl border-2 ${t.card}`}>
+          {loading ? (
+            <div className="space-y-2 p-3">
+              {Array.from({ length: 6 }).map((_, i) => (
+                <div
+                  key={i}
+                  className={`h-16 animate-pulse rounded-xl ${isDark ? "bg-white/5" : "bg-slate-100"}`}
+                />
+              ))}
+            </div>
+          ) : filtered.length === 0 ? (
+            <div className="px-4 py-14 text-center">
+              <div
+                className={`mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl ${t.chipNavy}`}
+              >
+                <FiFileText size={18} />
+              </div>
+              <p
+                className={`text-[16px] font-black uppercase tracking-tight ${t.heading}`}
               >
                 No invoices found
-              </h3>
-              <p
-                className="text-sm mb-6"
-                style={{ color: colors.textSecondary }}
-              >
+              </p>
+              <p className={`mt-1 text-[14px] ${t.muted}`}>
                 {query || filterStatus !== "all"
-                  ? "Try adjusting your search filters."
-                  : "Get started by creating your first invoice."}
+                  ? "Try another search or status."
+                  : "Create your first invoice to get started."}
               </p>
               <Link
                 to="/billing/new"
-                className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-all"
-                style={{
-                  backgroundColor: colors.hoverBg,
-                  color: colors.accent,
-                }}
+                className={`${btnBase} mt-4 h-10 px-4 ${t.btnPrimary}`}
               >
-                <FiPlus size={16} /> Create Invoice
+                <FiPlus size={14} /> New invoice
               </Link>
             </div>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse">
-                <thead>
-                  <tr
-                    style={{
-                      borderBottom: `2px solid ${colors.border}`,
-                      backgroundColor: isDark
-                        ? "rgba(255,255,255,0.02)"
-                        : "rgba(0,0,0,0.02)",
-                    }}
-                  >
-                    <th
-                      className="p-4 text-xs font-bold uppercase tracking-wider"
-                      style={{ color: colors.textSecondary }}
-                    >
-                      Invoice #
-                    </th>
-                    <th
-                      className="p-4 text-xs font-bold uppercase tracking-wider"
-                      style={{ color: colors.textSecondary }}
-                    >
-                      Client
-                    </th>
-                    <th
-                      className="p-4 text-xs font-bold uppercase tracking-wider hidden sm:table-cell"
-                      style={{ color: colors.textSecondary }}
-                    >
-                      Date
-                    </th>
-                    <th
-                      className="p-4 text-xs font-bold uppercase tracking-wider hidden md:table-cell"
-                      style={{ color: colors.textSecondary }}
-                    >
-                      Due Date
-                    </th>
-                    <th
-                      className="p-4 text-xs font-bold uppercase tracking-wider text-right"
-                      style={{ color: colors.textSecondary }}
-                    >
-                      Amount
-                    </th>
-                    <th
-                      className="p-4 text-xs font-bold uppercase tracking-wider text-center hidden sm:table-cell"
-                      style={{ color: colors.textSecondary }}
-                    >
-                      Status
-                    </th>
-                    <th
-                      className="p-4 text-xs font-bold uppercase tracking-wider text-right"
-                      style={{ color: colors.textSecondary }}
-                    >
-                      Actions
-                    </th>
-                  </tr>
-                </thead>
-                <tbody
-                  className="divide-y"
-                  style={{ borderColor: colors.border }}
-                >
-                  {filtered.map((inv) => (
+            <>
+              {/* desktop table */}
+              <div className="hidden overflow-x-auto lg:block">
+                <table className="w-full border-collapse text-left">
+                  <thead>
                     <tr
-                      key={inv.id}
-                      className="transition-colors hover:bg-opacity-50 group"
-                      style={{ hoverBg: colors.hoverBg }}
-                      onMouseEnter={(e) =>
-                        (e.currentTarget.style.backgroundColor = colors.hoverBg)
-                      }
-                      onMouseLeave={(e) =>
-                        (e.currentTarget.style.backgroundColor = "transparent")
-                      }
+                      className={`border-b-2 ${t.line} ${isDark ? "bg-white/5" : "bg-[#F8FAFC]"}`}
                     >
-                      {/* Invoice Number */}
-                      <td className="p-4">
-                        <div className="flex items-center gap-3">
-                          <div
-                            className="w-8 h-8 rounded-lg flex items-center justify-center"
-                            style={{
-                              backgroundColor: isDark
-                                ? "rgba(59, 130, 246, 0.2)"
-                                : "#DBEAFE",
-                            }}
-                          >
-                            <FiFileText
-                              size={16}
-                              style={{ color: colors.accent }}
-                            />
-                          </div>
-                          <div>
+                      {[
+                        "Invoice",
+                        "Client",
+                        "Date",
+                        "Due",
+                        "Amount",
+                        "Status",
+                        "",
+                      ].map((h, i) => (
+                        <th
+                          key={i}
+                          className={`whitespace-nowrap px-4 py-3 text-[12px] font-black uppercase tracking-[0.15em] text-slate-400 ${
+                            i === 4
+                              ? "text-right"
+                              : i === 5
+                                ? "text-center"
+                                : ""
+                          }`}
+                        >
+                          {h}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filtered.map((inv) => (
+                      <tr
+                        key={inv.id}
+                        onClick={() => navigate(`/billing/${inv.id}`)}
+                        className={`cursor-pointer border-b transition-colors last:border-0 ${
+                          isDark
+                            ? "border-white/5 hover:bg-white/5"
+                            : "border-[#E2E8F0] hover:bg-[#F8FAFC]"
+                        }`}
+                      >
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-3">
+                            <div
+                              className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${t.chipNavy}`}
+                            >
+                              <FiFileText size={14} />
+                            </div>
                             <p
-                              className="font-bold text-sm"
-                              style={{ color: colors.textPrimary }}
+                              className={`font-mono text-[14px] font-bold ${t.heading}`}
                             >
                               {inv.invoiceNumber}
                             </p>
-                            {/* <p
-                              className="text-xs hidden sm:block"
-                              style={{ color: colors.textSecondary }}
-                            >
-                              {getStatusBadge(inv.status)}
-                            </p> */}
                           </div>
+                        </td>
+                        <td className="px-4 py-3">
+                          <p
+                            className={`text-[14px] font-semibold ${t.heading}`}
+                          >
+                            {inv.client?.fullName || "Walk-in customer"}
+                          </p>
+                          <div className="mt-0.5 flex items-center gap-2">
+                            <Plate value={inv.client?.regNumber} size="sm" />
+                            {inv.client?.phone && (
+                              <span className={`text-[12px] ${t.muted}`}>
+                                {inv.client.phone}
+                              </span>
+                            )}
+                          </div>
+                        </td>
+                        <td
+                          className={`whitespace-nowrap px-4 py-3 text-[14px] ${t.body}`}
+                        >
+                          {fmtDate(invDate(inv))}
+                        </td>
+                        <td
+                          className={`whitespace-nowrap px-4 py-3 text-[14px] ${isOverdue(inv) ? "font-bold text-red-500" : t.body}`}
+                        >
+                          {inv.dueDate ? fmtDate(inv.dueDate) : "—"}
+                        </td>
+                        <td
+                          className={`whitespace-nowrap px-4 py-3 text-right text-[14px] font-black ${t.heading}`}
+                        >
+                          {money(inv.grandTotal)}
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          <span
+                            className={`inline-block rounded-full border px-2.5 py-0.5 text-[12px] font-bold ${statusCls(inv.status)}`}
+                          >
+                            {inv.status || "Unknown"}
+                          </span>
+                        </td>
+                        <td
+                          className="px-4 py-3"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <div className="flex justify-end gap-1.5">
+                            <button
+                              onClick={() => navigate(`/billing/${inv.id}`)}
+                              className={iconBtn}
+                              title="View"
+                            >
+                              <FiEye size={14} />
+                            </button>
+                            <button
+                              onClick={() =>
+                                navigate(`/billing/${inv.id}/edit`)
+                              }
+                              className={iconBtn}
+                              title="Edit"
+                            >
+                              <FiEdit size={14} />
+                            </button>
+                            <button
+                              onClick={() => setToDelete(inv)}
+                              className="flex h-8 w-8 items-center justify-center rounded-lg border-2 border-red-500/30 text-red-500 hover:bg-red-500/10"
+                              title="Delete"
+                            >
+                              <FiTrash2 size={14} />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* phone / tablet cards */}
+              <div className="grid grid-cols-1 gap-2 p-2 sm:grid-cols-2 sm:p-3 lg:hidden">
+                {filtered.map((inv) => (
+                  <div
+                    key={inv.id}
+                    className={`rounded-xl border-2 p-3 ${t.inner}`}
+                  >
+                    <button
+                      onClick={() => navigate(`/billing/${inv.id}`)}
+                      className="block w-full text-left"
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <p
+                            className={`truncate font-mono text-[14px] font-black ${t.heading}`}
+                          >
+                            {inv.invoiceNumber}
+                          </p>
+                          <p
+                            className={`truncate text-[12px] font-semibold ${t.muted}`}
+                          >
+                            {inv.client?.fullName || "Walk-in customer"}
+                          </p>
                         </div>
-                      </td>
-
-                      {/* Client */}
-                      <td className="p-4">
-                        <p
-                          className="font-medium text-sm"
-                          style={{ color: colors.textPrimary }}
+                        <span
+                          className={`shrink-0 rounded-full border px-2 py-px text-[12px] font-bold ${statusCls(inv.status)}`}
                         >
-                          {inv.client?.fullName || "Unknown Client"}
-                        </p>
-                        <p
-                          className="text-xs"
-                          style={{ color: colors.textSecondary }}
+                          {inv.status || "—"}
+                        </span>
+                      </div>
+                      <div className="mt-2 flex flex-wrap items-center gap-2">
+                        <Plate value={inv.client?.regNumber} size="sm" />
+                        <span
+                          className={`inline-flex items-center gap-1 text-[12px] ${t.muted}`}
                         >
-                          {inv.client?.phone || "No Phone"}
-                        </p>
-                      </td>
-
-                      {/* Date */}
-                      <td className="p-4 hidden sm:table-cell">
-                        <p
-                          className="text-sm"
-                          style={{ color: colors.textPrimary }}
+                          <FiCalendar size={12} /> {fmtDate(invDate(inv))}
+                        </span>
+                        {isOverdue(inv) && (
+                          <span className="text-[12px] font-bold text-red-500">
+                            Overdue
+                          </span>
+                        )}
+                      </div>
+                    </button>
+                    <div
+                      className={`mt-2 flex items-center justify-between gap-2 border-t-2 pt-2 ${t.line}`}
+                    >
+                      <span className={`text-[16px] font-black ${t.heading}`}>
+                        {money(inv.grandTotal)}
+                      </span>
+                      <div className="flex gap-1.5">
+                        <button
+                          onClick={() => navigate(`/billing/${inv.id}/edit`)}
+                          className={iconBtn}
+                          aria-label="Edit"
                         >
-                          {new Date(inv.createdAt).toLocaleDateString("en-IN", {
-                            day: "2-digit",
-                            month: "short",
-                            year: "numeric",
-                          })}
-                        </p>
-                      </td>
-
-                      {/* Due Date */}
-                      <td className="p-4 hidden md:table-cell">
-                        <p
-                          className="text-sm font-medium"
-                          style={{ color: colors.textPrimary }}
+                          <FiEdit size={14} />
+                        </button>
+                        <button
+                          onClick={() => setToDelete(inv)}
+                          className="flex h-8 w-8 items-center justify-center rounded-lg border-2 border-red-500/30 text-red-500"
+                          aria-label="Delete"
                         >
-                          {inv.dueDate
-                            ? new Date(inv.dueDate).toLocaleDateString(
-                                "en-IN",
-                                {
-                                  day: "2-digit",
-                                  month: "short",
-                                },
-                              )
-                            : "—"}
-                        </p>
-                      </td>
-
-                      {/* Amount */}
-                      <td className="p-4 text-right">
-                        <p
-                          className="text-sm font-bold"
-                          style={{ color: colors.textPrimary }}
+                          <FiTrash2 size={14} />
+                        </button>
+                        <button
+                          onClick={() => navigate(`/billing/${inv.id}`)}
+                          className={`flex h-8 w-8 items-center justify-center rounded-lg ${t.chipNavy}`}
+                          aria-label="Open"
                         >
-                          ₹{Number(inv.grandTotal || 0).toFixed(2)}
-                        </p>
-                      </td>
-
-                      {/* Status (Mobile Hidden) */}
-                      <td className="p-4 text-center hidden sm:table-cell">
-                        {getStatusBadge(inv.status)}
-                      </td>
-
-                      {/* Actions */}
-                      <td className="p-4 text-right">
-                        <div className="flex items-center justify-end gap-2">
-                          <button
-                            onClick={() => navigate(`/billing/${inv.id}`)}
-                            className="p-2 rounded-lg text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors"
-                            title="View"
-                          >
-                            <FiEye size={18} />
-                          </button>
-                          <button
-                            onClick={() => navigate(`/billing/${inv.id}/edit`)}
-                            className="p-2 rounded-lg text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-900/20 transition-colors"
-                            title="Edit"
-                          >
-                            <FiEdit size={18} />
-                          </button>
-                          <button
-                            onClick={() => handleDelete(inv.id)}
-                            className="p-2 rounded-lg text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
-                            title="Delete"
-                          >
-                            <FiTrash2 size={18} />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                          <FiChevronRight size={14} />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </>
           )}
         </div>
       </div>
+
+      <ConfirmDialog
+        isDark={isDark}
+        open={!!toDelete}
+        title="Delete invoice?"
+        message={`${toDelete?.invoiceNumber || "This invoice"} (${money(toDelete?.grandTotal)}) will be removed permanently.`}
+        confirmText="Delete"
+        busy={deleting}
+        onCancel={() => setToDelete(null)}
+        onConfirm={confirmDelete}
+      />
+    </div>
+  );
+}
+
+function Stat({ isDark, icon: Icon, label, value, tone }) {
+  const t = tk(isDark);
+  const chip =
+    tone === "green"
+      ? "bg-green-500/10 text-green-600"
+      : tone === "amber"
+        ? "bg-amber-500/10 text-amber-600"
+        : t.chipNavy;
+  return (
+    <div className={`rounded-2xl border-2 p-3 sm:p-4 ${t.card}`}>
+      <div className="flex items-start justify-between gap-2">
+        <p className="text-[12px] font-bold uppercase leading-tight tracking-wider text-slate-400">
+          {label}
+        </p>
+        <div
+          className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-xl ${chip}`}
+        >
+          <Icon size={14} />
+        </div>
+      </div>
+      <p
+        className={`mt-2 truncate text-[16px] font-black tracking-tight ${t.heading}`}
+      >
+        {value}
+      </p>
     </div>
   );
 }

@@ -1,87 +1,24 @@
-// VehicleInfoSection.jsx
-import React, { useState, useEffect } from "react";
-import { FiCalendar, FiHash } from "react-icons/fi";
+// client/src/pages/clients/components/VehicleInfoSection.jsx
+import React, { useState, useEffect, useMemo } from "react";
+import {
+  FiCalendar,
+  FiHash,
+  FiDroplet,
+  FiUsers,
+  FiCheck,
+  FiEdit3,
+  FiList,
+} from "react-icons/fi";
 import { FaCar } from "react-icons/fa";
+import {
+  SectionCard,
+  TextField,
+  SelectField,
+  FieldLabel,
+  tk,
+  toCode,
+} from "./clientUi";
 
-// --- Reusable Input Component (Updated Styling) ---
-function InputField({
-  icon,
-  label,
-  value,
-  onChange,
-  placeholder,
-  isDark,
-  type = "text",
-  required,
-  min,
-  max,
-}) {
-  return (
-    <div className="w-full">
-      <label
-        className={`block text-sm font-medium mb-1.5 flex items-center gap-2 ${
-          isDark ? "text-gray-200" : "text-gray-700"
-        }`}
-      >
-        <span className={isDark ? "text-emerald-300" : "text-emerald-600"}>
-          {icon}
-        </span>
-        {label} {required && <span className="text-red-500">*</span>}
-      </label>
-
-      <input
-        type={type}
-        value={value}
-        onChange={onChange}
-        placeholder={placeholder}
-        min={min}
-        max={max}
-        autoComplete="off"
-        required={required}
-        className={`w-full px-4 py-2.5 rounded-lg text-sm font-medium border focus:ring-2 focus:ring-emerald-500 transition duration-150 ${
-          isDark
-            ? "bg-gray-800 border-gray-700 text-white placeholder-gray-500"
-            : "bg-white border-gray-300 placeholder-gray-400 focus:border-emerald-500"
-        }`}
-      />
-    </div>
-  );
-}
-
-// --- Reusable Select Component (Updated Styling) ---
-function SelectField({ label, value, onChange, options, isDark }) {
-  return (
-    <div>
-      <label
-        className={`block text-sm font-medium mb-1.5 ${
-          isDark ? "text-black" : "text-gray-700"
-        }`}
-      >
-        {label}
-      </label>
-
-      <select
-        value={value || ""}
-        onChange={onChange}
-        className={`w-full px-4 py-2.5 rounded-lg border text-sm font-medium appearance-none cursor-pointer focus:ring-2 focus:ring-emerald-500 transition duration-150 ${
-          isDark
-            ? "bg-gray-800 border-gray-700 text-black"
-            : "bg-white border-gray-300 text-gray-900 focus:border-emerald-500"
-        }`}
-      >
-        <option value="">Select {label}</option>
-
-        {(options || []).map((opt) => (
-          <option key={opt.value} value={opt.value}>
-            {opt.label}
-          </option>
-        ))}
-      </select>
-    </div>
-  );
-}
-
-// --- Main Component ---
 export default function VehicleInfoSection({
   form,
   setForm,
@@ -93,43 +30,18 @@ export default function VehicleInfoSection({
   fuelTypes = [],
   seatOptions = [],
 }) {
+  const t = tk(isDark);
+  const isBasic = userPlan === "BASIC";
   const [brandInput, setBrandInput] = useState(form.vehicleMake || "");
-  const [filteredMakes, setFilteredMakes] = useState([]);
+  const [brandFocus, setBrandFocus] = useState(false);
   const [useCustomModel, setUseCustomModel] = useState(false);
-  const [customModel, setCustomModel] = useState("");
 
-  // Build proper model options with {label, value} structure
-  const modelOptions = [
-    ...carModels.map((m) => ({
-      label: m.name,
-      value: m.name,
-    })),
-    {
-      label: "Other / Custom Model",
-      value: "__custom__", // sentinel value
-    },
-  ];
-
-  // Keep local input in sync with form (for RC + edit mode)
+  // keep local input in sync with form (RC scan + edit mode)
   useEffect(() => {
     setBrandInput(form.vehicleMake || "");
   }, [form.vehicleMake]);
 
-  // Filter BRAND suggestions (only Standard/Premium)
-  useEffect(() => {
-    if (!brandInput || userPlan === "BASIC") {
-      setFilteredMakes([]);
-      return;
-    }
-
-    const inputLower = brandInput.toLowerCase();
-    const matches = (carMakes || []).filter((m) =>
-      m.make.toLowerCase().includes(inputLower),
-    );
-
-    setFilteredMakes(matches);
-  }, [brandInput, carMakes, userPlan]);
-
+  // switch to custom input if the saved model isn't in the list
   useEffect(() => {
     if (
       form.vehicleModel &&
@@ -137,298 +49,319 @@ export default function VehicleInfoSection({
       !carModels.some((m) => m.name === form.vehicleModel)
     ) {
       setUseCustomModel(true);
-      setCustomModel(form.vehicleModel);
     }
   }, [form.vehicleModel, carModels]);
 
-  const handleBrandSelect = (brandObj) => {
-    setBrandInput(brandObj.make);
-    setForm((prev) => ({
-      ...prev,
-      vehicleMake: brandObj.make,
-      vehicleModel: "",
-    }));
-    fetchCarModels(brandObj.make);
-    setFilteredMakes([]);
-  };
+  const filteredMakes = useMemo(() => {
+    if (isBasic || brandInput.trim().length < 2) return [];
+    const q = brandInput.toLowerCase();
+    return (carMakes || [])
+      .filter((m) => m.make.toLowerCase().includes(q))
+      .slice(0, 12);
+  }, [brandInput, carMakes, isBasic]);
 
-  const handleBrandChange = (value) => {
-    setBrandInput(value);
-    setForm((prev) => ({ ...prev, vehicleMake: value }));
-  };
+  const exactMake = carMakes.some(
+    (m) => m.make.toLowerCase() === brandInput.trim().toLowerCase(),
+  );
+  const showMakes = filteredMakes.length > 0 && (brandFocus || !exactMake);
 
-  const handleModelSelect = (modelName) => {
+  const handleBrandSelect = (m) => {
+    setBrandInput(m.make);
+    setForm((prev) => ({ ...prev, vehicleMake: m.make, vehicleModel: "" }));
     setUseCustomModel(false);
-    setCustomModel("");
-    setForm((prev) => ({ ...prev, vehicleModel: modelName }));
+    fetchCarModels?.(m.make);
   };
+
+  const handleModelSelect = (name) => {
+    setUseCustomModel(false);
+    setForm((prev) => ({ ...prev, vehicleModel: name }));
+  };
+
+  const set =
+    (key, fn = (v) => v) =>
+    (e) => {
+      const v = fn(e.target.value);
+      setForm((prev) => ({ ...prev, [key]: v }));
+    };
 
   return (
-    <div
-      className={`${
-        isDark ? "bg-gray-900 border-gray-700" : "bg-white border-gray-200"
-      } rounded-xl shadow-2xl border`} // Modernized shadow and border
+    <SectionCard
+      isDark={isDark}
+      icon={FaCar}
+      step="03"
+      title="Vehicle information"
+      subtitle="Make, model and registration"
     >
-      {/* Header */}
-      <div
-        className={`px-6 py-4 border-b ${
-          isDark
-            ? "border-gray-700/70 bg-gray-800/50"
-            : "border-gray-100 bg-emerald-50/70"
-        } rounded-t-xl`}
-      >
-        <div className="flex items-center gap-3">
-          <div
-            className={`w-10 h-10 rounded-full flex items-center justify-center text-xl ${
-              isDark ? "text-emerald-400" : "text-emerald-600"
-            } bg-emerald-500/10`}
-          >
-            <FaCar />
-          </div>
-          <div>
-            <h2
-              className={`text-lg font-extrabold ${
-                isDark ? "text-white" : "text-gray-900"
-              }`}
-            >
-              Vehicle Information
-            </h2>
-            <p
-              className={`text-sm ${
-                isDark ? "text-gray-400" : "text-gray-500"
-              }`}
-            >
-              Vehicle details and registration
-            </p>
-          </div>
-        </div>
-      </div>
-
-      {/* Body */}
-      <div className="p-6">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {/* BRAND FIELD */}
-          <InputField
-            icon={<FaCar />}
-            label="Vehicle Make"
+      <div className="space-y-5">
+        {/* make + model */}
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+          <TextField
+            isDark={isDark}
+            icon={<FaCar size={12} />}
+            label="Vehicle make"
             required
             value={brandInput}
-            onChange={(e) => handleBrandChange(e.target.value)}
-            placeholder="Start typing brand (e.g., Tata)"
-            isDark={isDark}
+            onChange={(e) => {
+              setBrandInput(e.target.value);
+              setForm((prev) => ({ ...prev, vehicleMake: e.target.value }));
+            }}
+            onFocus={() => setBrandFocus(true)}
+            onBlur={() => setTimeout(() => setBrandFocus(false), 150)}
+            placeholder={
+              isBasic ? "e.g. Maruti Suzuki" : "Start typing a brand…"
+            }
+            autoComplete="off"
           />
 
-          {/* MODEL FIELD - Fixed with proper {label, value} structure */}
-          {userPlan === "BASIC" ? (
-            <InputField
-              icon={<FaCar />}
-              label="Vehicle Model"
-              required
-              value={form.vehicleModel}
-              onChange={(e) =>
-                setForm((prev) => ({ ...prev, vehicleModel: e.target.value }))
-              }
-              placeholder="Enter model"
+          {isBasic ? (
+            <TextField
               isDark={isDark}
+              icon={<FaCar size={12} />}
+              label="Vehicle model"
+              required
+              value={form.vehicleModel || ""}
+              onChange={set("vehicleModel")}
+              placeholder="e.g. Swift"
             />
           ) : (
             <div>
-              {!useCustomModel ? (
-                <SelectField
-                  label="Vehicle Model"
-                  value={form.vehicleModel}
-                  onChange={(e) => {
-                    if (e.target.value === "__custom__") {
-                      setUseCustomModel(true);
-                      setCustomModel(""); // ✅ blank input
-                      setForm((prev) => ({
-                        ...prev,
-                        vehicleModel: "", // ✅ clear stored value
-                      }));
-                    } else {
-                      setUseCustomModel(false);
-                      setCustomModel("");
-                      setForm((prev) => ({
-                        ...prev,
-                        vehicleModel: e.target.value, // ✅ list model stored
-                      }));
-                    }
-                  }}
-                  options={modelOptions}
+              <div className="flex items-end justify-between gap-2">
+                <FieldLabel
+                  icon={<FaCar size={12} />}
+                  label="Vehicle model"
+                  required
                   isDark={isDark}
                 />
-              ) : (
-                <InputField
-                  icon={<FaCar />}
-                  label="Custom Vehicle Model"
-                  required
-                  value={customModel}
-                  onChange={(e) => {
-                    setCustomModel(e.target.value);
-                    setForm((prev) => ({
-                      ...prev,
-                      vehicleModel: e.target.value, // ✅ typing stored
-                    }));
+                <button
+                  type="button"
+                  onClick={() => {
+                    setUseCustomModel((c) => !c);
+                    setForm((prev) => ({ ...prev, vehicleModel: "" }));
                   }}
-                  placeholder="Enter custom model name"
+                  className={`mb-1.5 inline-flex items-center gap-1 text-[12px] font-bold ${isDark ? "text-blue-300" : "text-blue-600"} hover:underline`}
+                >
+                  {useCustomModel ? (
+                    <FiList size={12} />
+                  ) : (
+                    <FiEdit3 size={12} />
+                  )}
+                  {useCustomModel ? "Pick from list" : "Type custom"}
+                </button>
+              </div>
+              {useCustomModel || carModels.length === 0 ? (
+                <TextField
                   isDark={isDark}
+                  required
+                  value={form.vehicleModel || ""}
+                  onChange={set("vehicleModel")}
+                  placeholder={
+                    carModels.length
+                      ? "Enter custom model name"
+                      : "Choose a make first, or type a model"
+                  }
+                />
+              ) : (
+                <SelectField
+                  isDark={isDark}
+                  required
+                  value={form.vehicleModel || ""}
+                  onChange={(e) => handleModelSelect(e.target.value)}
+                  options={carModels.map((m) => ({
+                    label: m.name,
+                    value: m.name,
+                  }))}
+                  placeholder="Select model"
                 />
               )}
             </div>
           )}
         </div>
 
-        {/* BRAND LOGO CARDS (Standard & Premium) - Below the input fields */}
-        {userPlan !== "BASIC" &&
-          brandInput.length >= 2 &&
-          filteredMakes.length > 0 && (
-            <div className="mt-5">
-              <h3
-                className={`text-sm font-semibold mb-3 ${
-                  isDark ? "text-gray-300" : "text-gray-700"
-                }`}
-              >
-                Select Make
-              </h3>
-              <div className="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
-                {filteredMakes.map((m, i) => (
-                  <div
-                    key={i}
+        {/* brand logo cards */}
+        {!isBasic && showMakes && (
+          <div>
+            <p
+              className={`mb-2 text-[12px] font-bold uppercase tracking-wider ${t.muted}`}
+            >
+              Select make
+            </p>
+            <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 lg:grid-cols-6">
+              {filteredMakes.map((m) => {
+                const on = form.vehicleMake === m.make;
+                return (
+                  <button
+                    type="button"
+                    key={m.make}
+                    onMouseDown={(e) => e.preventDefault()}
                     onClick={() => handleBrandSelect(m)}
-                    className={`cursor-pointer border rounded-lg p-3 flex flex-col items-center justify-center hover:ring-2 ring-emerald-500 transition duration-200 ${
-                      isDark
-                        ? "bg-gray-800 border-gray-700 hover:bg-gray-700"
-                        : "bg-gray-50 border-gray-200 hover:bg-gray-100"
+                    className={`relative flex flex-col items-center justify-center rounded-xl border-2 p-2 transition ${
+                      on
+                        ? isDark
+                          ? "border-white bg-white/10"
+                          : "border-[#001F3F] bg-[#001F3F]/5"
+                        : `${t.inner} hover:border-slate-400`
                     }`}
                   >
-                    <img
-                      src={m.logoUrl}
-                      alt={m.make}
-                      className="w-full h-12 object-contain mb-2"
-                    />
-                    <p className="text-center text-xs font-semibold">
+                    {m.logoUrl ? (
+                      <img
+                        src={m.logoUrl}
+                        alt=""
+                        className="mb-1 h-9 w-full object-contain"
+                      />
+                    ) : (
+                      <FaCar className="mb-1 h-9 text-slate-400" />
+                    )}
+                    <span
+                      className={`w-full truncate text-center text-[12px] font-bold ${t.heading}`}
+                    >
                       {m.make}
-                    </p>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-        {/* MODEL THUMBNAILS GRID (Standard & Premium) - Below inputs/brand cards */}
-        {userPlan !== "BASIC" && carModels.length > 0 && (
-          <div className="mt-6">
-            <h3
-              className={`text-sm font-semibold mb-3 ${
-                isDark ? "text-gray-300" : "text-gray-700"
-              }`}
-            >
-              Choose Model
-            </h3>
-            <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-4">
-              {carModels.map((m, i) => (
-                <div
-                  key={i}
-                  onClick={() => handleModelSelect(m.name)}
-                  // Disable right-click on the model card
-                  onContextMenu={(e) => e.preventDefault()}
-                  className={`cursor-pointer border rounded-xl p-2.5 flex flex-col items-center transition duration-200 ${
-                    form.vehicleModel === m.name
-                      ? "ring-2 ring-emerald-500 border-emerald-500 shadow-md"
-                      : isDark
-                        ? "border-gray-700 hover:bg-gray-800"
-                        : "border-gray-200 hover:bg-gray-50"
-                  }`}
-                >
-                  <div className="w-full aspect-video flex items-center justify-center overflow-hidden">
-                    <img
-                      src={m.thumbnailUrl}
-                      alt={m.name}
-                      // Enforce uniform image size/fit
-                      className="w-full h-24 object-contain rounded-md"
-                    />
-                  </div>
-                  <p className="mt-2 text-center text-base font-semibold">
-                    {m.name}
-                  </p>
-                </div>
-              ))}
+                    </span>
+                  </button>
+                );
+              })}
             </div>
           </div>
         )}
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
-          {/* YEAR */}
-          <InputField
-            icon={<FiCalendar />}
-            label="Vehicle Year"
-            type="number"
-            value={form.vehicleYear}
-            onChange={(e) =>
-              setForm((prev) => ({ ...prev, vehicleYear: e.target.value }))
-            }
-            placeholder="2024"
-            min="1990"
-            max={new Date().getFullYear() + 1}
-            isDark={isDark}
-          />
+        {/* model thumbnails */}
+        {!isBasic && carModels.length > 0 && !useCustomModel && (
+          <div>
+            <p
+              className={`mb-2 text-[12px] font-bold uppercase tracking-wider ${t.muted}`}
+            >
+              Choose model{" "}
+              <span className="normal-case tracking-normal">
+                ({carModels.length})
+              </span>
+            </p>
+            <div className="grid max-h-[340px] grid-cols-2 gap-2 overflow-y-auto pr-1 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
+              {carModels.map((m) => {
+                const on = form.vehicleModel === m.name;
+                return (
+                  <button
+                    type="button"
+                    key={m.id || m.name}
+                    onClick={() => handleModelSelect(m.name)}
+                    onContextMenu={(e) => e.preventDefault()}
+                    className={`relative flex flex-col items-center rounded-xl border-2 p-2 transition ${
+                      on
+                        ? isDark
+                          ? "border-white bg-white/10"
+                          : "border-[#001F3F] bg-[#001F3F]/5 shadow-md"
+                        : `${t.inner} hover:border-slate-400`
+                    }`}
+                  >
+                    {on && (
+                      <span
+                        className={`absolute right-1.5 top-1.5 flex h-5 w-5 items-center justify-center rounded-full ${t.chipNavy}`}
+                      >
+                        <FiCheck size={12} />
+                      </span>
+                    )}
+                    <div className="flex aspect-video w-full items-center justify-center overflow-hidden">
+                      {m.thumbnailUrl ? (
+                        <img
+                          src={m.thumbnailUrl}
+                          alt={m.name}
+                          className="h-full w-full object-contain"
+                          draggable="false"
+                        />
+                      ) : (
+                        <FaCar className="text-slate-400" size={22} />
+                      )}
+                    </div>
+                    <span
+                      className={`mt-1 w-full truncate text-center text-[12px] font-bold ${t.heading}`}
+                    >
+                      {m.name}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
-          {/* REG NUMBER */}
-          <InputField
-            icon={<FiHash />}
-            label="Registration Number"
+        {/* registration + specs */}
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <TextField
+            isDark={isDark}
+            icon={<FiHash size={12} />}
+            label="Registration number"
             required
-            value={form.regNumber}
-            onChange={(e) =>
-              setForm((prev) => ({
-                ...prev,
-                regNumber: e.target.value.toUpperCase(),
-              }))
-            }
+            value={form.regNumber || ""}
+            onChange={set("regNumber", toCode)}
             placeholder="KA01AB1234"
-            isDark={isDark}
+            autoCapitalize="characters"
+            autoComplete="off"
+            spellCheck={false}
+            maxLength={12}
+            inputClassName="font-mono uppercase tracking-wider"
           />
-
-          {/* FUEL */}
-          <SelectField
-            label="Fuel Type"
-            value={form.fuel}
-            onChange={(e) =>
-              setForm((prev) => ({ ...prev, fuel: e.target.value }))
-            }
-            options={fuelTypes.map((type) => ({ label: type, value: type }))}
+          <TextField
             isDark={isDark}
+            icon={<FiCalendar size={12} />}
+            label="Year"
+            type="number"
+            inputMode="numeric"
+            value={form.vehicleYear || ""}
+            onChange={set("vehicleYear")}
+            placeholder={String(new Date().getFullYear())}
+            min="1980"
+            max={new Date().getFullYear() + 1}
           />
-
-          {/* SEATS */}
           <SelectField
+            isDark={isDark}
+            icon={<FiDroplet size={12} />}
+            label="Fuel type"
+            value={form.fuel || ""}
+            onChange={set("fuel")}
+            options={[
+              ...new Set([
+                ...(fuelTypes || []),
+                ...(form.fuel ? [form.fuel] : []),
+              ]),
+            ].map((v) => ({ label: v, value: v }))}
+          />
+          <SelectField
+            isDark={isDark}
+            icon={<FiUsers size={12} />}
             label="Seats"
-            value={form.seats}
-            onChange={(e) =>
-              setForm((prev) => ({ ...prev, seats: e.target.value }))
-            }
-            options={seatOptions.map((seat) => ({ label: seat, value: seat }))}
-            isDark={isDark}
+            value={form.seats ? String(form.seats) : ""}
+            onChange={set("seats")}
+            options={[
+              ...new Set([
+                ...(seatOptions || []).map(String),
+                ...(form.seats ? [String(form.seats)] : []),
+              ]),
+            ].map((v) => ({
+              label: v,
+              value: v,
+            }))}
           />
-        </div>
-
-        {/* VIN */}
-        <div className="mt-6">
-          <InputField
-            icon={<FiHash />}
-            label="VIN / Chassis Number"
-            value={form.vin}
-            onChange={(e) =>
-              setForm((prev) => ({
-                ...prev,
-                vin: e.target.value.toUpperCase(),
-              }))
-            }
-            placeholder="MA1TA1234XYZ56789"
+          <TextField
             isDark={isDark}
+            icon={<FiDroplet size={12} />}
+            label="Colour"
+            value={form.color || ""}
+            onChange={set("color")}
+            placeholder="e.g. Pearl White"
+          />
+          <TextField
+            isDark={isDark}
+            icon={<FiHash size={12} />}
+            label="VIN / Chassis number"
+            value={form.vin || ""}
+            onChange={set("vin", toCode)}
+            placeholder="MA1TA1234XYZ56789"
+            autoCapitalize="characters"
+            autoComplete="off"
+            spellCheck={false}
+            maxLength={20}
+            inputClassName="font-mono uppercase tracking-wider"
           />
         </div>
       </div>
-    </div>
+    </SectionCard>
   );
 }

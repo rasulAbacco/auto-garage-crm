@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import axios from "axios";
+import toast, { Toaster } from "react-hot-toast";
 import { useTheme } from "../../contexts/ThemeContext";
 import {
   FiPackage,
@@ -7,91 +8,69 @@ import {
   FiTrash2,
   FiPower,
   FiSearch,
-  FiZap,
   FiShoppingBag,
+  FiCheck,
+  FiX,
+  FiRefreshCw,
+  FiLoader,
 } from "react-icons/fi";
+import {
+  tk,
+  btnBase,
+  PageHeading,
+  ConfirmDialog,
+  CrmChip,
+  LivePill,
+  EmptyState,
+  ErrorBar,
+  SkeletonCards,
+  detectCrmType,
+  pageWrap,
+  inr,
+  errText,
+} from "./marketplaceUi";
 
 const API_URL = import.meta.env.VITE_API_BASE_URL ?? "";
+const auth = () => ({
+  headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+});
 
 export default function MarketplacePackages() {
   const { isDark } = useTheme();
+  const t = tk(isDark);
+  const currentCrmType = useMemo(() => detectCrmType(), []);
+
   const [activeTab, setActiveTab] = useState("list");
   const [flatServices, setFlatServices] = useState([]);
   const [packages, setPackages] = useState([]);
   const [selectedServices, setSelectedServices] = useState([]);
   const [name, setName] = useState("");
   const [price, setPrice] = useState("");
-  const [searchTerm, setSearchTerm] = useState("");
-  const [loading, setLoading] = useState(false);
   const [description, setDescription] = useState("");
+  const [searchTerm, setSearchTerm] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [formError, setFormError] = useState("");
+  const [busyId, setBusyId] = useState(null);
+  const [deleteTarget, setDeleteTarget] = useState(null);
 
-  // 1. Extract and decode operational workspace from active token payload
-  const token = localStorage.getItem("token");
-  let currentCrmType = "CAR"; // Initial default structural fallback
-
-  if (token) {
+  const fetchAll = useCallback(async () => {
+    setLoadError("");
     try {
-      const base64Url = token.split(".")[1];
-      const base64 = base64Url.replace(/-/g, "+").replace(/_/g, "/");
-      const payload = JSON.parse(window.atob(base64));
-      if (payload?.crmType) {
-        currentCrmType = payload.crmType.toUpperCase();
-      }
-    } catch (e) {
-      console.error("Token decoding failed:", e);
-    }
-  }
-
-  // 🔍 2. BULLETPROOF WORKSPACE AUTO-DETECT
-  const browserURLPath = window.location.pathname.toLowerCase();
-  const storageCrmType = localStorage.getItem("crmType")?.toUpperCase();
-
-  if (
-    storageCrmType === "CAR" ||
-    storageCrmType === "BIKE" ||
-    storageCrmType === "WASHING"
-  ) {
-    currentCrmType = storageCrmType;
-  } else if (
-    browserURLPath.includes("/bike") ||
-    window.location.hostname.includes("bike")
-  ) {
-    currentCrmType = "BIKE";
-  } else if (
-    browserURLPath.includes("/wash") ||
-    window.location.hostname.includes("wash")
-  ) {
-    currentCrmType = "WASHING";
-  } else if (
-    browserURLPath.includes("/car") ||
-    window.location.hostname.includes("car")
-  ) {
-    currentCrmType = "CAR";
-  }
-
-  useEffect(() => {
-    fetchAll();
-  }, [currentCrmType]); // Re-fetch bundle elements cleanly when workspace channel switches
-
-  const fetchAll = async () => {
-    try {
-      setLoading(true);
-
-      // Explicitly append target vehicleType query string parameters to completely dump stale route cache mappings
       const config = {
-        headers: { Authorization: `Bearer ${token}` },
+        ...auth(),
         params: { vehicleType: currentCrmType.toLowerCase() },
       };
-
       const [serviceRes, packageRes] = await Promise.all([
         axios.get(`${API_URL}/api/marketplace/services`, config),
         axios.get(`${API_URL}/api/marketplace/packages`, config),
       ]);
 
       const flattened = [];
-      serviceRes.data?.data?.forEach((main) => {
-        main.sections.forEach((section) => {
-          section.services.forEach((svc) => {
+      (serviceRes.data?.data || []).forEach((main) => {
+        (main.sections || []).forEach((section) => {
+          (section.services || []).forEach((svc) => {
             flattened.push({
               ...svc,
               externalServiceId: svc.id,
@@ -103,389 +82,513 @@ export default function MarketplacePackages() {
       });
 
       setFlatServices(flattened);
-      setPackages(packageRes.data?.data || []);
+      setPackages(
+        Array.isArray(packageRes.data?.data) ? packageRes.data.data : [],
+      );
     } catch (err) {
-      console.error("Packages sync loop failure:", err);
+      console.error("Packages load failed:", err);
+      setLoadError(errText(err, "Could not load packages"));
     } finally {
       setLoading(false);
     }
-  };
+  }, [currentCrmType]);
+
+  useEffect(() => {
+    fetchAll();
+  }, [fetchAll]);
 
   const toggleService = (id) => {
+    setFormError("");
     setSelectedServices((prev) =>
       prev.includes(id) ? prev.filter((s) => s !== id) : [...prev, id],
     );
   };
 
+  const resetForm = () => {
+    setName("");
+    setPrice("");
+    setDescription("");
+    setSelectedServices([]);
+    setSearchTerm("");
+    setFormError("");
+  };
+
   const createPackage = async () => {
-    if (!name || !price || selectedServices.length === 0)
-      return alert("Please complete all fields");
-
+    if (!name.trim() || !price || selectedServices.length === 0) {
+      setFormError("Add a name, a price and at least one service.");
+      return;
+    }
+    setSaving(true);
     try {
-      const config = { headers: { Authorization: `Bearer ${token}` } };
-
       const servicePayload = selectedServices.map((id) => {
         const svc = flatServices.find((s) => s.externalServiceId === id);
         return { id, name: svc?.name };
       });
-
       await axios.post(
         `${API_URL}/api/marketplace/packages`,
         {
-          name,
+          name: name.trim(),
           price: Number(price),
           description,
           serviceIds: servicePayload,
         },
-        config,
+        auth(),
       );
-
-      setName("");
-      setPrice("");
-      setDescription("");
-      setSelectedServices([]);
+      toast.success("Package created");
+      resetForm();
       setActiveTab("list");
       fetchAll();
     } catch (err) {
-      console.error("Bundle compilation rejected:", err);
+      console.error("Create package failed:", err);
+      setFormError(errText(err, "Could not create the package"));
+    } finally {
+      setSaving(false);
     }
   };
 
-  const deletePackage = async (id) => {
-    if (
-      window.confirm("Are you sure you want to remove this package bundle?")
-    ) {
-      try {
-        const config = { headers: { Authorization: `Bearer ${token}` } };
-        await axios.delete(`${API_URL}/api/marketplace/packages/${id}`, config);
-        fetchAll();
-      } catch (err) {
-        console.error(err);
-      }
-    }
-  };
-
-  const togglePackageStatus = async (id) => {
+  const deletePackage = async () => {
+    if (!deleteTarget) return;
+    setBusyId(deleteTarget.id);
     try {
-      const config = { headers: { Authorization: `Bearer ${token}` } };
-      await axios.patch(
-        `${API_URL}/api/marketplace/packages/${id}/toggle`,
-        {},
-        config,
+      await axios.delete(
+        `${API_URL}/api/marketplace/packages/${deleteTarget.id}`,
+        auth(),
       );
+      toast.success("Package removed");
+      setDeleteTarget(null);
       fetchAll();
     } catch (err) {
-      console.error(err);
+      toast.error(errText(err, "Could not remove the package"));
+    } finally {
+      setBusyId(null);
     }
   };
 
-  return (
-    <div
-      className={`min-h-screen pb-24 transition-colors duration-500 font-sans tracking-tight ${
-        isDark ? "bg-[#090b11] text-slate-200" : "bg-[#f6f8fa] text-slate-900"
-      } md:ml-20`}
-    >
-      {/* GLASSMORPHIC HEADER */}
-      <header
-        className={`sticky top-0 z-50 backdrop-blur-md border-b px-8 py-5 transition-all ${
-          isDark
-            ? "bg-[#090b11]/70 border-white/[0.04]"
-            : "bg-white/70 border-slate-200/60"
-        }`}
-      >
-        <div className="max-w-6xl mx-auto flex flex-col md:flex-row justify-between items-center gap-4">
-          <div className="flex items-center gap-4">
-            <div className="p-3 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-2xl shadow-xl text-white shadow-blue-500/10">
-              <FiPackage size={18} />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h1 className="text-xl font-bold tracking-tight leading-none">
-                  Package Studio
-                </h1>
-                <span
-                  className={`text-[9px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider ${
-                    currentCrmType === "BIKE"
-                      ? "bg-amber-500/10 text-amber-400"
-                      : currentCrmType === "WASHING"
-                        ? "bg-purple-500/10 text-purple-400"
-                        : "bg-blue-500/10 text-blue-400"
-                  }`}
-                >
-                  {currentCrmType} Mode
-                </span>
-              </div>
-              <p className="text-xs opacity-40 mt-1">
-                Bundle services into curated cost-saving consumer marketplace
-                packages.
-              </p>
-            </div>
-          </div>
+  const togglePackageStatus = async (pkg) => {
+    setBusyId(pkg.id);
+    try {
+      await axios.patch(
+        `${API_URL}/api/marketplace/packages/${pkg.id}/toggle`,
+        {},
+        auth(),
+      );
+      toast.success(pkg.isActive ? "Package paused" : "Package is live");
+      await fetchAll();
+    } catch (err) {
+      toast.error(errText(err, "Could not change the package"));
+    } finally {
+      setBusyId(null);
+    }
+  };
 
-          <div
-            className={`flex w-full md:w-auto p-1 rounded-xl border ${
-              isDark
-                ? "bg-white/[0.02] border-white/[0.05]"
-                : "bg-slate-200/60 border-slate-200/50"
-            }`}
-          >
-            {[
-              {
-                id: "list",
-                label: "Collection",
-                icon: <FiShoppingBag size={13} />,
-              },
-              { id: "create", label: "Architect", icon: <FiPlus size={13} /> },
-            ].map((tab) => (
+  const visibleServices = useMemo(() => {
+    const q = searchTerm.trim().toLowerCase();
+    return flatServices.filter(
+      (s) =>
+        !q ||
+        String(s.name || "")
+          .toLowerCase()
+          .includes(q) ||
+        String(s.section || "")
+          .toLowerCase()
+          .includes(q),
+    );
+  }, [flatServices, searchTerm]);
+
+  const selectedList = selectedServices
+    .map((id) => flatServices.find((s) => s.externalServiceId === id))
+    .filter(Boolean);
+  const liveCount = packages.filter((p) => p.isActive).length;
+  const inputCls = `w-full rounded-xl border-2 px-3.5 text-[14px] font-semibold outline-none transition ${t.input}`;
+
+  const tabs = [
+    { id: "list", label: `Packages (${packages.length})`, icon: FiShoppingBag },
+    { id: "create", label: "Create package", icon: FiPlus },
+  ];
+
+  return (
+    <div className={pageWrap(currentCrmType)}>
+      <Toaster
+        position="top-right"
+        toastOptions={{ style: { fontSize: 14 } }}
+      />
+      <div className="mx-auto max-w-[1600px] space-y-4 sm:space-y-5">
+        <PageHeading
+          isDark={isDark}
+          title="Service"
+          accent="packages."
+          subtitle={`Bundle services at one price for the MotorDesk app · ${liveCount} live`}
+          right={<CrmChip crmType={currentCrmType} isDark={isDark} />}
+        />
+
+        {/* tabs */}
+        <div
+          className={`grid grid-cols-2 gap-1 rounded-xl border-2 p-1 sm:inline-grid sm:w-auto ${t.card}`}
+        >
+          {tabs.map((tab) => {
+            const on = activeTab === tab.id;
+            const Icon = tab.icon;
+            return (
               <button
                 key={tab.id}
+                type="button"
                 onClick={() => setActiveTab(tab.id)}
-                className={`flex-1 md:flex-none flex items-center justify-center gap-2 px-5 py-2 text-[10px] font-semibold uppercase rounded-lg transition-all duration-300 ${
-                  activeTab === tab.id
-                    ? "bg-blue-500 text-white shadow-lg shadow-blue-500/10"
-                    : "text-slate-400 hover:text-slate-500"
-                }`}
+                className={`${btnBase} h-9 px-4 ${on ? t.btnPrimary : `${t.muted} hover:opacity-80`}`}
               >
-                {tab.icon} {tab.label}
+                <Icon size={14} /> {tab.label}
               </button>
-            ))}
-          </div>
+            );
+          })}
         </div>
-      </header>
 
-      <main className="max-w-6xl mx-auto p-4 md:p-8">
+        <ErrorBar message={loadError} onRetry={() => fetchAll()} />
+
         {activeTab === "create" ? (
-          <div className="animate-in fade-in slide-in-from-bottom-4 duration-400 max-w-4xl mx-auto">
-            <div
-              className={`rounded-2xl border overflow-hidden transition-all duration-300 ${
-                isDark
-                  ? "bg-[#11141d]/40 border-white/[0.04]"
-                  : "bg-white border-slate-200/50 shadow-sm shadow-slate-200/20"
-              }`}
+          <div className="grid gap-4 lg:grid-cols-[1fr_340px]">
+            {/* services picker */}
+            <section
+              className={`overflow-hidden rounded-2xl border-2 ${t.card}`}
             >
-              <div className="p-6 md:p-10 space-y-8">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-                  <div className="md:col-span-2 space-y-5">
-                    <div>
-                      <label className="text-[10px] font-semibold uppercase text-blue-500 tracking-wider block mb-1">
-                        Package Designation
-                      </label>
-                      <input
-                        type="text"
-                        placeholder="e.g., Premium Monsoon Treatment Bundle"
-                        value={name}
-                        onChange={(e) => setName(e.target.value)}
-                        className={`w-full text-base font-medium bg-transparent border-b py-2 outline-none transition-all ${
-                          isDark
-                            ? "border-white/[0.08] focus:border-blue-500 text-slate-200"
-                            : "border-slate-200 focus:border-blue-600 text-slate-900"
-                        }`}
-                      />
-                    </div>
-                    <div>
-                      <label className="text-[10px] font-semibold uppercase text-slate-400 tracking-wider block mb-1">
-                        Marketing Summary Description
-                      </label>
-                      <textarea
-                        rows="2"
-                        placeholder="Describe consumer bundle benefits clearly..."
-                        value={description}
-                        onChange={(e) => setDescription(e.target.value)}
-                        className={`w-full bg-transparent border-b py-2 text-xs font-normal outline-none transition-all resize-none ${
-                          isDark
-                            ? "border-white/[0.08] focus:border-blue-500 text-slate-300"
-                            : "border-slate-200 focus:border-blue-600 text-slate-800"
-                        }`}
-                      />
-                    </div>
-                  </div>
-                  <div
-                    className={`p-5 rounded-xl border flex flex-col justify-center items-center ${
-                      isDark
-                        ? "bg-white/[0.01] border-white/[0.04]"
-                        : "bg-slate-50 border-slate-200/40"
-                    }`}
-                  >
-                    <label className="text-[10px] font-semibold uppercase text-blue-500 mb-1">
-                      Bundled Flat Price
-                    </label>
-                    <div className="flex items-center gap-1 text-blue-500">
-                      <span className="text-lg font-semibold opacity-60">
-                        ₹
-                      </span>
-                      <input
-                        type="number"
-                        placeholder="0"
-                        value={price}
-                        onChange={(e) => setPrice(e.target.value)}
-                        className="bg-transparent w-full text-2xl font-bold outline-none tracking-tight"
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                <div className="space-y-4 pt-6 border-t border-white/[0.04]">
-                  <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
-                    <h3 className="text-xs font-semibold uppercase tracking-wider flex items-center gap-2 opacity-70">
-                      <FiZap className="text-amber-500" /> Select Channels
-                      Components ({selectedServices.length})
-                    </h3>
-                    <div
-                      className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border ${
-                        isDark
-                          ? "bg-white/[0.02] border-white/[0.05]"
-                          : "bg-slate-50 border-slate-200/60"
-                      }`}
-                    >
-                      <FiSearch size={13} className="text-slate-400" />
-                      <input
-                        type="text"
-                        placeholder="Search workspace..."
-                        onChange={(e) => setSearchTerm(e.target.value)}
-                        className="bg-transparent text-xs font-normal outline-none w-full sm:w-36"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 max-h-[260px] overflow-y-auto p-1 custom-scrollbar">
-                    {flatServices
-                      .filter((s) =>
-                        s.name.toLowerCase().includes(searchTerm.toLowerCase()),
-                      )
-                      .map((s) => (
-                        <button
-                          key={s.externalServiceId}
-                          onClick={() => toggleService(s.externalServiceId)}
-                          className={`p-3.5 rounded-xl border text-left transition-all duration-200 outline-none ${
-                            selectedServices.includes(s.externalServiceId)
-                              ? "bg-blue-500 border-blue-600 text-white shadow-md shadow-blue-500/10"
-                              : isDark
-                                ? "bg-white/[0.01] border-white/[0.04] text-slate-400 hover:bg-white/[0.04]"
-                                : "bg-white border-slate-200 text-slate-700 hover:bg-slate-50 shadow-sm"
-                          }`}
-                        >
-                          <p className="text-xs font-medium truncate leading-tight">
-                            {s.name}
-                          </p>
-                          <p
-                            className={`text-[9px] mt-1 font-semibold uppercase tracking-wider opacity-40`}
-                          >
-                            {s.section}
-                          </p>
-                        </button>
-                      ))}
-                  </div>
-                </div>
-
-                <button
-                  onClick={createPackage}
-                  className="w-full bg-blue-500 py-3.5 rounded-xl font-semibold text-white uppercase tracking-wide shadow-lg shadow-blue-500/10 hover:bg-blue-600 active:scale-[0.99] transition-all flex items-center justify-center gap-2 text-xs"
-                >
-                  <FiPackage size={14} /> Commit & Launch Bundle
-                </button>
-              </div>
-            </div>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 animate-in fade-in duration-400">
-            {packages.length === 0 && !loading && (
-              <div className="col-span-full py-28 text-center opacity-30 flex flex-col items-center justify-center gap-2">
-                <FiPackage size={36} className="text-slate-400" />
-                <p className="text-xs font-semibold uppercase tracking-wider">
-                  No Active Studio Bundles Configured
-                </p>
-              </div>
-            )}
-
-            {packages.map((pkg) => (
               <div
-                key={pkg.id}
-                className={`rounded-2xl border transition-all duration-300 overflow-hidden ${
-                  isDark
-                    ? "bg-[#11141d]/40 border-white/[0.04]"
-                    : "bg-white border-slate-200/50 shadow-sm"
-                }`}
+                className={`flex flex-col gap-2 border-b-2 px-3 py-3 sm:flex-row sm:items-center sm:px-4 ${t.cardHead}`}
               >
-                <div className="p-6 md:p-8 flex flex-col gap-5">
-                  <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-1.5">
-                        <span
-                          className={`w-1.5 h-1.5 rounded-full ${pkg.isActive ? "bg-emerald-500 shadow-[0_0_6px_#10b981]" : "bg-slate-400"}`}
-                        />
-                        <span className="text-[9px] font-semibold tracking-wider uppercase opacity-40">
-                          {pkg.isActive ? "Live in App" : "Inactive"}
-                        </span>
-                      </div>
-                      <h2 className="text-base font-bold tracking-tight break-words max-w-[250px] md:max-w-full">
-                        {pkg.name}
-                      </h2>
-                    </div>
-
-                    <div
-                      className={`px-3.5 py-1.5 rounded-xl border flex items-baseline gap-0.5 shrink-0 font-semibold ${
-                        isDark
-                          ? "bg-white/[0.02] border-white/[0.08] text-blue-400"
-                          : "bg-blue-50 border-blue-100 text-blue-600"
+                <div className="min-w-0 flex-1">
+                  <h2
+                    className={`text-[14px] font-black uppercase tracking-tight ${t.heading}`}
+                  >
+                    Pick{" "}
+                    <span className="font-light lowercase italic">
+                      services
+                    </span>
+                  </h2>
+                  <p className={`text-[12px] ${t.muted}`}>
+                    {selectedServices.length} selected
+                  </p>
+                </div>
+                <div className="relative sm:w-64">
+                  <FiSearch
+                    size={14}
+                    className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
+                  />
+                  <input
+                    type="text"
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    placeholder="Search services…"
+                    className={`${inputCls} h-10 pl-9`}
+                  />
+                </div>
+              </div>
+              <div className="grid max-h-[460px] grid-cols-1 gap-2 overflow-y-auto p-3 sm:grid-cols-2 sm:p-4 xl:grid-cols-3">
+                {visibleServices.map((s) => {
+                  const on = selectedServices.includes(s.externalServiceId);
+                  return (
+                    <button
+                      key={s.externalServiceId}
+                      type="button"
+                      onClick={() => toggleService(s.externalServiceId)}
+                      aria-pressed={on}
+                      className={`flex items-start gap-2 rounded-xl border-2 p-2.5 text-left transition ${
+                        on
+                          ? isDark
+                            ? "border-white bg-white text-[#001F3F]"
+                            : "border-[#001F3F] bg-[#001F3F] text-white"
+                          : `${t.inner} ${t.heading}`
                       }`}
                     >
-                      <span className="text-xs opacity-60">₹</span>
-                      <span className="text-xl font-bold tracking-tight">
-                        {pkg.price}
-                      </span>
-                    </div>
-                  </div>
-
-                  {pkg.description && (
-                    <p className="text-xs opacity-50 -mt-2 leading-relaxed">
-                      {pkg.description}
-                    </p>
-                  )}
-
-                  {/* Service Pills */}
-                  <div className="flex flex-wrap gap-1.5">
-                    {pkg.items?.map((item) => (
                       <span
-                        key={item.id}
-                        className={`text-[9px] font-semibold uppercase px-2.5 py-1 rounded-lg border ${
-                          isDark
-                            ? "bg-black/20 border-white/[0.04] text-slate-400"
-                            : "bg-slate-50 border-slate-100 text-slate-500"
+                        className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded border-2 ${
+                          on
+                            ? isDark
+                              ? "border-[#001F3F] bg-[#001F3F] text-white"
+                              : "border-white bg-white text-[#001F3F]"
+                            : "border-slate-400"
                         }`}
                       >
-                        {item.serviceName}
+                        {on && <FiCheck size={10} strokeWidth={4} />}
                       </span>
-                    ))}
-                  </div>
-
-                  {/* Actions */}
-                  <div
-                    className={`flex items-center justify-between border-t pt-4 ${isDark ? "border-white/[0.04]" : "border-slate-100"}`}
+                      <span className="min-w-0">
+                        <span className="block truncate text-[14px] font-bold">
+                          {s.name}
+                        </span>
+                        <span
+                          className={`block truncate text-[12px] uppercase tracking-wider ${on ? "opacity-70" : t.muted}`}
+                        >
+                          {s.section}
+                        </span>
+                      </span>
+                    </button>
+                  );
+                })}
+                {!loading && visibleServices.length === 0 && (
+                  <p
+                    className={`col-span-full py-8 text-center text-[14px] ${t.muted}`}
                   >
-                    <button
-                      onClick={() => togglePackageStatus(pkg.id)}
-                      className={`flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider transition-colors outline-none ${
-                        pkg.isActive
-                          ? "text-slate-400 hover:text-orange-400"
-                          : "text-blue-500 hover:text-blue-600"
-                      }`}
-                    >
-                      <FiPower size={13} />{" "}
-                      {pkg.isActive ? "Pause Bundle" : "Activate"}
-                    </button>
-                    <button
-                      onClick={() => deletePackage(pkg.id)}
-                      className="p-2 rounded-xl bg-rose-500/5 text-rose-400 hover:bg-rose-500 hover:text-white transition-all outline-none"
-                    >
-                      <FiTrash2 size={14} />
-                    </button>
-                  </div>
+                    {flatServices.length
+                      ? "No services match your search."
+                      : "No services available for this workspace."}
+                  </p>
+                )}
+              </div>
+            </section>
+
+            {/* package details */}
+            <section
+              className={`h-fit overflow-hidden rounded-2xl border-2 lg:sticky lg:top-4 ${t.card}`}
+            >
+              <div className={`border-b-2 px-3 py-3 sm:px-4 ${t.cardHead}`}>
+                <h2
+                  className={`text-[14px] font-black uppercase tracking-tight ${t.heading}`}
+                >
+                  Package{" "}
+                  <span className="font-light lowercase italic">details</span>
+                </h2>
+              </div>
+              <div className="space-y-4 p-3 sm:p-4">
+                <div>
+                  <label
+                    className={`mb-1.5 block text-[12px] font-bold uppercase tracking-wider ${isDark ? "text-slate-300" : "text-[#001F3F]"}`}
+                  >
+                    Package name <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    value={name}
+                    onChange={(e) => {
+                      setName(e.target.value);
+                      setFormError("");
+                    }}
+                    placeholder="e.g. Monsoon care bundle"
+                    className={`${inputCls} h-11`}
+                  />
+                </div>
+                <div>
+                  <label
+                    className={`mb-1.5 block text-[12px] font-bold uppercase tracking-wider ${isDark ? "text-slate-300" : "text-[#001F3F]"}`}
+                  >
+                    Package price (₹) <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    inputMode="decimal"
+                    value={price}
+                    onChange={(e) => {
+                      setPrice(e.target.value);
+                      setFormError("");
+                    }}
+                    placeholder="0"
+                    className={`${inputCls} h-11 font-mono`}
+                  />
+                </div>
+                <div>
+                  <label
+                    className={`mb-1.5 block text-[12px] font-bold uppercase tracking-wider ${isDark ? "text-slate-300" : "text-[#001F3F]"}`}
+                  >
+                    Short description
+                  </label>
+                  <textarea
+                    rows={3}
+                    value={description}
+                    onChange={(e) => setDescription(e.target.value)}
+                    placeholder="What the customer gets and why it's good value…"
+                    className={`${inputCls} resize-none py-2.5`}
+                  />
+                </div>
+
+                <div>
+                  <p className="mb-1.5 text-[12px] font-bold uppercase tracking-wider text-slate-400">
+                    Included ({selectedList.length})
+                  </p>
+                  {selectedList.length ? (
+                    <div className="flex flex-wrap gap-1.5">
+                      {selectedList.map((s) => (
+                        <span
+                          key={s.externalServiceId}
+                          className={`inline-flex items-center gap-1 rounded-lg border py-0.5 pl-2 pr-1 text-[12px] font-bold ${t.inner} ${t.heading}`}
+                        >
+                          {s.name}
+                          <button
+                            type="button"
+                            onClick={() => toggleService(s.externalServiceId)}
+                            aria-label={`Remove ${s.name}`}
+                            className="flex h-5 w-5 items-center justify-center rounded text-slate-400 hover:text-red-500"
+                          >
+                            <FiX size={12} />
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className={`text-[12px] ${t.muted}`}>
+                      Tap services on the list to add them.
+                    </p>
+                  )}
+                </div>
+
+                {formError && (
+                  <p className="rounded-xl border-2 border-red-500/30 bg-red-500/10 px-3 py-2 text-[14px] font-semibold text-red-500">
+                    {formError}
+                  </p>
+                )}
+
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={resetForm}
+                    disabled={saving}
+                    className={`${btnBase} h-10 border-2 ${t.btnGhost}`}
+                  >
+                    Clear
+                  </button>
+                  <button
+                    type="button"
+                    onClick={createPackage}
+                    disabled={saving}
+                    className={`${btnBase} h-10 shadow-lg ${t.btnPrimary}`}
+                  >
+                    {saving ? (
+                      <FiLoader size={14} className="animate-spin" />
+                    ) : (
+                      <FiPackage size={14} />
+                    )}
+                    {saving ? "Saving…" : "Launch"}
+                  </button>
                 </div>
               </div>
-            ))}
+            </section>
+          </div>
+        ) : loading ? (
+          <SkeletonCards isDark={isDark} rows={2} h="h-40" />
+        ) : packages.length === 0 ? (
+          <EmptyState
+            isDark={isDark}
+            icon={FiPackage}
+            title="No packages yet"
+            text="Bundle a few services at one price to attract more bookings."
+            action={
+              <button
+                type="button"
+                onClick={() => setActiveTab("create")}
+                className={`${btnBase} h-9 px-4 ${t.btnPrimary}`}
+              >
+                <FiPlus size={14} /> Create package
+              </button>
+            }
+          />
+        ) : (
+          <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+            {packages.map((pkg) => {
+              const busy = busyId === pkg.id;
+              return (
+                <article
+                  key={pkg.id}
+                  className={`flex flex-col overflow-hidden rounded-2xl border-2 ${t.card} ${pkg.isActive ? "" : "opacity-80"}`}
+                >
+                  <div className="flex-1 space-y-3 p-3 sm:p-4">
+                    <div className="flex items-start gap-3">
+                      <div
+                        className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${t.chipNavy}`}
+                      >
+                        <FiPackage size={16} />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <LivePill
+                          on={pkg.isActive}
+                          onText="Live in app"
+                          offText="Paused"
+                        />
+                        <h3
+                          className={`mt-1 break-words text-[14px] font-black uppercase tracking-tight ${t.heading}`}
+                        >
+                          {pkg.name}
+                        </h3>
+                      </div>
+                      <p
+                        className={`shrink-0 font-mono text-[16px] font-black ${t.heading}`}
+                      >
+                        {inr(pkg.price)}
+                      </p>
+                    </div>
+                    {pkg.description && (
+                      <p className={`text-[14px] leading-relaxed ${t.muted}`}>
+                        {pkg.description}
+                      </p>
+                    )}
+                    <div className="flex flex-wrap gap-1.5">
+                      {(pkg.items || []).map((item) => (
+                        <span
+                          key={item.id}
+                          className={`rounded-lg border px-2 py-0.5 text-[12px] font-bold ${t.inner} ${t.body}`}
+                        >
+                          {item.serviceName}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                  <div
+                    className={`flex items-center justify-between gap-2 border-t-2 px-3 py-2.5 sm:px-4 ${t.line} ${t.cardHead}`}
+                  >
+                    <span
+                      className={`text-[12px] font-bold uppercase tracking-wider ${t.muted}`}
+                    >
+                      {(pkg.items || []).length} service
+                      {(pkg.items || []).length === 1 ? "" : "s"}
+                    </span>
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => togglePackageStatus(pkg)}
+                        disabled={busy}
+                        className={`${btnBase} h-8 border-2 px-3 ${
+                          pkg.isActive
+                            ? t.btnGhost
+                            : isDark
+                              ? "border-green-500/30 text-green-400 hover:bg-green-500/10"
+                              : "border-green-200 text-green-700 hover:bg-green-50"
+                        }`}
+                      >
+                        {busy ? (
+                          <FiRefreshCw size={12} className="animate-spin" />
+                        ) : (
+                          <FiPower size={12} />
+                        )}
+                        {pkg.isActive ? "Pause" : "Go live"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setDeleteTarget(pkg)}
+                        aria-label={`Delete ${pkg.name}`}
+                        className={`flex h-8 w-8 items-center justify-center rounded-xl border-2 transition ${
+                          isDark
+                            ? "border-white/10 text-slate-300 hover:border-red-500/40 hover:bg-red-500/10 hover:text-red-400"
+                            : "border-[#CBD5E1] text-slate-500 hover:border-red-300 hover:bg-red-50 hover:text-red-600"
+                        }`}
+                      >
+                        <FiTrash2 size={14} />
+                      </button>
+                    </div>
+                  </div>
+                </article>
+              );
+            })}
           </div>
         )}
-      </main>
+      </div>
+
+      <ConfirmDialog
+        isDark={isDark}
+        open={Boolean(deleteTarget)}
+        title="Remove package?"
+        message={
+          deleteTarget
+            ? `"${deleteTarget.name}" will be removed from the MotorDesk app.`
+            : ""
+        }
+        confirmText="Remove"
+        busy={Boolean(deleteTarget && busyId === deleteTarget.id)}
+        onConfirm={deletePackage}
+        onCancel={() => !busyId && setDeleteTarget(null)}
+      />
     </div>
   );
 }

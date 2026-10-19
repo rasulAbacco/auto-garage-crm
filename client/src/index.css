@@ -3,13 +3,44 @@
 @tailwind utilities;
 
 :root {
-  --sidebar-width: 250px;
+    --sidebar-width: 250px;
+}
+
+/* ------------------------------------------------------------------
+   Page width – keep the app exactly as wide as the phone (iOS fix)
+   iOS ignores overflow-x on <body> alone, so it is set on <html> too.
+   #root uses "clip" (not "hidden") so sticky top bars keep sticking.
+------------------------------------------------------------------- */
+html,
+body {
+    width: 100%;
+    max-width: 100%;
+    overflow-x: hidden;
+    -webkit-text-size-adjust: 100%;
+    /* stop iOS enlarging text in landscape */
+    text-size-adjust: 100%;
 }
 
 body {
     padding-top: env(safe-area-inset-top);
     padding-bottom: env(safe-area-inset-bottom);
+    -webkit-tap-highlight-color: transparent;
+    /* no grey flash when tapping */
 }
+
+#root {
+    width: 100%;
+    max-width: 100vw;
+    overflow-x: clip;
+}
+
+/* Media never wider than its box */
+img,
+video,
+canvas {
+    max-width: 100%;
+}
+
 /* Force dark input background and text color in dark mode */
 .dark input:not([type="date"]),
 .dark textarea,
@@ -23,11 +54,38 @@ select,
 textarea {
     appearance: auto !important;
     -webkit-appearance: auto !important;
+    min-width: 0;
+    /* let inputs shrink inside flex / grid rows */
+    max-width: 100%;
 }
 
-input[type="date"] {
+input[type="date"],
+input[type="time"],
+input[type="datetime-local"],
+input[type="month"] {
     background-color: white !important;
     color: black !important;
+    /* iOS gives date inputs a fixed minimum width – this lets them fit the card */
+    min-width: 0;
+    max-width: 100%;
+    text-align: left;
+}
+
+input[type="date"]::-webkit-date-and-time-value,
+input[type="time"]::-webkit-date-and-time-value {
+    text-align: left;
+    margin: 0;
+}
+
+/* iPhone / iPad only: 16px input text so Safari never zooms in on tap
+   (Android keeps the 14px design) */
+@supports (-webkit-touch-callout: none) {
+
+    input,
+    select,
+    textarea {
+        font-size: 16px !important;
+    }
 }
 
 /* Browser autofill (saved email/password): keep text readable in both themes.
@@ -37,10 +95,10 @@ input:-webkit-autofill:hover,
 input:-webkit-autofill:focus,
 textarea:-webkit-autofill,
 select:-webkit-autofill {
-  -webkit-box-shadow: 0 0 0px 1000px #f8fafc inset !important;
-  -webkit-text-fill-color: #0f172a !important;
-  caret-color: #0f172a;
-  transition: background-color 5000s ease-in-out 0s;
+    -webkit-box-shadow: 0 0 0px 1000px #f8fafc inset !important;
+    -webkit-text-fill-color: #0f172a !important;
+    caret-color: #0f172a;
+    transition: background-color 5000s ease-in-out 0s;
 }
 
 .dark input:-webkit-autofill,
@@ -48,46 +106,59 @@ select:-webkit-autofill {
 .dark input:-webkit-autofill:focus,
 .dark textarea:-webkit-autofill,
 .dark select:-webkit-autofill {
-  -webkit-box-shadow: 0 0 0px 1000px #0b1220 inset !important;
-  -webkit-text-fill-color: #ffffff !important;
-  caret-color: #ffffff;
+    -webkit-box-shadow: 0 0 0px 1000px #0b1220 inset !important;
+    -webkit-text-fill-color: #ffffff !important;
+    caret-color: #ffffff;
 }
-
-
 
 /* Print styles for invoice */
 @media print {
-  .no-print { display: none !important; }
-  .print-p-0 { padding: 0 !important; }
-  body { background: white !important; }
+    .no-print {
+        display: none !important;
+    }
+
+    .print-p-0 {
+        padding: 0 !important;
+    }
+
+    body {
+        background: white !important;
+        padding: 0 !important;
+    }
+
+    html,
+    body,
+    #root {
+        overflow: visible !important;
+    }
 }
 
 @layer utilities {
     .animate-blob {
         animation: blob 7s infinite;
     }
-    
+
     .animation-delay-2000 {
         animation-delay: 2s;
     }
-    
+
     .animation-delay-4000 {
         animation-delay: 4s;
     }
-    
+
     .animate-float {
         animation: float 6s ease-in-out infinite;
     }
-    
+
     .animate-gradient {
         background-size: 200% 200%;
         animation: gradient 3s ease infinite;
     }
-    
+
     .animate-fadeIn {
         animation: fadeIn 0.5s ease-in;
     }
-    
+
     .animate-fadeInUp {
         animation: fadeInUp 0.8s ease-out;
     }
@@ -105,21 +176,27 @@ select:-webkit-autofill {
     0% {
         transform: translate(0px, 0px) scale(1);
     }
+
     33% {
         transform: translate(30px, -50px) scale(1.1);
     }
+
     66% {
         transform: translate(-20px, 20px) scale(0.9);
     }
+
     100% {
         transform: translate(0px, 0px) scale(1);
     }
 }
 
 @keyframes float {
-    0%, 100% {
+
+    0%,
+    100% {
         transform: translateY(0);
     }
+
     50% {
         transform: translateY(-20px);
     }
@@ -129,9 +206,11 @@ select:-webkit-autofill {
     0% {
         background-position: 0% 50%;
     }
+
     50% {
         background-position: 100% 50%;
     }
+
     100% {
         background-position: 0% 50%;
     }
@@ -141,6 +220,7 @@ select:-webkit-autofill {
     from {
         opacity: 0;
     }
+
     to {
         opacity: 1;
     }
@@ -151,6 +231,7 @@ select:-webkit-autofill {
         opacity: 0;
         transform: translateY(20px);
     }
+
     to {
         opacity: 1;
         transform: translateY(0);
@@ -162,6 +243,7 @@ select:-webkit-autofill {
         opacity: 0;
         transform: translateX(-20px);
     }
+
     to {
         opacity: 1;
         transform: translateX(0);
@@ -173,6 +255,7 @@ select:-webkit-autofill {
         opacity: 0;
         transform: translateX(20px);
     }
+
     to {
         opacity: 1;
         transform: translateX(0);
@@ -187,10 +270,12 @@ select:-webkit-autofill {
     0% {
         transform: scale(1);
     }
+
     50% {
         transform: scale(1.05);
         box-shadow: 0 0 40px rgba(99, 102, 241, 0.4);
     }
+
     100% {
         transform: scale(1);
     }
@@ -201,13 +286,24 @@ select:-webkit-autofill {
 }
 
 @keyframes shake {
-    0%, 100% {
+
+    0%,
+    100% {
         transform: translateX(0);
     }
-    10%, 30%, 50%, 70%, 90% {
+
+    10%,
+    30%,
+    50%,
+    70%,
+    90% {
         transform: translateX(-5px);
     }
-    20%, 40%, 60%, 80% {
+
+    20%,
+    40%,
+    60%,
+    80% {
         transform: translateX(5px);
     }
 }

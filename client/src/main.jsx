@@ -1,23 +1,24 @@
+// client/src/main.jsx
+// ⚠️ Keep your existing imports / providers — the only required change is:
+//    await initAuthStorage() BEFORE rendering, so the saved session is back
+//    in localStorage before any route or component reads the token.
 import React from "react";
 import ReactDOM from "react-dom/client";
-import { unstable_HistoryRouter as HistoryRouter } from "react-router-dom";
-import { createBrowserHistory } from "history";
+import { BrowserRouter } from "react-router-dom";
 import App from "./App.jsx";
 import "./index.css";
-import "leaflet/dist/leaflet.css";
+import { initAuthStorage } from "./utils/authStorage";
 
-const history = createBrowserHistory();
+async function bootstrap() {
+  await initAuthStorage();
 
-ReactDOM.createRoot(document.getElementById("root")).render(
-  <React.StrictMode>
-    <HistoryRouter
-      history={history}
-      future={{
-        v7_startTransition: true,
-        v7_relativeSplatPath: true
-      }}
-    >
-      <App />
-    </HistoryRouter>
-  </React.StrictMode>
-);
+  ReactDOM.createRoot(document.getElementById("root")).render(
+    <React.StrictMode>
+      <BrowserRouter>
+        <App />
+      </BrowserRouter>
+    </React.StrictMode>,
+  );
+}
+
+bootstrap();
