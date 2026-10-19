@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import {
   FiTruck,
   FiActivity,
@@ -327,6 +327,12 @@ export default function LoginAndroid() {
                 <FiShield className="text-green-500" />
                 <span>Secure Transmission: 256-Bit</span>
               </div>
+              <Link
+                to="/privacy-policy"
+                className="mt-3 inline-block text-[10px] font-bold uppercase tracking-widest text-blue-500 underline underline-offset-4"
+              >
+                Privacy Policy
+              </Link>
             </div>
           </div>
         </div>

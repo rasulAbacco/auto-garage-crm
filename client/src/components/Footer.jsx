@@ -60,6 +60,12 @@ const Footer = () => {
                 Terms of Service
               </Link>
               <Link
+                to="/privacy-policy"
+                className="text-[11px] font-bold uppercase tracking-widest text-slate-500 hover:text-blue-500 transition-colors"
+              >
+                Privacy Policy
+              </Link>
+              <Link
                 to="/referencet&c"
                 className="text-[11px] font-bold uppercase tracking-widest text-slate-500 hover:text-blue-500 transition-colors"
               >
@@ -110,6 +116,12 @@ const Footer = () => {
           <p className="text-[9px] font-bold uppercase tracking-[0.2em]">
             © {currentYear} MotorDesk Infrastructure. All Rights Reserved.
           </p>
+          <Link
+            to="/privacy-policy"
+            className="text-[9px] font-bold uppercase tracking-[0.2em] hover:text-blue-500 transition-colors"
+          >
+            Privacy Policy
+          </Link>
           <div className="flex items-center gap-6">
             <div className="flex items-center gap-2">
               <FiCpu size={12} />

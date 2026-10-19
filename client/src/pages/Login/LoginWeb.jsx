@@ -521,6 +521,15 @@ export default function ModernLogin() {
                 <FiShield className="text-green-500" size={12} /> Secure,
                 encrypted sign-in
               </p>
+              <p className={`text-[12px] ${t.muted}`}>
+                <Link to="/privacy-policy" className={`font-bold ${t.link}`}>
+                  Privacy Policy
+                </Link>
+                {" · "}
+                <Link to="/terms" className={`font-bold ${t.link}`}>
+                  Terms
+                </Link>
+              </p>
             </div>
           </section>
         </main>
