@@ -8,7 +8,7 @@ import {
   ConfirmDialog,
   TypeBadge,
   RequiredTag,
-} from "../../pages/clients/components/clientUi";
+} from "./DynamicUi";
 
 const ColumnManager = ({ columns = [], onAdd, onEdit, onDelete, isDark }) => {
   const t = tk(isDark);

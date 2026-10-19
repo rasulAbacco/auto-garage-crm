@@ -8,7 +8,7 @@ import {
   FieldLabel,
   ToggleRow,
   TypeBadge,
-} from "../../pages/clients/components/clientUi";
+} from "./DynamicUi";
 
 const EditColumnModal = ({ column, onClose, onSave, isDark }) => {
   const t = tk(isDark);
