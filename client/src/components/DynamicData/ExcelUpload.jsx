@@ -8,9 +8,31 @@ import {
   Loader2,
   Info,
 } from "lucide-react";
-import { tk, btnBase, Banner } from "../../pages/clients/components/clientUi";
+import { tk, btnBase } from "../../pages/clients/components/clientUi";
 
 const MAX_ROWS = 500;
+
+const Banner = ({ tone = "warning", children }) => {
+  if (!children) return null;
+
+  const styles = {
+    warning: "border-amber-500/30 bg-amber-500/10 text-amber-600",
+    error: "border-red-500/30 bg-red-500/10 text-red-600",
+    success: "border-green-500/30 bg-green-500/10 text-green-600",
+    info: "border-blue-500/30 bg-blue-500/10 text-blue-600",
+  };
+
+  return (
+    <div
+      role="alert"
+      className={`rounded-xl border px-3 py-2 text-[12px] font-semibold ${
+        styles[tone] || styles.warning
+      }`}
+    >
+      {children}
+    </div>
+  );
+};
 
 const ExcelUpload = ({ onProceed, isDark, importProgress }) => {
   const t = tk(isDark);
