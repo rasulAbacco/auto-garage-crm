@@ -40,6 +40,7 @@ import ContactUs from "./pages/ContactUs.jsx";
 import ClientsLayout from "./components/ClientLayout.jsx";
 import CarRegister from "./pages/CarRegister.jsx";
 import TermsPage from "./pages/terms.jsx";
+import PrivacyPolicy from "./pages/PrivacyPolicy.jsx";
 import Profile from "./components/Profile.jsx";
 import Plans from "./pages/plans/Plans.jsx";
 import RefundPage from "./pages/RefundT&C.jsx";
@@ -149,6 +150,11 @@ function App() {
               <Route path="spare-parts/car" element={<CarSpareParts />} />
               <Route path="contactus" element={<ContactUs />} />
               <Route path="terms" element={<TermsPage />} />
+              <Route path="privacy-policy" element={<PrivacyPolicy />} />
+              <Route
+                path="privacy"
+                element={<Navigate to="/privacy-policy" replace />}
+              />
               <Route path="term&conditions" element={<RefundPage />} />
               <Route path="referencet&c" element={<ReferencePage />} />
             </Route>
