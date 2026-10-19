@@ -8,18 +8,36 @@ import {
   ArrowUpRight,
   Share2,
   Calendar,
+  Clock,
+  MessageCircle,
 } from "lucide-react";
 import axios from "axios";
-import { useTheme } from "../contexts/ThemeContext"; // Imported Theme Context
+import { useTheme } from "../contexts/ThemeContext";
+import { tk, btnBase, PageHeading } from "./clients/components/clientUi";
 
 const API_URL = import.meta.env.VITE_API_BASE_URL;
 
+const fmtDate = (d) => {
+  if (!d) return "—";
+  const dt = new Date(d);
+  return Number.isNaN(dt.getTime())
+    ? "—"
+    : dt.toLocaleDateString("en-IN", {
+        day: "numeric",
+        month: "short",
+        year: "numeric",
+      });
+};
+const inr = (v) => `₹${(Number(v) || 0).toLocaleString("en-IN")}`;
+
 const Reference = () => {
-  const { isDark } = useTheme(); // Access Theme State
+  const { isDark } = useTheme();
+  const t = tk(isDark);
   const [referralCode, setReferralCode] = useState("");
   const [referrals, setReferrals] = useState([]);
   const [copied, setCopied] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
   useEffect(() => {
     fetchReferralData();
@@ -31,271 +49,341 @@ const Reference = () => {
       const res = await axios.get(`${API_URL}/api/referral/my-referrals`, {
         headers: { Authorization: `Bearer ${token}` },
       });
-      setReferralCode(res.data.referralCode);
-      setReferrals(res.data.referrals || []);
+      setReferralCode(res.data.referralCode || "");
+      setReferrals(Array.isArray(res.data.referrals) ? res.data.referrals : []);
     } catch (err) {
       console.error("Referral fetch error:", err);
+      setError(err?.response?.data?.message || "Could not load your referrals");
     } finally {
       setLoading(false);
     }
   };
 
-  const copyCode = () => {
+  const copyCode = async () => {
     if (!referralCode) return;
-    navigator.clipboard.writeText(referralCode);
+    try {
+      await navigator.clipboard.writeText(referralCode);
+    } catch {
+      // fallback for older browsers / http
+      const ta = document.createElement("textarea");
+      ta.value = referralCode;
+      document.body.appendChild(ta);
+      ta.select();
+      try {
+        document.execCommand("copy");
+      } catch {
+        /* ignore */
+      }
+      ta.remove();
+    }
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
 
-  // Calculate Stats on the fly
+  const shareText = `I run my garage on MotorDesk. Sign up with my code ${referralCode} — ${window.location.origin}`;
+  const waLink = `https://wa.me/?text=${encodeURIComponent(shareText)}`;
+
   const stats = useMemo(() => {
-    const totalEarned = referrals.reduce(
-      (acc, curr) => acc + (Number(curr.amount) || 0),
-      0,
-    );
+    const paid = referrals.filter((r) => r.paidAt);
     return {
       count: referrals.length,
-      earnings: totalEarned,
+      paid: paid.length,
+      earnings: referrals.reduce((acc, r) => acc + (Number(r.amount) || 0), 0),
     };
   }, [referrals]);
 
-  return (
+  const th =
+    "whitespace-nowrap px-4 py-3 text-[12px] font-black uppercase tracking-wider text-slate-400";
+
+  const StatusPill = ({ paid }) =>
+    paid ? (
+      <span className="inline-flex items-center gap-1 rounded-lg border border-green-500/30 bg-green-500/10 px-2 py-0.5 text-[12px] font-black uppercase tracking-wider text-green-600">
+        <CheckCircle size={12} /> Paid
+      </span>
+    ) : (
+      <span className="inline-flex items-center gap-1 rounded-lg border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[12px] font-black uppercase tracking-wider text-amber-600">
+        <Clock size={12} /> Pending
+      </span>
+    );
+
+  const Avatar = ({ name }) => (
     <div
-      className={`space-y-6 lg:ml-16 lg:ml-16 sm:ml-0 min-h-screen p-4 sm:p-1 transition-colors duration-300 ${isDark ? " text-white" : "bg-gray-50 text-gray-900"}`}
+      className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-[14px] font-black ${t.chipNavy}`}
     >
-      <div className=" mx-auto space-y-8 animate-fade-in-up">
-        {/* Header Section */}
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-          <div>
-            <h1 className="text-6xl font-extrabold">Referral Program</h1>
-            <p
-              className={`mt-4 ml-1 text-md font-semibold ${isDark ? "text-gray-200" : "text-gray-800"}`}
-            >
-              Invite friends and earn rewards when they subscribe.
-            </p>
-          </div>
-        </div>
+      {(
+        String(name || "?")
+          .trim()
+          .charAt(0) || "?"
+      ).toUpperCase()}
+    </div>
+  );
 
-        {/* Top Grid: Code & Stats */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* 1. The Hero Card (Referral Code) */}
-          <div className="lg:col-span-2 relative overflow-hidden rounded-3xl p-8 shadow-xl bg-gradient-to-r from-violet-600 to-indigo-600 text-white border border-transparent dark:border-gray-700">
-            {/* Decorative Circles */}
-            <div className="absolute top-0 right-0 -mr-16 -mt-16 w-64 h-64 rounded-full bg-white opacity-10 blur-3xl"></div>
-            <div className="absolute bottom-0 left-0 -ml-16 -mb-16 w-40 h-40 rounded-full bg-white opacity-10 blur-3xl"></div>
+  return (
+    <div className="min-h-screen lg:ml-20">
+      <div className="mx-auto max-w-[1600px] space-y-4 sm:space-y-5">
+        <PageHeading
+          isDark={isDark}
+          title="Referral"
+          accent="program."
+          subtitle="Invite other garages and earn a reward when they subscribe."
+        />
 
-            <div className="relative z-10 flex flex-col md:flex-row justify-between items-center gap-6">
-              <div className="space-y-4">
-                <div className="flex items-center gap-2 text-indigo-100 bg-white/10 w-fit px-3 py-1 rounded-full text-sm backdrop-blur-md border border-white/20">
-                  <Share2 size={14} />
-                  <span>Your Unique Code</span>
+        {error && (
+          <p className="rounded-xl border-2 border-red-500/30 bg-red-500/10 px-4 py-3 text-[14px] font-semibold text-red-500">
+            {error}
+          </p>
+        )}
+
+        <div className="grid gap-3 lg:grid-cols-3">
+          {/* code card */}
+          <section className="relative overflow-hidden rounded-2xl border-2 border-white/5 bg-gradient-to-br from-[#001F3F] to-[#000814] p-4 text-white shadow-2xl shadow-black/20 sm:p-5 lg:col-span-2">
+            <div className="pointer-events-none absolute -right-10 -top-10 h-40 w-40 rotate-12 rounded-3xl border-2 border-white/5" />
+            <div className="pointer-events-none absolute -bottom-12 right-24 h-32 w-32 rotate-45 rounded-3xl border-2 border-white/5" />
+
+            <div className="relative space-y-4">
+              <span className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-2.5 py-1 text-[12px] font-black uppercase tracking-[0.2em]">
+                <Share2 size={12} /> Your code
+              </span>
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+                <div className="min-w-0">
+                  <p className="break-all font-mono text-[16px] font-black tracking-[0.3em] sm:tracking-[0.4em]">
+                    {loading ? "– – – – – –" : referralCode || "—"}
+                  </p>
+                  <p className="mt-1 max-w-md text-[14px] text-white/60">
+                    Share it with other garage owners. You earn for every one
+                    that subscribes.
+                  </p>
                 </div>
-                <h2 className="text-4xl md:text-5xl font-extrabold tracking-tight">
-                  {loading ? "..." : referralCode}
-                </h2>
-                <p className="text-indigo-100 max-w-md">
-                  Share this code with your network. You earn rewards for every
-                  successful signup!
-                </p>
+                <div className="grid shrink-0 grid-cols-2 gap-2 sm:flex">
+                  <button
+                    type="button"
+                    onClick={copyCode}
+                    disabled={!referralCode}
+                    className={`${btnBase} h-10 bg-white px-4 text-[#001F3F] hover:bg-blue-50`}
+                  >
+                    {copied ? (
+                      <CheckCircle size={14} className="text-green-600" />
+                    ) : (
+                      <Copy size={14} />
+                    )}
+                    {copied ? "Copied" : "Copy code"}
+                  </button>
+                  <a
+                    href={referralCode ? waLink : undefined}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    aria-disabled={!referralCode}
+                    className={`${btnBase} h-10 border-2 border-white/15 px-4 text-white hover:bg-white/10 ${referralCode ? "" : "pointer-events-none opacity-50"}`}
+                  >
+                    <MessageCircle size={14} /> WhatsApp
+                  </a>
+                </div>
               </div>
-
-              <button
-                onClick={copyCode}
-                className="group relative flex items-center gap-3 bg-white text-indigo-600 px-6 py-4 rounded-xl font-bold shadow-lg hover:bg-gray-100 transition-all active:scale-95"
-              >
-                {copied ? (
-                  <>
-                    <CheckCircle className="w-5 h-5 text-green-500" />
-                    <span>Copied!</span>
-                  </>
-                ) : (
-                  <>
-                    <Copy className="w-5 h-5 group-hover:scale-110 transition-transform" />
-                    <span>Copy Code</span>
-                  </>
-                )}
-              </button>
             </div>
-          </div>
+          </section>
 
-          {/* 2. Stats Column */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-1 gap-6">
-            {/* Stat Card 1: Users */}
-            <div
-              className={`p-6 rounded-3xl shadow-sm border flex items-center gap-5 ${isDark ? "bg-gray-800 border-gray-700" : "bg-white border-gray-100"}`}
-            >
+          {/* stats */}
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-1">
+            {[
+              {
+                title: "Garages referred",
+                value: `${stats.count}`,
+                sub: `${stats.paid} subscribed`,
+                icon: Users,
+                chip: t.chipNavy,
+              },
+              {
+                title: "Total earnings",
+                value: inr(stats.earnings),
+                sub: "From paid referrals",
+                icon: Wallet,
+                chip: "bg-green-500/10 text-green-600",
+              },
+            ].map(({ title, value, sub, icon: Icon, chip }) => (
               <div
-                className={`p-4 rounded-2xl ${isDark ? "bg-blue-900/30 text-blue-400" : "bg-blue-50 text-blue-600"}`}
+                key={title}
+                className={`rounded-2xl border-2 p-3 sm:p-4 ${t.card}`}
               >
-                <Users size={28} />
-              </div>
-              <div>
+                <div className="flex items-start justify-between gap-2">
+                  <p className="text-[12px] font-bold uppercase leading-tight tracking-wider text-slate-400">
+                    {title}
+                  </p>
+                  <div
+                    className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-xl ${chip}`}
+                  >
+                    <Icon size={14} />
+                  </div>
+                </div>
                 <p
-                  className={`text-sm font-medium ${isDark ? "text-gray-400" : "text-gray-500"}`}
+                  className={`mt-2 truncate text-[16px] font-black tracking-tight ${t.heading}`}
                 >
-                  Total Referred
+                  {value}
                 </p>
-                <h3 className="text-3xl font-bold">{stats.count}</h3>
+                <p className={`text-[12px] ${t.muted}`}>{sub}</p>
               </div>
-            </div>
-
-            {/* Stat Card 2: Earnings */}
-            <div
-              className={`p-6 rounded-3xl shadow-sm border flex items-center gap-5 ${isDark ? "bg-gray-800 border-gray-700" : "bg-white border-gray-100"}`}
-            >
-              <div
-                className={`p-4 rounded-2xl ${isDark ? "bg-emerald-900/30 text-emerald-400" : "bg-emerald-50 text-emerald-600"}`}
-              >
-                <Wallet size={28} />
-              </div>
-              <div>
-                <p
-                  className={`text-sm font-medium ${isDark ? "text-gray-400" : "text-gray-500"}`}
-                >
-                  Total Earnings
-                </p>
-                <h3 className="text-3xl font-bold">
-                  ₹{stats.earnings.toLocaleString()}
-                </h3>
-              </div>
-            </div>
+            ))}
           </div>
         </div>
 
-        {/* Referrals Table Section */}
-        <div
-          className={`rounded-3xl shadow-sm border overflow-hidden ${isDark ? "bg-gray-800 border-gray-700" : "bg-white border-gray-100"}`}
-        >
+        {/* history */}
+        <section className={`overflow-hidden rounded-2xl border-2 ${t.card}`}>
           <div
-            className={`p-6 border-b flex justify-between items-center ${isDark ? "border-gray-700" : "border-gray-100"}`}
+            className={`flex items-center gap-3 border-b-2 px-3 py-3 sm:px-4 ${t.cardHead}`}
           >
-            <h3 className="text-xl font-bold flex items-center gap-2">
-              <Trophy className="text-yellow-500" size={20} />
-              Referral History
-            </h3>
+            <div
+              className={`flex h-8 w-8 items-center justify-center rounded-xl ${t.chipNavy}`}
+            >
+              <Trophy size={14} />
+            </div>
+            <h2
+              className={`text-[14px] font-black uppercase tracking-tight ${t.heading}`}
+            >
+              Referral{" "}
+              <span className="font-light lowercase italic">history</span>
+            </h2>
           </div>
 
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse">
-              <thead>
-                <tr
-                  className={`text-xs uppercase tracking-wider ${isDark ? "bg-gray-700/50 text-gray-400" : "bg-gray-50 text-gray-500"}`}
-                >
-                  <th className="p-5 font-semibold">User</th>
-                  <th className="p-5 font-semibold">Plan Details</th>
-                  <th className="p-5 font-semibold">Reward</th>
-                  <th className="p-5 font-semibold">Status</th>
-                  <th className="p-5 font-semibold">Joined Date</th>
-                  <th className="p-5 font-semibold">Payment Date</th>
-                </tr>
-              </thead>
-              <tbody
-                className={`divide-y ${isDark ? "divide-gray-700" : "divide-gray-100"}`}
+          {loading ? (
+            <div className="space-y-2 p-3 sm:p-4">
+              {[0, 1, 2].map((i) => (
+                <div
+                  key={i}
+                  className={`h-12 animate-pulse rounded-xl ${isDark ? "bg-white/5" : "bg-[#F8FAFC]"}`}
+                />
+              ))}
+            </div>
+          ) : referrals.length === 0 ? (
+            <div className="flex flex-col items-center px-4 py-12 text-center">
+              <div
+                className={`mb-3 flex h-12 w-12 items-center justify-center rounded-2xl border-2 text-slate-400 ${t.inner}`}
               >
-                {referrals.length === 0 ? (
-                  <tr>
-                    <td colSpan="6">
-                      <div className="flex flex-col items-center justify-center py-16 text-center">
-                        <div
-                          className={`p-4 rounded-full mb-4 ${isDark ? "bg-gray-700" : "bg-gray-50"}`}
+                <Users size={20} />
+              </div>
+              <p
+                className={`text-[14px] font-black uppercase tracking-tight ${t.heading}`}
+              >
+                No referrals yet
+              </p>
+              <p className={`mt-1 text-[14px] ${t.muted}`}>
+                Share your code to get started.
+              </p>
+            </div>
+          ) : (
+            <>
+              {/* desktop */}
+              <div className="hidden overflow-x-auto md:block">
+                <table className="w-full border-collapse text-left">
+                  <thead className={`border-b-2 ${t.cardHead}`}>
+                    <tr>
+                      <th className={th}>Garage</th>
+                      <th className={th}>Plan</th>
+                      <th className={`${th} text-right`}>Reward</th>
+                      <th className={th}>Status</th>
+                      <th className={th}>Joined</th>
+                      <th className={th}>Paid on</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {referrals.map((u, idx) => (
+                      <tr
+                        key={u.id || u.email || idx}
+                        className={`border-b last:border-0 ${t.line} ${isDark ? "hover:bg-white/5" : "hover:bg-[#F8FAFC]"}`}
+                      >
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-3">
+                            <Avatar name={u.name} />
+                            <div className="min-w-0">
+                              <p
+                                className={`truncate text-[14px] font-black ${t.heading}`}
+                              >
+                                {u.name || "—"}
+                              </p>
+                              <p className={`truncate text-[12px] ${t.muted}`}>
+                                {u.email}
+                              </p>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-4 py-3">
+                          <span
+                            className={`whitespace-nowrap rounded-lg border px-2 py-0.5 text-[12px] font-bold ${t.inner} ${t.body}`}
+                          >
+                            {[u.plan, u.billing].filter(Boolean).join(" · ") ||
+                              "—"}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-right">
+                          <span
+                            className={`inline-flex items-center gap-1 font-mono text-[14px] font-black ${isDark ? "text-green-400" : "text-green-700"}`}
+                          >
+                            {inr(u.amount)} <ArrowUpRight size={12} />
+                          </span>
+                        </td>
+                        <td className="px-4 py-3">
+                          <StatusPill paid={Boolean(u.paidAt)} />
+                        </td>
+                        <td
+                          className={`whitespace-nowrap px-4 py-3 text-[14px] ${t.body}`}
                         >
-                          <Users
-                            className={`w-8 h-8 ${isDark ? "text-gray-500" : "text-gray-400"}`}
-                          />
-                        </div>
+                          {fmtDate(u.joiningDate)}
+                        </td>
+                        <td
+                          className={`whitespace-nowrap px-4 py-3 text-[14px] ${t.body}`}
+                        >
+                          {u.paidAt ? (
+                            <span className="inline-flex items-center gap-1.5">
+                              <Calendar size={12} className="text-slate-400" />{" "}
+                              {fmtDate(u.paidAt)}
+                            </span>
+                          ) : (
+                            <span className={t.muted}>—</span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* phone */}
+              <div className="space-y-2 p-3 md:hidden">
+                {referrals.map((u, idx) => (
+                  <div
+                    key={u.id || u.email || idx}
+                    className={`rounded-xl border-2 p-3 ${t.inner}`}
+                  >
+                    <div className="flex items-start gap-3">
+                      <Avatar name={u.name} />
+                      <div className="min-w-0 flex-1">
                         <p
-                          className={`${isDark ? "text-gray-300" : "text-gray-500"} font-medium`}
+                          className={`truncate text-[14px] font-black ${t.heading}`}
                         >
-                          No referrals yet.
+                          {u.name || "—"}
                         </p>
-                        <p
-                          className={`text-sm mt-1 ${isDark ? "text-gray-500" : "text-gray-400"}`}
-                        >
-                          Share your code to get started!
+                        <p className={`truncate text-[12px] ${t.muted}`}>
+                          {[u.plan, u.billing].filter(Boolean).join(" · ")}
                         </p>
                       </div>
-                    </td>
-                  </tr>
-                ) : (
-                  referrals.map((user, idx) => (
-                    <tr
-                      key={idx}
-                      className={`transition-colors group ${isDark ? "hover:bg-gray-700/30" : "hover:bg-gray-50"}`}
+                      <span
+                        className={`font-mono text-[14px] font-black ${isDark ? "text-green-400" : "text-green-700"}`}
+                      >
+                        {inr(u.amount)}
+                      </span>
+                    </div>
+                    <div
+                      className={`mt-2 flex items-center justify-between gap-2 border-t-2 pt-2 ${t.line}`}
                     >
-                      <td className="p-5">
-                        <div className="flex items-center gap-3">
-                          {/* Avatar Initials */}
-                          <div
-                            className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm ${isDark ? "bg-indigo-900 text-indigo-300" : "bg-indigo-100 text-indigo-600"}`}
-                          >
-                            {user.name.charAt(0).toUpperCase()}
-                          </div>
-                          <div>
-                            <p className="font-bold">{user.name}</p>
-                            <p
-                              className={`text-xs ${isDark ? "text-gray-500" : "text-gray-500"}`}
-                            >
-                              {user.email}
-                            </p>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="p-5">
-                        <span
-                          className={`px-3 py-1 rounded-full text-xs font-semibold border ${isDark ? "bg-gray-700 text-gray-300 border-gray-600" : "bg-gray-100 text-gray-600 border-gray-200"}`}
-                        >
-                          {user.plan} • {user.billing}
-                        </span>
-                      </td>
-                      <td className="p-5">
-                        <div
-                          className={`flex items-center gap-1 font-bold ${isDark ? "text-emerald-400" : "text-emerald-600"}`}
-                        >
-                          <span>₹{user.amount}</span>
-                          <ArrowUpRight size={14} />
-                        </div>
-                      </td>
-                      <td className="p-5">
-                        {user.paidAt ? (
-                          <span
-                            className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium ${isDark ? "bg-green-900/30 text-green-400" : "bg-green-100 text-green-800"}`}
-                          >
-                            ● Paid
-                          </span>
-                        ) : (
-                          <span
-                            className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium ${isDark ? "bg-yellow-900/30 text-yellow-400" : "bg-yellow-100 text-yellow-800"}`}
-                          >
-                            ● Pending
-                          </span>
-                        )}
-                      </td>
-                      <td
-                        className={`p-5 text-sm ${isDark ? "text-gray-400" : "text-gray-500"}`}
-                      >
-                        {new Date(user.joiningDate).toLocaleDateString()}
-                      </td>
-                      <td
-                        className={`p-5 text-sm ${isDark ? "text-gray-400" : "text-gray-500"}`}
-                      >
-                        <div className="flex items-center gap-2">
-                          {user.paidAt ? (
-                            <>
-                              <Calendar size={14} />
-                              {new Date(user.paidAt).toLocaleDateString()}
-                            </>
-                          ) : (
-                            <span className="opacity-50">-</span>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
+                      <StatusPill paid={Boolean(u.paidAt)} />
+                      <span className={`text-[12px] ${t.muted}`}>
+                        Joined {fmtDate(u.joiningDate)}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+        </section>
       </div>
     </div>
   );

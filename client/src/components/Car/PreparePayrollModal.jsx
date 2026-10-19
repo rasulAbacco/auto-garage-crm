@@ -1,5 +1,25 @@
-import { useEffect, useState } from "react";
-import { X, Lock } from "lucide-react";
+// client/src/components/Car/PreparePayrollModal.jsx
+import React, { useEffect, useMemo, useState } from "react";
+import { Lock, Sparkles, Loader2, Save, Users } from "lucide-react";
+import { useTheme } from "../../contexts/ThemeContext";
+import {
+  tk,
+  btnBase,
+  Modal,
+  Avatar,
+  StatusPill,
+  EmptyState,
+  MiniNumber,
+  inr,
+  n,
+  monthName,
+} from "./staffUi";
+
+const FIELDS = [
+  { key: "leaves", label: "Leaves" },
+  { key: "bonus", label: "Bonus" },
+  { key: "extraDeductions", label: "Extra ded." },
+];
 
 export default function PreparePayrollModal({
   staffList,
@@ -8,16 +28,22 @@ export default function PreparePayrollModal({
   year,
   onClose,
   onSubmit,
-  isDark,
+  isDark: isDarkProp,
 }) {
+  const theme = useTheme();
+  const isDark = isDarkProp ?? theme?.isDark;
+  const t = tk(isDark);
+
+  const staff = Array.isArray(staffList) ? staffList : [];
+  const salaries = Array.isArray(existingSalaries) ? existingSalaries : [];
+
   const [inputs, setInputs] = useState({});
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     const initial = {};
-
-    staffList.forEach((s) => {
-      const salary = existingSalaries.find((sal) => sal.staffId === s.id);
-
+    staff.forEach((s) => {
+      const salary = salaries.find((sal) => sal.staffId === s.id);
       initial[s.id] = {
         salaryId: salary?.id || null,
         leaves: salary ? salary.leaves : "",
@@ -26,8 +52,8 @@ export default function PreparePayrollModal({
         status: salary?.status || "UNPAID",
       };
     });
-
     setInputs(initial);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [staffList, existingSalaries]);
 
   const updateField = (staffId, field, value) => {
@@ -40,7 +66,28 @@ export default function PreparePayrollModal({
     }));
   };
 
-  const handleGenerate = () => {
+  const estNet = (s) => {
+    const row = inputs[s.id] || {};
+    return (
+      n(s.baseSalary) +
+      n(row.bonus) -
+      n(row.leaves) * n(s.deductionPerLeave) -
+      n(row.extraDeductions)
+    );
+  };
+
+  const summary = useMemo(() => {
+    const rows = Object.values(inputs);
+    return {
+      paid: rows.filter((r) => r.status === "PAID").length,
+      saved: rows.filter((r) => r.salaryId && r.status !== "PAID").length,
+      fresh: rows.filter((r) => !r.salaryId).length,
+      total: staff.reduce((acc, s) => acc + estNet(s), 0),
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [inputs, staff]);
+
+  const handleGenerate = async () => {
     const createPayload = {};
     const updatePayload = [];
 
@@ -50,228 +97,193 @@ export default function PreparePayrollModal({
         bonus: Number(data.bonus) || 0,
         extraDeductions: Number(data.extraDeductions) || 0,
       };
-
       if (data.salaryId && data.status !== "PAID") {
-        updatePayload.push({
-          id: data.salaryId,
-          data: payload,
-        });
+        updatePayload.push({ id: data.salaryId, data: payload });
       } else if (!data.salaryId) {
         createPayload[staffId] = payload;
       }
     });
 
-    onSubmit({ createPayload, updatePayload });
+    setSaving(true);
+    try {
+      await onSubmit({ createPayload, updatePayload });
+    } finally {
+      setSaving(false);
+    }
   };
 
- const PaidSeal = () => (
-   <div className="inline-flex items-center justify-center">
-     <div className="relative w-20 h-20">
-       <svg
-         viewBox="0 0 100 100"
-         className="w-full h-full transform -rotate-12"
-       >
-         {/* Outer circle */}
-         <circle
-           cx="50"
-           cy="50"
-           r="48"
-           fill="none"
-           stroke="#10b981"
-           strokeWidth="2"
-         />
-         <circle
-           cx="50"
-           cy="50"
-           r="45"
-           fill="none"
-           stroke="#10b981"
-           strokeWidth="1"
-         />
+  const RowStatus = ({ s }) => {
+    const row = inputs[s.id];
+    if (!row) return null;
+    if (row.status === "PAID")
+      return (
+        <span className="inline-flex items-center gap-1 rounded-lg border border-green-500/30 bg-green-500/10 px-2 py-0.5 text-[12px] font-black uppercase tracking-wider text-green-600">
+          <Lock size={12} /> Paid
+        </span>
+      );
+    if (row.salaryId) return <StatusPill status={row.status} />;
+    return (
+      <span
+        className={`inline-flex items-center gap-1 rounded-lg border px-2 py-0.5 text-[12px] font-black uppercase tracking-wider ${t.inner} ${t.heading}`}
+      >
+        <Sparkles size={12} /> New
+      </span>
+    );
+  };
 
-         {/* Inner background */}
-         <circle cx="50" cy="50" r="42" fill="#10b981" opacity="0.1" />
-
-         {/* PAID text */}
-         <text
-           x="50"
-           y="58"
-           textAnchor="middle"
-           fill="#10b981"
-           fontSize="24"
-           fontWeight="bold"
-           fontFamily="Arial, sans-serif"
-         >
-           PAID
-         </text>
-
-         {/* Checkmark */}
-         <path
-           d="M 35 48 L 43 56 L 65 34"
-           fill="none"
-           stroke="#10b981"
-           strokeWidth="3"
-           strokeLinecap="round"
-           strokeLinejoin="round"
-           opacity="0.3"
-         />
-       </svg>
-     </div>
-   </div>
- );
+  const th =
+    "px-3 py-3 text-[12px] font-black uppercase tracking-wider text-slate-400";
+  const period = `${monthName(month)} ${year}`;
 
   return (
-    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-      <div
-        className={`w-full max-w-6xl rounded-2xl shadow-2xl overflow-hidden ${
-          isDark ? "bg-slate-900 text-slate-100" : "bg-white text-slate-900"
-        }`}
-      >
-        {/* Header */}
-        <div className="flex justify-between items-center p-6 border-b border-gray-200 dark:border-gray-700">
-          <div>
-            <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
-              Prepare Payroll
-            </h2>
-            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-              {month}/{year} — Edit or generate salaries
-            </p>
-          </div>
-          <button
-            onClick={onClose}
-            className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+    <Modal
+      isDark={isDark}
+      open
+      onClose={saving ? () => {} : onClose}
+      icon={Sparkles}
+      title="Prepare payroll"
+      subtitle={`${period} · enter leaves, bonus and extra deductions`}
+      maxW="max-w-6xl"
+      footer={
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <p
+            className={`text-[12px] font-bold uppercase tracking-wider ${t.muted}`}
           >
-            <X className="w-5 h-5 text-gray-500 dark:text-gray-400" />
-          </button>
+            Est. total{" "}
+            <span
+              className={`ml-1 font-mono text-[14px] ${isDark ? "text-green-400" : "text-green-700"}`}
+            >
+              {inr(summary.total)}
+            </span>
+            <span className="ml-2 normal-case tracking-normal">
+              · paid rows are locked
+            </span>
+          </p>
+          <div className="grid grid-cols-2 gap-2 sm:flex">
+            <button
+              type="button"
+              onClick={onClose}
+              disabled={saving}
+              className={`${btnBase} h-10 border-2 px-4 ${t.btnGhost}`}
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={handleGenerate}
+              disabled={saving || !staff.length}
+              className={`${btnBase} h-10 px-5 ${t.btnPrimary}`}
+            >
+              {saving ? (
+                <Loader2 size={14} className="animate-spin" />
+              ) : (
+                <Save size={14} />
+              )}
+              {saving ? "Saving…" : "Save salaries"}
+            </button>
+          </div>
         </div>
+      }
+    >
+      {!staff.length ? (
+        <EmptyState
+          isDark={isDark}
+          icon={Users}
+          title="No staff yet"
+          text="Add staff on the Staff page first, then prepare payroll."
+        />
+      ) : (
+        <div className="space-y-3 p-3 sm:p-4">
+          {/* summary chips */}
+          <div className="flex flex-wrap gap-2">
+            {[
+              ["New", summary.fresh],
+              ["Saved", summary.saved],
+              ["Paid", summary.paid],
+            ].map(([label, v]) => (
+              <span
+                key={label}
+                className={`rounded-lg border-2 px-2.5 py-1 text-[12px] font-black uppercase tracking-wider ${t.inner} ${t.body}`}
+              >
+                {label} <span className={t.heading}>{v}</span>
+              </span>
+            ))}
+          </div>
 
-        {/* Table */}
-        <div className="p-6 overflow-auto max-h-[60vh]">
-          <div className="bg-white dark:bg-slate-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
-            <table className="w-full border-collapse">
-              <thead>
-                <tr className="bg-gray-50 dark:bg-slate-700">
-                  <th className="p-4 text-left font-semibold text-gray-700 dark:text-gray-300 border-b border-gray-200 dark:border-gray-600">
-                    Staff
-                  </th>
-                  <th className="p-4 text-left font-semibold text-gray-700 dark:text-gray-300 border-b border-gray-200 dark:border-gray-600">
-                    Base Salary
-                  </th>
-                  <th className="p-4 text-left font-semibold text-gray-700 dark:text-gray-300 border-b border-gray-200 dark:border-gray-600">
-                    Deduction/Leave
-                  </th>
-                  <th className="p-4 text-left font-semibold text-gray-700 dark:text-gray-300 border-b border-gray-200 dark:border-gray-600">
-                    Leaves
-                  </th>
-                  <th className="p-4 text-left font-semibold text-gray-700 dark:text-gray-300 border-b border-gray-200 dark:border-gray-600">
-                    Bonus
-                  </th>
-                  <th className="p-4 text-left font-semibold text-gray-700 dark:text-gray-300 border-b border-gray-200 dark:border-gray-600">
-                    Extra Deductions
-                  </th>
-                  <th className="p-4 text-center font-semibold text-gray-700 dark:text-gray-300 border-b border-gray-200 dark:border-gray-600">
-                    Status
-                  </th>
+          {/* desktop grid */}
+          <div
+            className={`hidden overflow-x-auto rounded-xl border-2 lg:block ${t.line}`}
+          >
+            <table className="w-full border-collapse text-left">
+              <thead className={`border-b-2 ${t.cardHead}`}>
+                <tr>
+                  <th className={th}>Staff</th>
+                  <th className={`${th} text-right`}>Base</th>
+                  <th className={`${th} text-right`}>Per leave</th>
+                  <th className={th}>Leaves</th>
+                  <th className={th}>Bonus</th>
+                  <th className={th}>Extra deductions</th>
+                  <th className={`${th} text-right`}>Est. net</th>
+                  <th className={`${th} text-center`}>Status</th>
                 </tr>
               </thead>
               <tbody>
-                {staffList.map((s) => {
-                  const isLocked = inputs[s.id]?.status === "PAID";
-                  const isPaid = inputs[s.id]?.status === "PAID";
-
+                {staff.map((s) => {
+                  const locked = inputs[s.id]?.status === "PAID";
                   return (
                     <tr
                       key={s.id}
-                      className={`border-b border-gray-200 dark:border-gray-700 transition-colors ${
-                        isPaid ? "bg-green-50 dark:bg-green-900/20" : ""
-                      }`}
+                      className={`border-b last:border-0 ${t.line} ${locked ? "bg-green-500/5" : ""}`}
                     >
-                      <td className="p-4 font-medium text-gray-900 dark:text-white">
-                        <div className="flex items-center gap-2">
-                          {isPaid && (
-                            <Lock className="w-4 h-4 text-green-600 dark:text-green-400" />
-                          )}
-                          {s.name}
-                        </div>
-                      </td>
-                      <td className="p-4 text-gray-700 dark:text-gray-300">
-                        ₹{s.baseSalary.toLocaleString()}
-                      </td>
-                      <td className="p-4 text-gray-700 dark:text-gray-300">
-                        ₹{s.deductionPerLeave.toLocaleString()}
-                      </td>
-
-                      <td className="p-4">
-                        <div className="relative">
-                          <input
-                            type="number"
-                            min="0"
-                            disabled={isLocked}
-                            value={inputs[s.id]?.leaves ?? ""}
-                            onChange={(e) =>
-                              updateField(s.id, "leaves", e.target.value)
-                            }
-                            className={`w-24 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-colors ${
-                              isLocked
-                                ? "bg-gray-100 dark:bg-gray-700 text-gray-500 cursor-not-allowed border-gray-300 dark:border-gray-600"
-                                : "bg-white dark:bg-slate-700 border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white"
-                            }`}
-                          />
-                        </div>
-                      </td>
-
-                      <td className="p-4">
-                        <div className="relative">
-                          <input
-                            type="number"
-                            min="0"
-                            disabled={isLocked}
-                            value={inputs[s.id]?.bonus ?? ""}
-                            onChange={(e) =>
-                              updateField(s.id, "bonus", e.target.value)
-                            }
-                            className={`w-24 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-colors ${
-                              isLocked
-                                ? "bg-gray-100 dark:bg-gray-700 text-gray-500 cursor-not-allowed border-gray-300 dark:border-gray-600"
-                                : "bg-white dark:bg-slate-700 border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white"
-                            }`}
-                          />
-                        </div>
-                      </td>
-
-                      <td className="p-4">
-                        <div className="relative">
-                          <input
-                            type="number"
-                            min="0"
-                            disabled={isLocked}
-                            value={inputs[s.id]?.extraDeductions ?? ""}
-                            onChange={(e) =>
-                              updateField(
-                                s.id,
-                                "extraDeductions",
-                                e.target.value
-                              )
-                            }
-                            className={`w-24 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-colors ${
-                              isLocked
-                                ? "bg-gray-100 dark:bg-gray-700 text-gray-500 cursor-not-allowed border-gray-300 dark:border-gray-600"
-                                : "bg-white dark:bg-slate-700 border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white"
-                            }`}
-                          />
-                        </div>
-                      </td>
-
-                      <td className="p-4 text-center">
-                        {isPaid ? (
-                          <div className="flex justify-center">
-                            <PaidSeal />
+                      <td className="px-3 py-2.5">
+                        <div className="flex items-center gap-2.5">
+                          <Avatar name={s.name} isDark={isDark} size="sm" />
+                          <div className="min-w-0">
+                            <p
+                              className={`truncate text-[14px] font-black ${t.heading}`}
+                            >
+                              {s.name}
+                            </p>
+                            {s.role && (
+                              <p className={`truncate text-[12px] ${t.muted}`}>
+                                {s.role}
+                              </p>
+                            )}
                           </div>
-                        ) : (
-                          <span className="text-gray-500 dark:text-gray-400 text-sm">
-                            Pending
-                          </span>
-                        )}
+                        </div>
+                      </td>
+                      <td
+                        className={`px-3 py-2.5 text-right font-mono text-[14px] font-bold ${t.body}`}
+                      >
+                        {inr(s.baseSalary)}
+                      </td>
+                      <td
+                        className={`px-3 py-2.5 text-right font-mono text-[14px] ${t.muted}`}
+                      >
+                        {inr(s.deductionPerLeave)}
+                      </td>
+                      {FIELDS.map((f) => (
+                        <td key={f.key} className="px-3 py-2.5">
+                          <MiniNumber
+                            isDark={isDark}
+                            aria-label={`${f.label} for ${s.name}`}
+                            className="max-w-[110px]"
+                            disabled={locked}
+                            value={inputs[s.id]?.[f.key] ?? ""}
+                            onChange={(e) =>
+                              updateField(s.id, f.key, e.target.value)
+                            }
+                            placeholder="0"
+                          />
+                        </td>
+                      ))}
+                      <td
+                        className={`px-3 py-2.5 text-right font-mono text-[14px] font-black ${isDark ? "text-green-400" : "text-green-700"}`}
+                      >
+                        {inr(estNet(s))}
+                      </td>
+                      <td className="px-3 py-2.5 text-center">
+                        <RowStatus s={s} />
                       </td>
                     </tr>
                   );
@@ -279,24 +291,67 @@ export default function PreparePayrollModal({
               </tbody>
             </table>
           </div>
-        </div>
 
-        {/* Footer */}
-        <div className="flex justify-end gap-3 p-6 border-t border-gray-200 dark:border-gray-700">
-          <button
-            onClick={onClose}
-            className="px-6 py-2.5 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors font-medium"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={handleGenerate}
-            className="px-6 py-2.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors font-medium shadow-sm hover:shadow-md"
-          >
-            Save / Update Salary
-          </button>
+          {/* phone / tablet cards */}
+          <div className="grid gap-3 sm:grid-cols-2 lg:hidden">
+            {staff.map((s) => {
+              const locked = inputs[s.id]?.status === "PAID";
+              return (
+                <div
+                  key={s.id}
+                  className={`rounded-2xl border-2 p-3 ${t.inner} ${locked ? "opacity-80" : ""}`}
+                >
+                  <div className="flex items-start gap-2.5">
+                    <Avatar name={s.name} isDark={isDark} size="sm" />
+                    <div className="min-w-0 flex-1">
+                      <p
+                        className={`truncate text-[14px] font-black ${t.heading}`}
+                      >
+                        {s.name}
+                      </p>
+                      <p className={`truncate text-[12px] ${t.muted}`}>
+                        Base {inr(s.baseSalary)} · {inr(s.deductionPerLeave)}
+                        /leave
+                      </p>
+                    </div>
+                    <RowStatus s={s} />
+                  </div>
+                  <div className="mt-3 grid grid-cols-3 gap-2">
+                    {FIELDS.map((f) => (
+                      <label key={f.key} className="min-w-0">
+                        <span className="mb-1 block truncate text-[12px] font-bold uppercase tracking-wider text-slate-400">
+                          {f.label}
+                        </span>
+                        <MiniNumber
+                          isDark={isDark}
+                          disabled={locked}
+                          value={inputs[s.id]?.[f.key] ?? ""}
+                          onChange={(e) =>
+                            updateField(s.id, f.key, e.target.value)
+                          }
+                          placeholder="0"
+                        />
+                      </label>
+                    ))}
+                  </div>
+                  <div
+                    className={`mt-3 flex items-center justify-between border-t-2 pt-2 ${t.line}`}
+                  >
+                    <span className="text-[12px] font-bold uppercase tracking-wider text-slate-400">
+                      Est. net
+                    </span>
+                    <span
+                      className={`font-mono text-[14px] font-black ${isDark ? "text-green-400" : "text-green-700"}`}
+                    >
+                      {inr(estNet(s))}
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         </div>
-      </div>
-    </div>
+      )}
+    </Modal>
   );
 }

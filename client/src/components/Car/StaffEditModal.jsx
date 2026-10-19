@@ -1,36 +1,70 @@
-// StaffEditModal.jsx
+// client/src/components/Car/StaffEditModal.jsx
 import React, { useState } from "react";
+import toast from "react-hot-toast";
 import {
-  X,
   User,
   Briefcase,
   Mail,
   Lock,
+  Phone,
   IndianRupee,
   TrendingDown,
   Loader2,
   Save,
+  Edit3,
+  AlertCircle,
 } from "lucide-react";
 import { useTheme } from "../../contexts/ThemeContext";
+import {
+  tk,
+  btnBase,
+  Modal,
+  TextField,
+  PasswordField,
+  inr,
+  n,
+} from "./staffUi";
 
 const API = import.meta.env.VITE_API_BASE_URL;
 
+function Group({ isDark, title, children }) {
+  const t = tk(isDark);
+  return (
+    <div className="space-y-3">
+      <h4
+        className={`border-b-2 pb-2 text-[12px] font-black uppercase tracking-[0.15em] ${t.line} ${t.heading}`}
+      >
+        {title}
+      </h4>
+      {children}
+    </div>
+  );
+}
+
 export default function StaffEditModal({ staff, onClose, onSaved }) {
   const { isDark } = useTheme();
+  const t = tk(isDark);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
   const [form, setForm] = useState({
     ...staff,
+    phone: staff.phone ?? "",
     email: staff.login?.email || "",
-    password: "", // Default empty means "don't change"
-    advanceAmount: staff.advanceAmount || 0, // 🔄 Initialized balance parameter state
+    password: "", // empty = keep current password
+    advanceAmount: staff.advanceAmount || 0,
   });
 
   const handleChange = (e) => {
     setForm({ ...form, [e.target.name]: e.target.value });
+    setError("");
   };
 
   const save = async (e) => {
-    e.preventDefault();
+    e?.preventDefault();
+    if (!String(form.name || "").trim()) {
+      setError("Name is required");
+      return;
+    }
     setLoading(true);
     try {
       const res = await fetch(`${API}/api/car-staff/${staff.id}`, {
@@ -43,274 +77,175 @@ export default function StaffEditModal({ staff, onClose, onSaved }) {
       });
 
       if (res.ok) {
-        onSaved();
+        toast.success("Staff details saved");
+        onSaved?.();
         onClose();
       } else {
-        const err = await res.json();
-        alert(err.message || "Failed to update staff");
+        const err = await res.json().catch(() => null);
+        setError(err?.message || "Failed to update staff");
       }
-    } catch (error) {
-      console.error(error);
-      alert("Something went wrong");
+    } catch (err) {
+      console.error(err);
+      setError("Something went wrong. Please try again.");
     } finally {
       setLoading(false);
     }
   };
 
+  const estimate =
+    n(form.baseSalary) + n(form.bonusDefault) - n(form.extraDeductionsDefault);
+  const money = (name, label, icon = <IndianRupee size={12} />) => (
+    <TextField
+      isDark={isDark}
+      label={label}
+      icon={icon}
+      name={name}
+      type="number"
+      min="0"
+      inputMode="decimal"
+      value={form[name] ?? ""}
+      onChange={handleChange}
+      placeholder="0"
+    />
+  );
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm transition-opacity">
-      <div
-        className={`w-full max-w-2xl rounded-2xl shadow-2xl border overflow-hidden flex flex-col max-h-[90vh] ${
-          isDark ? "bg-slate-900 border-slate-800" : "bg-white border-slate-200"
-        }`}
+    <Modal
+      isDark={isDark}
+      open
+      onClose={loading ? () => {} : onClose}
+      icon={Edit3}
+      title="Edit staff details"
+      subtitle={`Update information for ${staff.name}`}
+      maxW="max-w-2xl"
+      footer={
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <p
+            className={`text-[12px] font-bold uppercase tracking-wider ${t.muted}`}
+          >
+            Est. monthly{" "}
+            <span
+              className={`ml-1 font-mono text-[14px] ${isDark ? "text-green-400" : "text-green-700"}`}
+            >
+              {inr(estimate)}
+            </span>
+          </p>
+          <div className="grid grid-cols-2 gap-2 sm:flex">
+            <button
+              type="button"
+              onClick={onClose}
+              disabled={loading}
+              className={`${btnBase} h-10 border-2 px-4 ${t.btnGhost}`}
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              form="staff-edit-form"
+              disabled={loading}
+              className={`${btnBase} h-10 px-5 ${t.btnPrimary}`}
+            >
+              {loading ? (
+                <Loader2 size={14} className="animate-spin" />
+              ) : (
+                <Save size={14} />
+              )}
+              {loading ? "Saving…" : "Save changes"}
+            </button>
+          </div>
+        </div>
+      }
+    >
+      <form
+        id="staff-edit-form"
+        onSubmit={save}
+        className="space-y-6 p-4 sm:p-5"
       >
-        {/* Header */}
-        <div
-          className={`flex justify-between items-center p-5 border-b z-10 ${
-            isDark
-              ? "border-slate-800 bg-slate-900"
-              : "border-slate-100 bg-white"
-          }`}
-        >
-          <div>
-            <h2
-              className={`text-xl font-bold ${
-                isDark ? "text-slate-100" : "text-slate-900"
-              }`}
-            >
-              Edit Staff Details
-            </h2>
-            <p
-              className={`text-sm mt-1 ${
-                isDark ? "text-slate-400" : "text-slate-500"
-              }`}
-            >
-              Update information for{" "}
-              <span className="font-medium text-indigo-600">{staff.name}</span>
-            </p>
+        <Group isDark={isDark} title="Identity & access">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <TextField
+              isDark={isDark}
+              label="Full name"
+              icon={<User size={12} />}
+              required
+              name="name"
+              value={form.name ?? ""}
+              onChange={handleChange}
+              placeholder="Staff name"
+            />
+            <TextField
+              isDark={isDark}
+              label="Role / position"
+              icon={<Briefcase size={12} />}
+              name="role"
+              value={form.role ?? ""}
+              onChange={handleChange}
+              placeholder="Job title"
+            />
+            <TextField
+              isDark={isDark}
+              label="Phone"
+              icon={<Phone size={12} />}
+              name="phone"
+              type="tel"
+              inputMode="tel"
+              value={form.phone ?? ""}
+              onChange={handleChange}
+              placeholder="98765 43210"
+            />
+            <TextField
+              isDark={isDark}
+              label="Login email"
+              icon={<Mail size={12} />}
+              name="email"
+              type="email"
+              value={form.email}
+              onChange={handleChange}
+              placeholder="email@example.com"
+            />
+            <PasswordField
+              isDark={isDark}
+              className="sm:col-span-2"
+              label="New password"
+              icon={<Lock size={12} />}
+              name="password"
+              value={form.password}
+              onChange={handleChange}
+              placeholder="Leave empty to keep current"
+              autoComplete="new-password"
+            />
           </div>
-          <button
-            onClick={onClose}
-            className={`p-2 rounded-full transition-colors ${
-              isDark
-                ? "text-slate-400 hover:text-slate-300 hover:bg-slate-800"
-                : "text-slate-400 hover:text-slate-600 hover:bg-slate-100"
-            }`}
-          >
-            <X size={20} />
-          </button>
-        </div>
+        </Group>
 
-        {/* Scrollable Body */}
-        <div className="overflow-y-auto p-6 space-y-8 custom-scrollbar">
-          {/* Section 1: Identity & Access */}
-          <div className="space-y-4">
-            <h3
-              className={`text-sm font-bold border-b pb-2 ${
-                isDark
-                  ? "text-slate-100 border-slate-800"
-                  : "text-slate-900 border-slate-100"
-              }`}
-            >
-              Identity & Access
-            </h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <InputGroup
-                label="Full Name"
-                name="name"
-                icon={User}
-                value={form.name}
-                onChange={handleChange}
-                isDark={isDark}
-                placeholder="Staff Name"
-              />
-              <InputGroup
-                label="Role / Position"
-                name="role"
-                icon={Briefcase}
-                value={form.role}
-                onChange={handleChange}
-                isDark={isDark}
-                placeholder="Job Title"
-              />
-              <InputGroup
-                label="Login Email"
-                name="email"
-                icon={Mail}
-                value={form.email}
-                onChange={handleChange}
-                isDark={isDark}
-                placeholder="email@example.com"
-              />
-              <InputGroup
-                label="Password"
-                name="password"
-                icon={Lock}
-                type="password"
-                value={form.password}
-                onChange={handleChange}
-                isDark={isDark}
-                placeholder="Leave empty to keep current"
-              />
-            </div>
+        <Group isDark={isDark} title="Payroll defaults">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+            {money("baseSalary", "Base salary")}
+            {money("bonusDefault", "Monthly bonus")}
+            {money("advanceAmount", "Advance amount")}
           </div>
+        </Group>
 
-          {/* Section 2: Payroll Configuration */}
-          <div className="space-y-4">
-            <h3
-              className={`text-sm font-bold border-b pb-2 ${
-                isDark
-                  ? "text-slate-100 border-slate-800"
-                  : "text-slate-900 border-slate-100"
-              }`}
-            >
-              Payroll Configuration
-            </h3>
-            {/* 🔄 CHANGED: Upgraded grid block to columns-3 layout map */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <InputGroup
-                label="Base Salary"
-                name="baseSalary"
-                icon={IndianRupee}
-                type="number"
-                value={form.baseSalary}
-                onChange={handleChange}
-                isDark={isDark}
-                placeholder="0.00"
-              />
-              <InputGroup
-                label="Monthly Bonus"
-                name="bonusDefault"
-                icon={IndianRupee}
-                type="number"
-                value={form.bonusDefault}
-                onChange={handleChange}
-                isDark={isDark}
-                placeholder="0.00"
-              />
-              {/* 🔄 NEW ADVANCE AMOUNT TRACKING INPUT ELEMENT */}
-              <InputGroup
-                label="Advance Amount"
-                name="advanceAmount"
-                icon={IndianRupee}
-                type="number"
-                value={form.advanceAmount}
-                onChange={handleChange}
-                isDark={isDark}
-                placeholder="0.00"
-              />
-            </div>
-          </div>
-
-          {/* Section 3: Deductions & Attendance */}
-          <div className="space-y-4">
-            <h3
-              className={`text-sm font-bold border-b pb-2 ${
-                isDark
-                  ? "text-slate-100 border-slate-800"
-                  : "text-slate-900 border-slate-100"
-              }`}
-            >
-              Deductions & Attendance
-            </h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <InputGroup
-                label="Deduction Per Leave"
-                name="deductionPerLeave"
-                icon={TrendingDown}
-                type="number"
-                value={form.deductionPerLeave}
-                onChange={handleChange}
-                isDark={isDark}
-                placeholder="0.00"
-              />
-              <InputGroup
-                label="Extra Deductions"
-                name="extraDeductionsDefault"
-                icon={TrendingDown}
-                type="number"
-                value={form.extraDeductionsDefault}
-                onChange={handleChange}
-                isDark={isDark}
-                placeholder="0.00"
-              />
-            </div>
-          </div>
-        </div>
-
-        {/* Footer */}
-        <div
-          className={`p-5 border-t flex justify-end gap-3 z-10 ${
-            isDark
-              ? "border-slate-800 bg-slate-800/50"
-              : "border-slate-100 bg-slate-50"
-          }`}
-        >
-          <button
-            onClick={onClose}
-            type="button"
-            className={`px-4 py-2 text-sm font-medium rounded-lg transition-all ${
-              isDark
-                ? "text-slate-300 hover:bg-slate-700 border border-slate-600"
-                : "text-slate-600 hover:bg-white border border-slate-200"
-            }`}
-          >
-            Cancel
-          </button>
-          <button
-            onClick={save}
-            disabled={loading}
-            className="px-6 py-2 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg shadow-lg shadow-indigo-500/20 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 transition-all transform active:scale-95"
-          >
-            {loading ? (
-              <Loader2 size={18} className="animate-spin" />
-            ) : (
-              <Save size={18} />
+        <Group isDark={isDark} title="Deductions & attendance">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            {money(
+              "deductionPerLeave",
+              "Deduction per leave",
+              <TrendingDown size={12} />,
             )}
-            {loading ? "Saving..." : "Save Changes"}
-          </button>
-        </div>
-      </div>
-    </div>
+            {money(
+              "extraDeductionsDefault",
+              "Extra deductions",
+              <TrendingDown size={12} />,
+            )}
+          </div>
+        </Group>
+
+        {error && (
+          <div className="flex items-center gap-2 rounded-xl border-2 border-red-500/30 bg-red-500/10 px-3 py-2 text-[14px] font-semibold text-red-500">
+            <AlertCircle size={14} className="shrink-0" /> {error}
+          </div>
+        )}
+      </form>
+    </Modal>
   );
 }
-
-const InputGroup = ({
-  label,
-  name,
-  icon: Icon,
-  type = "text",
-  placeholder,
-  value,
-  onChange,
-  isDark,
-  className = "",
-}) => (
-  <div className={`space-y-1.5 ${className}`}>
-    <label
-      className={`text-xs font-semibold uppercase tracking-wider ${
-        isDark ? "text-slate-400" : "text-slate-500"
-      }`}
-    >
-      {label}
-    </label>
-    <div className="relative group">
-      <Icon
-        className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-indigo-500 transition-colors"
-        size={18}
-      />
-      <input
-        name={name}
-        type={type}
-        value={value}
-        onChange={onChange}
-        placeholder={placeholder}
-        className={`w-full pl-10 pr-4 py-2.5 border rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all ${
-          isDark
-            ? "bg-slate-800 border-slate-700 text-slate-100 placeholder-slate-400"
-            : "bg-slate-50 border-slate-200 text-slate-900 placeholder-slate-400"
-        }`}
-      />
-    </div>
-  </div>
-);

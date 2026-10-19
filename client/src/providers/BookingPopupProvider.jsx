@@ -1,158 +1,221 @@
-import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
+// client/src/providers/BookingPopupProvider.jsx
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
+import { Capacitor } from "@capacitor/core";
 import { useSocket } from "./SocketProvider";
 
 const BookingPopupContext = createContext();
-
 export const useBookingPopup = () => useContext(BookingPopupContext);
+
+// Must match RESPONSE_WINDOW_MS on the server (30s)
+const RESPONSE_WINDOW_MS = 30 * 1000;
+// Tolerance for small differences between server and phone clocks
+const CLOCK_SKEW_MS = 15 * 1000;
+
+const IS_NATIVE = Capacitor.isNativePlatform();
+const SEEN_KEY = "md_seen_booking_ids";
+
+// 1-frame silent WAV — used ONLY to unlock audio in desktop/mobile browsers.
+// The real alert file is never played until a real booking arrives.
+const SILENT_WAV =
+  "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=";
+
+/* ---------- remember which bookings already rang ---------- */
+function loadSeen() {
+  try {
+    return new Set(JSON.parse(localStorage.getItem(SEEN_KEY) || "[]"));
+  } catch {
+    return new Set();
+  }
+}
+function saveSeen(set) {
+  try {
+    // keep only the last 100 ids
+    localStorage.setItem(SEEN_KEY, JSON.stringify([...set].slice(-100)));
+  } catch {
+    /* ignore */
+  }
+}
+
+/** Is this booking still inside its 30s response window? */
+function isFresh(data) {
+  const now = Date.now();
+  if (data?.expiresAt) {
+    return now < new Date(data.expiresAt).getTime() + CLOCK_SKEW_MS;
+  }
+  if (data?.createdAt) {
+    return (
+      now - new Date(data.createdAt).getTime() <
+      RESPONSE_WINDOW_MS + CLOCK_SKEW_MS
+    );
+  }
+  // Old server without timestamps → trust live events only
+  return true;
+}
 
 export default function BookingPopupProvider({ children }) {
   const socket = useSocket();
   const [booking, setBooking] = useState(null);
 
-  // 🔊 GLOBAL AUDIO
   const alertAudioRef = useRef(null);
-  const [audioUnlocked, setAudioUnlocked] = useState(false);
+  const stopTimerRef = useRef(null);
+  const seenRef = useRef(loadSeen());
+  // Native apps (Capacitor) allow playback without a gesture → no unlock needed
+  const unlockedRef = useRef(IS_NATIVE);
 
-  // ✅ Subscribers that want to know when a popup action (accept/reject/timeout) completes
   const actionListenersRef = useRef([]);
 
   const onBookingAction = useCallback((fn) => {
     actionListenersRef.current.push(fn);
-    // Return unsubscribe function
     return () => {
-      actionListenersRef.current = actionListenersRef.current.filter((f) => f !== fn);
+      actionListenersRef.current = actionListenersRef.current.filter(
+        (l) => l !== fn,
+      );
     };
   }, []);
 
   const notifyListeners = useCallback(() => {
     actionListenersRef.current.forEach((fn) => {
-      try { fn(); } catch (e) { console.error("BookingPopup listener error:", e); }
+      try {
+        fn();
+      } catch (error) {
+        console.error("BookingPopup listener error:", error);
+      }
     });
   }, []);
 
-  // ==============================
-  // INIT AUDIO
-  // ==============================
+  /* ---------- audio helpers ---------- */
+  const stopAlert = useCallback(() => {
+    clearTimeout(stopTimerRef.current);
+    stopTimerRef.current = null;
+    const audio = alertAudioRef.current;
+    if (audio) {
+      audio.pause();
+      audio.currentTime = 0;
+    }
+  }, []);
+
+  const playAlert = useCallback(
+    (durationMs) => {
+      const audio = alertAudioRef.current;
+      if (!audio || !unlockedRef.current) return;
+
+      stopAlert();
+      audio
+        .play()
+        .catch((e) => console.warn("🔇 Alert playback failed:", e.message));
+
+      // Never ring longer than the booking's response window
+      stopTimerRef.current = setTimeout(stopAlert, Math.max(1000, durationMs));
+    },
+    [stopAlert],
+  );
+
+  /* ---------- create audio (never plays here) ---------- */
   useEffect(() => {
     const audio = new Audio("/alert.mp3");
     audio.loop = true;
     audio.preload = "auto";
-
     alertAudioRef.current = audio;
 
-    console.log("🔊 Audio initialized");
-
     return () => {
+      clearTimeout(stopTimerRef.current);
       audio.pause();
-      audio.currentTime = 0;
+      alertAudioRef.current = null;
     };
   }, []);
 
-  // ==============================
-  // AUTO UNLOCK (NO VISIBLE CLICK)
-  // ==============================
+  /* ---------- browser only: unlock with a SILENT clip ---------- */
   useEffect(() => {
-    const unlock = () => {
-      if (!alertAudioRef.current) return;
+    if (IS_NATIVE) return;
 
-      alertAudioRef.current
+    const unlock = () => {
+      if (unlockedRef.current) return;
+      const silent = new Audio(SILENT_WAV);
+      silent
         .play()
         .then(() => {
-          alertAudioRef.current.pause();
-          alertAudioRef.current.currentTime = 0;
-
-          setAudioUnlocked(true);
-          console.log("🔓 Audio unlocked (auto)");
-
-          // remove all listeners after unlock
-          window.removeEventListener("click", unlock);
-          window.removeEventListener("mousemove", unlock);
-          window.removeEventListener("keydown", unlock);
-          window.removeEventListener("touchstart", unlock);
-          window.removeEventListener("focus", unlock);
+          unlockedRef.current = true;
+          remove();
         })
         .catch(() => {
-          // still locked, will retry on next interaction
+          /* try again on next tap */
         });
     };
-
-    // 🔥 MULTIPLE SILENT TRIGGERS
-    window.addEventListener("click", unlock);
-    window.addEventListener("mousemove", unlock);
-    window.addEventListener("keydown", unlock);
-    window.addEventListener("touchstart", unlock);
-    window.addEventListener("focus", unlock);
-
-    return () => {
-      window.removeEventListener("click", unlock);
-      window.removeEventListener("mousemove", unlock);
+    const remove = () => {
+      window.removeEventListener("pointerdown", unlock);
       window.removeEventListener("keydown", unlock);
-      window.removeEventListener("touchstart", unlock);
-      window.removeEventListener("focus", unlock);
     };
+
+    window.addEventListener("pointerdown", unlock);
+    window.addEventListener("keydown", unlock);
+    return remove;
   }, []);
 
-  // ==============================
-  // SOCKET LISTENER
-  // ==============================
+  /* ---------- stop ringing when app goes to background ---------- */
+  useEffect(() => {
+    const onVisibility = () => {
+      if (document.hidden) stopAlert();
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => document.removeEventListener("visibilitychange", onVisibility);
+  }, [stopAlert]);
+
+  /* ---------- socket: ring ONLY for a new, still-open booking ---------- */
   useEffect(() => {
     if (!socket) return;
 
-    console.log("🟢 Attaching socket listener");
-
     const handleNewBooking = (data) => {
-      console.log("🔥 NEW BOOKING RECEIVED:", data);
+      const id = data?.id != null ? String(data.id) : null;
 
+      // Already rang for this one (reconnect / duplicate emit / app reopen)
+      if (id && seenRef.current.has(id)) return;
+
+      // Stale event delivered late (e.g. queued while app was in background)
+      if (!isFresh(data)) {
+        console.log("⏭️ Ignoring expired booking event:", id);
+        if (id) {
+          seenRef.current.add(id);
+          saveSeen(seenRef.current);
+        }
+        return;
+      }
+
+      if (id) {
+        seenRef.current.add(id);
+        saveSeen(seenRef.current);
+      }
+
+      console.log("🔥 NEW BOOKING RECEIVED:", data);
       setBooking(data);
 
-      // 🔊 STOP previous
-      if (alertAudioRef.current) {
-        alertAudioRef.current.pause();
-        alertAudioRef.current.currentTime = 0;
-      }
-
-      // 🔊 PLAY ONLY IF UNLOCKED
-      if (alertAudioRef.current && audioUnlocked) {
-        alertAudioRef.current
-          .play()
-          .then(() => {
-            console.log("🔊 Sound playing");
-          })
-          .catch((err) => {
-            console.error("🔇 Audio error:", err.message);
-          });
-      } else {
-        console.log("🔕 Audio not unlocked yet");
-      }
+      const remaining = data?.expiresAt
+        ? new Date(data.expiresAt).getTime() - Date.now()
+        : RESPONSE_WINDOW_MS;
+      playAlert(Math.min(remaining, RESPONSE_WINDOW_MS));
     };
 
-    // 🔥 prevent duplicate listeners
-    socket.off("new_booking");
     socket.on("new_booking", handleNewBooking);
+    return () => socket.off("new_booking", handleNewBooking);
+  }, [socket, playAlert]);
 
-    return () => {
-      socket.off("new_booking", handleNewBooking);
-    };
-  }, [socket, audioUnlocked]);
-
-  // ==============================
-  // CLEAR BOOKING
-  // ✅ Notify dashboard subscribers so they re-fetch after popup action
-  // ==============================
+  /* ---------- clear (accept / reject / timeout / close) ---------- */
   const clearBooking = useCallback(() => {
-    if (alertAudioRef.current) {
-      alertAudioRef.current.pause();
-      alertAudioRef.current.currentTime = 0;
-    }
-
+    stopAlert();
     setBooking(null);
-
-    // ✅ Tell any subscriber (e.g. MarketplaceDashboard) to refresh
     notifyListeners();
-  }, [notifyListeners]);
+  }, [stopAlert, notifyListeners]);
 
   return (
-    <BookingPopupContext.Provider value={{ booking, clearBooking, onBookingAction }}>
+    <BookingPopupContext.Provider
+      value={{ booking, clearBooking, onBookingAction, stopAlert }}
+    >
       {children}
     </BookingPopupContext.Provider>
   );

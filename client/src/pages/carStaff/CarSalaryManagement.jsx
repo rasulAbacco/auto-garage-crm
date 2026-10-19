@@ -1,16 +1,30 @@
-import { useEffect, useMemo, useState } from "react";
+// client/src/pages/carStaff/CarSalaryManagement.jsx
+import { useCallback, useEffect, useMemo, useState } from "react";
+import toast, { Toaster } from "react-hot-toast";
 import {
   Wallet,
   CheckCircle2,
   Clock,
   Users,
-  TrendingUp,
-  AlertCircle,
+  Sparkles,
+  RefreshCw,
 } from "lucide-react";
 import SalaryFilters from "../../components/Car/SalaryFilters";
 import SalaryTable from "../../components/Car/SalaryTable";
 import PreparePayrollModal from "../../components/Car/PreparePayrollModal";
 import SalaryViewModal from "../../components/Car/SalaryViewModal";
+import {
+  tk,
+  btnBase,
+  PageHeading,
+  ConfirmDialog,
+  StatTile,
+  ErrorBar,
+  SkeletonRows,
+  inr,
+  n,
+  monthName,
+} from "../../components/Car/staffUi";
 
 import {
   getSalaries,
@@ -20,242 +34,284 @@ import {
 } from "../../utils/salaryApi";
 import { useTheme } from "../../contexts/ThemeContext";
 
+const API = import.meta.env.VITE_API_BASE_URL;
+const authHeaders = () => ({
+  Authorization: `Bearer ${localStorage.getItem("token")}`,
+});
+const validYear = (y) => Number(y) >= 2000 && Number(y) <= 2100;
+const errMsg = (e, fallback) =>
+  e?.response?.data?.message || e?.message || fallback;
+
 export default function SalaryManagement() {
   const { isDark } = useTheme();
+  const t = tk(isDark);
   const today = new Date();
 
   const [month, setMonth] = useState(today.getMonth() + 1);
   const [year, setYear] = useState(today.getFullYear());
   const [salaries, setSalaries] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
   const [staffList, setStaffList] = useState([]);
   const [showPrepare, setShowPrepare] = useState(false);
   const [viewSalary, setViewSalary] = useState(null);
   const [companyProfile, setCompanyProfile] = useState(null);
+  const [payTarget, setPayTarget] = useState(null);
+  const [payingId, setPayingId] = useState(null);
 
-  /* ================= FETCH ================= */
-  const loadSalaries = async () => {
-    setSalaries(await getSalaries(month, year));
-  };
-
-  const loadStaff = async () => {
+  /* ---------- fetch ---------- */
+  const loadSalaries = useCallback(async () => {
+    if (!month || !validYear(year)) return;
+    setLoading(true);
+    setError("");
     try {
-      const res = await fetch(
-        `${import.meta.env.VITE_API_BASE_URL}/api/car-staff`,
-        {
-          headers: {
-            Authorization: `Bearer ${localStorage.getItem("token")}`,
-          },
-        }
-      );
-      setStaffList(await res.json());
-    } catch (error) {
-      console.error("Failed to load staff", error);
+      const data = await getSalaries(month, year);
+      setSalaries(Array.isArray(data) ? data : []);
+    } catch (e) {
+      console.error(e);
+      setSalaries([]);
+      setError(errMsg(e, "Could not load salaries"));
+    } finally {
+      setLoading(false);
     }
-  };
+  }, [month, year]);
 
-  const loadProfile = async () => {
+  const loadStaff = useCallback(async () => {
     try {
-      const res = await fetch(
-        `${import.meta.env.VITE_API_BASE_URL}/api/user/profile`,
-        {
-          headers: {
-            Authorization: `Bearer ${localStorage.getItem("token")}`,
-          },
-        }
-      );
-
+      const res = await fetch(`${API}/api/car-staff`, {
+        headers: authHeaders(),
+      });
       const data = await res.json();
-      setCompanyProfile(data);
-    } catch (err) {
-      console.error("Failed to load profile", err);
+      setStaffList(Array.isArray(data) ? data : []);
+    } catch (e) {
+      console.error("Failed to load staff", e);
     }
-  };
+  }, []);
+
+  const loadProfile = useCallback(async () => {
+    try {
+      const res = await fetch(`${API}/api/user/profile`, {
+        headers: authHeaders(),
+      });
+      setCompanyProfile(await res.json());
+    } catch (e) {
+      console.error("Failed to load profile", e);
+    }
+  }, []);
 
   useEffect(() => {
     loadSalaries();
+  }, [loadSalaries]);
+
+  useEffect(() => {
     loadStaff();
     loadProfile();
-  }, [month, year]);
+  }, [loadStaff, loadProfile]);
 
+  const openPrepare = () => {
+    loadStaff(); // pick up staff added since the page opened
+    setShowPrepare(true);
+  };
+
+  /* ---------- CSV ---------- */
   const handleDownloadReport = () => {
     if (!salaries.length) {
-      alert("No salary data to download");
+      toast.error("No salary data to download");
       return;
     }
-
     const headers = [
       "Staff Name",
       "Base Salary",
       "Leaves",
+      "Leave Deduction",
       "Bonus",
-      "Deductions",
+      "Extra Deductions",
       "Net Salary",
       "Status",
       "Paid At",
     ];
-
     const rows = salaries.map((s) => [
-      s.staff.name,
-      s.baseSalary,
-      s.leaves,
-      s.bonus,
-      s.extraDeductions,
-      s.netSalary,
-      s.status,
+      s.staff?.name ?? "",
+      n(s.baseSalary),
+      n(s.leaves),
+      n(s.leaveDeduction),
+      n(s.bonus),
+      n(s.extraDeductions),
+      n(s.netSalary),
+      s.status ?? "",
       s.paidAt ? new Date(s.paidAt).toLocaleDateString("en-IN") : "",
     ]);
-
-    const csv = [headers, ...rows]
-      .map((r) => r.map((v) => `"${v}"`).join(","))
-      .join("\n");
+    const esc = (v) => `"${String(v).replace(/"/g, '""')}"`;
+    const csv =
+      "﻿" + [headers, ...rows].map((r) => r.map(esc).join(",")).join("\n");
 
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
-
     const link = document.createElement("a");
     link.href = url;
-    link.download = `Salary_Report_${month}_${year}.csv`;
+    link.download = `Salary_Report_${monthName(month)}_${year}.csv`;
+    document.body.appendChild(link);
     link.click();
-
-    URL.revokeObjectURL(url);
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
 
-  /* ================= GENERATE / UPDATE ================= */
+  /* ---------- generate / update ---------- */
   const handleGenerate = async ({ createPayload, updatePayload }) => {
-    if (Object.keys(createPayload).length > 0) {
-      await generateSalary(month, year, createPayload);
+    try {
+      if (Object.keys(createPayload).length > 0) {
+        await generateSalary(month, year, createPayload);
+      }
+      for (const item of updatePayload) {
+        await updateSalary(item.id, item.data);
+      }
+      toast.success(`Payroll saved for ${monthName(month)} ${year}`);
+      setShowPrepare(false);
+      loadSalaries();
+    } catch (e) {
+      console.error(e);
+      toast.error(errMsg(e, "Could not save payroll"));
     }
-    for (const item of updatePayload) {
-      await updateSalary(item.id, item.data);
-    }
-    setShowPrepare(false);
-    loadSalaries();
   };
 
-  /* ================= PAY ================= */
-  const handlePay = async (id) => {
-    if (!confirm("Mark salary as paid?")) return;
-    await markSalaryPaid(id);
-    loadSalaries();
+  /* ---------- pay ---------- */
+  const confirmPay = async () => {
+    if (!payTarget) return;
+    const target = payTarget;
+    setPayingId(target.id);
+    try {
+      await markSalaryPaid(target.id);
+      toast.success(`${target.staff?.name || "Salary"} marked as paid`);
+      setPayTarget(null);
+      await loadSalaries();
+    } catch (e) {
+      console.error(e);
+      toast.error(errMsg(e, "Could not mark as paid"));
+    } finally {
+      setPayingId(null);
+    }
   };
 
-  /* ================= STATS ================= */
+  /* ---------- stats ---------- */
   const stats = useMemo(() => {
-    const total = salaries.reduce((s, r) => s + r.netSalary, 0);
+    const total = salaries.reduce((s, r) => s + n(r.netSalary), 0);
     const paidList = salaries.filter((s) => s.status === "PAID");
-    const paidAmount = paidList.reduce((s, r) => s + r.netSalary, 0);
-
+    const paid = paidList.reduce((s, r) => s + n(r.netSalary), 0);
     return {
       total,
-      paid: paidAmount,
-      pending: total - paidAmount,
+      paid,
+      pending: total - paid,
       paidCount: paidList.length,
       totalCount: salaries.length,
     };
   }, [salaries]);
 
-  // Helper for Month Name
-  const currentMonthName = new Date(year, month - 1).toLocaleString("default", {
-    month: "long",
-  });
+  const period = `${monthName(month)} ${year || ""}`.trim();
 
   return (
-    <div
-      className={`min-h-screen lg:ml-[5rem] transition-colors duration-300 ${
-        isDark ? "bg-gray-900 text-gray-100" : "bg-gray-50 text-gray-800"
-      }`}
-    >
-      {/* Header Section */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-2">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">
-            Payroll Management
-          </h1>
-          <p
-            className={`text-sm mt-1 ${
-              isDark ? "text-gray-400" : "text-gray-500"
-            }`}
-          >
-            Overview for{" "}
-            <span className="font-semibold text-blue-500">
-              {currentMonthName} {year}
-            </span>
-          </p>
-        </div>
-      </div>
+    <div className="min-h-screen lg:ml-20">
+      <Toaster
+        position="top-right"
+        toastOptions={{ style: { fontSize: 14 } }}
+      />
 
-      {/* Stats Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6 mb-8">
-        <StatCard
-          title="Total Payroll"
-          value={stats.total}
-          icon={Wallet}
-          color="blue"
+      <div className="mx-auto max-w-[1600px] space-y-4 sm:space-y-5">
+        <PageHeading
           isDark={isDark}
-          showCurrency
+          title="Payroll"
+          accent="management."
+          subtitle={`Salaries, leaves and payslips for ${period}.`}
+          right={
+            <button
+              type="button"
+              onClick={loadSalaries}
+              aria-label="Refresh"
+              title="Refresh"
+              className={`${btnBase} h-10 w-10 border-2 ${t.btnGhost}`}
+            >
+              <RefreshCw size={14} className={loading ? "animate-spin" : ""} />
+            </button>
+          }
         />
-        <StatCard
-          title="Paid Amount"
-          value={stats.paid}
-          icon={CheckCircle2}
-          color="emerald"
-          isDark={isDark}
-          showCurrency
-        />
-        <StatCard
-          title="Pending Amount"
-          value={stats.pending}
-          icon={Clock}
-          color="amber"
-          isDark={isDark}
-          showCurrency
-        />
-        <StatCard
-          title="Staff Status"
-          value={`${stats.paidCount} / ${stats.totalCount}`}
-          subLabel="Paid / Total"
-          icon={Users}
-          color="indigo"
-          isDark={isDark}
-        />
-      </div>
 
-      {/* Main Content Area */}
-      <div
-        className={`rounded-2xl shadow-sm border ${
-          isDark ? "bg-gray-800 border-gray-700" : "bg-white border-gray-200"
-        } overflow-hidden`}
-      >
-        {/* Filters Toolbar */}
-        <div
-          className={`p-5 border-b ${
-            isDark ? "border-gray-700" : "border-gray-100"
-          }`}
-        >
-          <SalaryFilters
-            month={month}
-            year={year}
-            onMonthChange={setMonth}
-            onYearChange={setYear}
-            onGenerate={() => setShowPrepare(true)}
-            onDownload={handleDownloadReport}
-            disabled={!salaries.length}
-            isDark={isDark} // ✅ Passed isDark
+        {/* stats */}
+        <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+          <StatTile
+            isDark={isDark}
+            title="Total payroll"
+            value={inr(stats.total)}
+            icon={Wallet}
+          />
+          <StatTile
+            isDark={isDark}
+            title="Paid"
+            value={inr(stats.paid)}
+            icon={CheckCircle2}
+            chip="bg-green-500/10 text-green-600"
+          />
+          <StatTile
+            isDark={isDark}
+            title="Pending"
+            value={inr(stats.pending)}
+            icon={Clock}
+            chip="bg-amber-500/10 text-amber-600"
+          />
+          <StatTile
+            isDark={isDark}
+            title="Staff paid"
+            value={`${stats.paidCount} / ${stats.totalCount}`}
+            sub="Paid / total"
+            icon={Users}
+            chip="bg-blue-500/10 text-blue-500"
           />
         </div>
 
-        {/* Table Container */}
-        <div className="p-0">
-          <SalaryTable
-            salaries={salaries}
-            onPay={handlePay}
-            onView={setViewSalary}
-            isDark={isDark} // ✅ Passed isDark
-          />
+        <ErrorBar message={error} onRetry={loadSalaries} />
+
+        <div className={`overflow-hidden rounded-2xl border-2 ${t.card}`}>
+          <div className={`border-b-2 p-3 sm:p-4 ${t.line}`}>
+            <SalaryFilters
+              month={month}
+              year={year}
+              onMonthChange={setMonth}
+              onYearChange={setYear}
+              onGenerate={openPrepare}
+              onDownload={handleDownloadReport}
+              disabled={!salaries.length}
+              isDark={isDark}
+            />
+            {!validYear(year) && (
+              <p className="mt-2 text-[12px] font-bold text-amber-500">
+                Enter a 4-digit year to load salaries.
+              </p>
+            )}
+          </div>
+
+          {loading ? (
+            <SkeletonRows isDark={isDark} rows={4} />
+          ) : (
+            <SalaryTable
+              salaries={salaries}
+              onPay={setPayTarget}
+              onView={setViewSalary}
+              payingId={payingId}
+              isDark={isDark}
+              emptyAction={
+                !error && (
+                  <button
+                    type="button"
+                    onClick={openPrepare}
+                    className={`${btnBase} h-9 px-4 ${t.btnPrimary}`}
+                  >
+                    <Sparkles size={14} /> Prepare payroll
+                  </button>
+                )
+              }
+            />
+          )}
         </div>
       </div>
 
-      {/* Modals */}
       {showPrepare && (
         <PreparePayrollModal
           staffList={staffList}
@@ -272,87 +328,26 @@ export default function SalaryManagement() {
         <SalaryViewModal
           salary={viewSalary}
           companyProfile={companyProfile}
-          isDark={isDark} // ✅ Passed isDark
+          isDark={isDark}
           onClose={() => setViewSalary(null)}
         />
       )}
-    </div>
-  );
-}
 
-/* ================= MODERN STAT CARD ================= */
-function StatCard({
-  title,
-  value,
-  subLabel,
-  icon: Icon,
-  showCurrency,
-  color = "blue",
-  isDark,
-}) {
-  // Consistent color mapping that depends on the 'isDark' prop, 
-  // removing reliance on global 'dark:' class to ensure consistency.
-  const getThemeColors = () => {
-    switch (color) {
-      case "blue":
-        return isDark
-          ? "bg-blue-900/30 text-blue-400"
-          : "bg-blue-100 text-blue-600";
-      case "emerald":
-        return isDark
-          ? "bg-emerald-900/30 text-emerald-400"
-          : "bg-emerald-100 text-emerald-600";
-      case "amber":
-        return isDark
-          ? "bg-amber-900/30 text-amber-400"
-          : "bg-amber-100 text-amber-600";
-      case "indigo":
-        return isDark
-          ? "bg-indigo-900/30 text-indigo-400"
-          : "bg-indigo-100 text-indigo-600";
-      default:
-        return isDark ? "bg-gray-700 text-gray-300" : "bg-gray-100 text-gray-600";
-    }
-  };
-
-  const formatCurrency = (amount) => {
-    return new Intl.NumberFormat("en-IN", {
-      style: "currency",
-      currency: "INR",
-      maximumFractionDigits: 0,
-    }).format(amount);
-  };
-
-  return (
-    <div
-      className={`relative p-6 rounded-2xl border transition-all duration-300 hover:-translate-y-1 hover:shadow-lg ${
-        isDark
-          ? "bg-gray-800 border-gray-700 shadow-none"
-          : "bg-white border-gray-100 shadow-sm"
-      }`}
-    >
-      <div className="flex justify-between items-start">
-        <div>
-          <p
-            className={`text-sm font-medium mb-1 ${
-              isDark ? "text-gray-400" : "text-gray-500"
-            }`}
-          >
-            {title}
-          </p>
-          <h3
-            className={`text-2xl font-bold tracking-tight ${
-              isDark ? "text-white" : "text-gray-900"
-            }`}
-          >
-            {showCurrency ? formatCurrency(value) : value}
-          </h3>
-          {subLabel && <p className="text-xs text-gray-400 mt-1">{subLabel}</p>}
-        </div>
-        <div className={`p-3 rounded-xl ${getThemeColors()}`}>
-          <Icon size={24} />
-        </div>
-      </div>
+      <ConfirmDialog
+        isDark={isDark}
+        open={Boolean(payTarget)}
+        tone="success"
+        title="Mark as paid?"
+        message={
+          payTarget
+            ? `${payTarget.staff?.name || "This salary"} · ${inr(payTarget.netSalary)} for ${period}. Paid salaries are locked.`
+            : ""
+        }
+        confirmText="Mark paid"
+        busy={Boolean(payingId)}
+        onConfirm={confirmPay}
+        onCancel={() => !payingId && setPayTarget(null)}
+      />
     </div>
   );
 }

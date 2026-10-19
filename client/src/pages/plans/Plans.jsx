@@ -1,9 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-
 import { useTheme } from "../../contexts/ThemeContext";
 import {
-  FiAlertTriangle,
   FiCheckCircle,
   FiCalendar,
   FiUser,
@@ -11,28 +9,104 @@ import {
   FiClock,
   FiActivity,
   FiArrowUpCircle,
+  FiChevronDown,
+  FiAlertTriangle,
+  FiXCircle,
+  FiZap,
 } from "react-icons/fi";
+import { tk, btnBase, PageHeading } from "../clients/components/clientUi";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:5001";
 
+const fmtDate = (
+  d,
+  opts = { day: "numeric", month: "short", year: "numeric" },
+) => {
+  if (!d) return "N/A";
+  const dt = new Date(d);
+  return Number.isNaN(dt.getTime())
+    ? "N/A"
+    : dt.toLocaleDateString("en-IN", opts);
+};
+const inr = (v) =>
+  v === null || v === undefined || v === ""
+    ? "—"
+    : `₹${Number(v).toLocaleString("en-IN")}`;
+
+const getUpgradePath = (crmType) => {
+  switch (crmType) {
+    case "bike":
+      return "/bike-plans";
+    case "wash":
+      return "/washing-upgrade";
+    case "car":
+    default:
+      return "/upgrade";
+  }
+};
+
+const STATUS_STYLE = {
+  TRIAL: {
+    pill: "border-amber-500/30 bg-amber-500/10 text-amber-600",
+    bar: "bg-amber-500",
+    icon: FiZap,
+    label: "Free trial",
+  },
+  ACTIVE: {
+    pill: "border-green-500/30 bg-green-500/10 text-green-600",
+    bar: "bg-green-500",
+    icon: FiCheckCircle,
+    label: "Active",
+  },
+  CANCELLED: {
+    pill: "border-red-500/30 bg-red-500/10 text-red-500",
+    bar: "bg-red-500",
+    icon: FiXCircle,
+    label: "Cancelled",
+  },
+  EXPIRED: {
+    pill: "border-red-500/30 bg-red-500/10 text-red-500",
+    bar: "bg-red-500",
+    icon: FiAlertTriangle,
+    label: "Expired",
+  },
+  PENDING: {
+    pill: "border-slate-500/30 bg-slate-500/10 text-slate-500",
+    bar: "bg-slate-400",
+    icon: FiClock,
+    label: "Pending",
+  },
+};
+const styleFor = (s) =>
+  STATUS_STYLE[s] || { ...STATUS_STYLE.PENDING, label: s || "Pending" };
+
 export default function Plans() {
   const { isDark } = useTheme();
+  const t = tk(isDark);
   const [planInfo, setPlanInfo] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [openIndex, setOpenIndex] = useState(null); // Accordion state for history
+  const [openIndex, setOpenIndex] = useState(null);
 
-  const user = JSON.parse(localStorage.getItem("user"));
-  const userEmail = user?.email;
+  let userEmail;
+  try {
+    userEmail = JSON.parse(localStorage.getItem("user"))?.email;
+  } catch {
+    userEmail = undefined;
+  }
 
   useEffect(() => {
+    if (!userEmail) {
+      setError("We couldn't find your account email. Please sign in again.");
+      setLoading(false);
+      return;
+    }
     const loadPlan = async () => {
       try {
         const res = await fetch(
           `${API_BASE}/api/payments/user-plan/${encodeURIComponent(userEmail)}`,
         );
         const data = await res.json();
-
         if (data.currentPlan || data.previousPlan) {
           setPlanInfo({
             current: data.currentPlan,
@@ -43,429 +117,367 @@ export default function Plans() {
         } else {
           setError(data.message || "No plans found");
         }
-      } catch (err) {
+      } catch {
         setError("Failed to fetch plan info");
       } finally {
         setLoading(false);
       }
     };
-
-    if (userEmail) loadPlan();
+    loadPlan();
   }, [userEmail]);
 
-  if (loading)
-    return (
-      <div
-        className={`min-h-screen flex justify-center items-center ${isDark ? " text-white" : "bg-gray-50 text-gray-900"}`}
-      >
-        <div className="flex flex-col items-center gap-3">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-current"></div>
-          <p>Loading Plan Details...</p>
-        </div>
-      </div>
-    );
-
-  if (!planInfo)
-    return (
-      <div
-        className={`min-h-screen flex justify-center items-center ${isDark ? "bg-gray-900" : "bg-gray-50"}`}
-      >
-        <div
-          className={`p-8 rounded-xl shadow-lg text-center ${isDark ? "bg-gray-800 text-white" : "bg-white text-gray-900"}`}
-        >
-          <h2 className="text-xl font-bold mb-2">No Active Plans Found</h2>
-          <p className="text-gray-500">
-            {error || "Please subscribe to a plan to see details here."}
-          </p>
-        </div>
-      </div>
-    );
-
   return (
-    <div
-      className={`space-y-6 lg:ml-16 min-h-screen p-1 transition-colors duration-300 ${isDark ? " text-white" : "bg-gray-50 text-gray-900"}`}
-    >
-      <div className="max-w-7xl mx-auto space-y-8">
-        {/* Page Header */}
-        <div>
-          <h1 className="text-3xl font-bold">Subscription & Billing</h1>
-          <p className={`mt-2 ${isDark ? "text-gray-400" : "text-gray-500"}`}>
-            Manage your current plan and view billing history.
-          </p>
-        </div>
+    <div className="min-h-screen lg:ml-16">
+      <div className="mx-auto max-w-[1200px] space-y-4 sm:space-y-5">
+        <PageHeading
+          isDark={isDark}
+          title="Plan &"
+          accent="billing."
+          subtitle="Your MotorDesk subscription, renewal date and payment history."
+        />
 
-        {/* Current Plan Section */}
-        {planInfo.current && (
-          <PlanCard
-            title="Current Plan"
-            data={planInfo.current}
-            isDark={isDark}
-            isActive={true}
-          />
-        )}
-
-        {/* Previous Plan Section (if exists) */}
-        {planInfo.previous && (
-          <div className="opacity-75">
-            <PlanCard
-              title="Previous Plan"
-              data={planInfo.previous}
-              isDark={isDark}
-              isActive={false}
-            />
+        {loading ? (
+          <div className="space-y-3">
+            {[0, 1].map((i) => (
+              <div
+                key={i}
+                className={`h-40 animate-pulse rounded-2xl border-2 ${isDark ? "border-white/5 bg-white/5" : "border-[#E2E8F0] bg-white"}`}
+              />
+            ))}
           </div>
-        )}
-
-        {/* Billing History Accordion */}
-        {planInfo.history && planInfo.history.length > 0 && (
+        ) : !planInfo ? (
           <div
-            className={`rounded-3xl shadow-lg border overflow-hidden ${isDark ? "bg-gray-800 border-gray-700" : "bg-white border-gray-100"}`}
+            className={`flex flex-col items-center rounded-2xl border-2 px-4 py-14 text-center ${t.card}`}
           >
-            <div className="p-6 border-b border-gray-200 dark:border-gray-700">
-              <h2 className="text-xl font-bold flex items-center gap-2">
-                <FiClock /> Billing History
-              </h2>
+            <div
+              className={`mb-3 flex h-12 w-12 items-center justify-center rounded-2xl ${t.chipNavy}`}
+            >
+              <FiCreditCard size={20} />
             </div>
-
-            <div className="divide-y divide-gray-200 dark:divide-gray-700">
-              {planInfo.history.map((item, index) => (
-                <HistoryItem
-                  key={index}
-                  item={item}
-                  isOpen={openIndex === index}
-                  toggle={() =>
-                    setOpenIndex(openIndex === index ? null : index)
-                  }
-                  isDark={isDark}
-                />
-              ))}
-            </div>
+            <h2
+              className={`text-[14px] font-black uppercase tracking-tight ${t.heading}`}
+            >
+              No active{" "}
+              <span className="font-light lowercase italic">plan</span>
+            </h2>
+            <p className={`mt-1 max-w-sm text-[14px] ${t.muted}`}>
+              {error || "Subscribe to a plan to see the details here."}
+            </p>
+            <Link
+              to={getUpgradePath(localStorage.getItem("crmType"))}
+              className={`${btnBase} mt-4 h-10 px-5 ${t.btnPrimary}`}
+            >
+              <FiArrowUpCircle size={14} /> See plans
+            </Link>
           </div>
+        ) : (
+          <>
+            {planInfo.current && (
+              <PlanCard
+                title="Current plan"
+                data={planInfo.current}
+                isDark={isDark}
+                isActive
+              />
+            )}
+            {planInfo.previous && (
+              <PlanCard
+                title="Previous plan"
+                data={planInfo.previous}
+                isDark={isDark}
+                isActive={false}
+              />
+            )}
+
+            {planInfo.history?.length > 0 && (
+              <section
+                className={`overflow-hidden rounded-2xl border-2 ${t.card}`}
+              >
+                <div
+                  className={`flex items-center gap-3 border-b-2 px-3 py-3 sm:px-4 ${t.cardHead}`}
+                >
+                  <div
+                    className={`flex h-8 w-8 items-center justify-center rounded-xl ${t.chipNavy}`}
+                  >
+                    <FiClock size={14} />
+                  </div>
+                  <div>
+                    <h2
+                      className={`text-[14px] font-black uppercase tracking-tight ${t.heading}`}
+                    >
+                      Billing{" "}
+                      <span className="font-light lowercase italic">
+                        history
+                      </span>
+                    </h2>
+                    <p className={`text-[12px] ${t.muted}`}>
+                      {planInfo.history.length} payment
+                      {planInfo.history.length === 1 ? "" : "s"}
+                    </p>
+                  </div>
+                </div>
+                <div>
+                  {planInfo.history.map((item, index) => (
+                    <HistoryItem
+                      key={item.id || item.paymentId || index}
+                      item={item}
+                      isOpen={openIndex === index}
+                      toggle={() =>
+                        setOpenIndex(openIndex === index ? null : index)
+                      }
+                      isDark={isDark}
+                    />
+                  ))}
+                </div>
+              </section>
+            )}
+          </>
         )}
       </div>
     </div>
   );
 }
 
-/* ----------------------------------------------------------------
-   COMPONENT: PlanCard (Handles Logic for Trial vs Active)
----------------------------------------------------------------- */
+/* ---------- plan card ---------- */
 function PlanCard({ title, data, isDark, isActive }) {
-  // 1. Determine Status Type
+  const t = tk(isDark);
   const status = data.status || "PENDING";
   const isTrial = status === "TRIAL";
-  const isCancelled = status === "CANCELLED";
 
-  // 2. LOGIC: Determine the correct End Date
-  // If Trial -> Use trialEndDate.
-  // If Active -> Use nextBillingDate (or expiryDate as fallback).
-  let endDateRaw = isTrial
+  const endDateRaw = isTrial
     ? data.trialEndDate
     : data.nextBillingDate || data.expiryDate;
-
-  // 3. Helper to format dates
-  const formatDate = (dateStr) => {
-    if (!dateStr) return "N/A";
-    return new Date(dateStr).toLocaleDateString("en-IN", {
-      day: "numeric",
-      month: "long",
-      year: "numeric",
-    });
-  };
-
-  const crmType = localStorage.getItem("crmType"); // car | bike | washing
-
-  const getUpgradePath = (crmType) => {
-    switch (crmType) {
-      case "bike":
-        return "/bike-plans";
-      case "wash":
-        return "/washing-upgrade";
-      case "car":
-      default:
-        return "/upgrade";
-    }
-  };
-
-  // 4. Calculate Countdown & Progress
   const today = new Date();
   const end = endDateRaw ? new Date(endDateRaw) : null;
-  const start = new Date(data.createdAt); // Used for progress calculation
+  const start = new Date(data.createdAt);
 
   let daysRemaining = 0;
   let progressPercent = 0;
-  let statusText = status;
+  let shownStatus = status;
 
-  if (end) {
-    const totalDuration = end - start;
-    const elapsed = today - start;
-    const diffTime = end - today;
-
-    daysRemaining = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-
-    // Calculate progress bar percentage (0% to 100%)
-    if (totalDuration > 0) {
+  if (end && !Number.isNaN(end.getTime())) {
+    const total = end - start;
+    daysRemaining = Math.ceil((end - today) / 86400000);
+    if (total > 0)
       progressPercent = Math.min(
         100,
-        Math.max(0, (elapsed / totalDuration) * 100),
+        Math.max(0, ((today - start) / total) * 100),
       );
-    }
-
     if (daysRemaining < 0) {
-      statusText = "EXPIRED";
+      shownStatus = "EXPIRED";
       daysRemaining = 0;
       progressPercent = 100;
     }
   }
 
-  // 5. Dynamic Styles based on Status
-  const themeStyles = {
-    TRIAL: {
-      bg: isDark ? "bg-orange-900/10" : "bg-orange-50",
-      border: "border-orange-200 dark:border-orange-800",
-      text: "text-orange-600 dark:text-orange-400",
-      bar: "bg-orange-500",
-      badge: "bg-orange-100 text-orange-700 border-orange-200",
-      btn: "bg-orange-600 hover:bg-orange-700",
-    },
-    ACTIVE: {
-      bg: isDark ? "bg-gray-800" : "bg-white",
-      border: "border-green-200 dark:border-green-900",
-      text: "text-green-600 dark:text-green-400",
-      bar: "bg-green-500",
-      badge: "bg-green-100 text-green-700 border-green-200",
-      btn: "bg-green-600 hover:bg-green-700",
-    },
-    CANCELLED: {
-      bg: isDark ? "bg-red-900/10" : "bg-red-50",
-      border: "border-red-200 dark:border-red-800",
-      text: "text-red-600 dark:text-red-400",
-      bar: "bg-red-500",
-      badge: "bg-red-100 text-red-700 border-red-200",
-      btn: "bg-gray-600 hover:bg-gray-700",
-    },
-  };
+  const st = styleFor(shownStatus);
+  const StIcon = st.icon;
+  const expiringSoon = isActive && end && daysRemaining <= 3;
+  const crmType = localStorage.getItem("crmType");
 
-  const currentTheme = themeStyles[status] || themeStyles.ACTIVE;
-
-  // 6. Dynamic Labels
-  const amountLabel = isTrial ? "Trial Value" : "Amount Paid";
-  const dateLabel = isTrial ? "Trial Ends On" : "Next Payment / Expiry";
-  const startedLabel = isTrial ? "Trial Started" : "Payment Date";
-
-  // Use paidAt for active plans, createdAt for trials
-  const startedDateValue = isTrial
-    ? data.createdAt
-    : data.paidAt || data.createdAt;
+  const details = [
+    { icon: FiUser, label: "Customer", value: data.customerName || "N/A" },
+    {
+      icon: FiCreditCard,
+      label: isTrial ? "Trial value" : "Amount paid",
+      value: inr(data.amount),
+    },
+    {
+      icon: FiCalendar,
+      label: isTrial ? "Trial started" : "Payment date",
+      value: fmtDate(isTrial ? data.createdAt : data.paidAt || data.createdAt),
+    },
+    {
+      icon: FiClock,
+      label: isTrial ? "Trial ends on" : "Next payment / expiry",
+      value: fmtDate(endDateRaw),
+      warn: expiringSoon,
+    },
+    {
+      icon: FiActivity,
+      label: "Billing period",
+      value: data.billingPeriod || "Monthly",
+    },
+    {
+      icon: FiCheckCircle,
+      label: "Payment status",
+      value: data.paidAt ? "Successful" : isTrial ? "Free trial" : "Pending",
+    },
+  ];
 
   return (
-    <div
-      className={`relative overflow-hidden rounded-3xl p-8 shadow-lg border ${currentTheme.border} ${currentTheme.bg} ${isDark ? "text-white" : "text-gray-900"}`}
+    <section
+      className={`overflow-hidden rounded-2xl border-2 ${t.card} ${isActive ? "" : "opacity-80"}`}
     >
-      {/* Top Header */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
-        <div>
-          <p className="text-xs font-bold tracking-widest uppercase opacity-60 mb-1">
+      {/* navy hero strip */}
+      <div
+        className={`flex flex-col gap-3 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-5 ${isActive ? "bg-[#001F3F] text-white" : t.cardHead}`}
+      >
+        <div className="min-w-0">
+          <p
+            className={`text-[12px] font-bold uppercase tracking-[0.2em] ${isActive ? "text-white/60" : "text-slate-400"}`}
+          >
             {title}
           </p>
-          <div className="flex items-center gap-3">
-            <h2 className="text-3xl font-bold">{data.plan}</h2>
-            {isTrial && (
-              <span className="text-xs px-2 py-1 rounded bg-black text-white dark:bg-white dark:text-black font-bold">
-                PRO
-              </span>
-            )}
-          </div>
-        </div>
-
-        <div className="flex flex-col items-end">
-          <span
-            className={`px-4 py-1 rounded-full text-xs font-bold border uppercase tracking-wide ${currentTheme.badge}`}
+          <h2
+            className={`truncate text-[16px] font-black uppercase tracking-tight ${isActive ? "text-white" : t.heading}`}
           >
-            ● {statusText}
+            {data.plan}{" "}
+            {isTrial && (
+              <span className="font-light lowercase italic">trial</span>
+            )}
+          </h2>
+        </div>
+        <div className="flex items-center gap-2 sm:flex-col sm:items-end">
+          <span
+            className={`inline-flex items-center gap-1 rounded-lg border px-2 py-0.5 text-[12px] font-black uppercase tracking-wider ${isActive ? "border-white/20 bg-white/10 text-white" : st.pill}`}
+          >
+            <StIcon size={12} /> {st.label}
           </span>
-          {isActive && daysRemaining > 0 && (
-            <span className={`text-sm mt-2 font-medium ${currentTheme.text}`}>
-              {daysRemaining} Days Remaining
+          {isActive && end && shownStatus !== "EXPIRED" && (
+            <span
+              className={`text-[12px] font-bold ${expiringSoon ? "text-amber-300" : "text-white/70"}`}
+            >
+              {daysRemaining} day{daysRemaining === 1 ? "" : "s"} left
             </span>
           )}
         </div>
       </div>
 
-      {/* Progress Bar (Only for Active/Trial) */}
-      {isActive && (
-        <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2 mb-8 overflow-hidden">
+      {isActive && end && (
+        <div
+          className={`h-1.5 w-full ${isDark ? "bg-white/10" : "bg-[#E2E8F0]"}`}
+        >
           <div
-            className={`h-2 rounded-full transition-all duration-500 ${currentTheme.bar}`}
+            className={`h-full transition-all duration-500 ${st.bar}`}
             style={{ width: `${progressPercent}%` }}
-          ></div>
+          />
         </div>
       )}
 
-      {/* Grid Data */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        <DetailBox
-          icon={<FiUser />}
-          label="Customer"
-          value={data.customerName || "N/A"}
-          isDark={isDark}
-        />
-
-        <DetailBox
-          icon={<FiCreditCard />}
-          label={amountLabel}
-          value={`₹${data.amount?.toLocaleString()}`}
-          isDark={isDark}
-        />
-
-        <DetailBox
-          icon={<FiCalendar />}
-          label={startedLabel}
-          value={formatDate(startedDateValue)}
-          isDark={isDark}
-        />
-
-        <DetailBox
-          icon={<FiClock />}
-          label={dateLabel}
-          value={formatDate(endDateRaw)}
-          highlight={daysRemaining <= 3 && isActive} // Red highlight if expiring soon
-          isDark={isDark}
-        />
-
-        <DetailBox
-          icon={<FiActivity />}
-          label="Billing Period"
-          value={data.billingPeriod || "Monthly"}
-          isDark={isDark}
-        />
-
-        <DetailBox
-          icon={<FiCheckCircle />}
-          label="Payment Status"
-          value={
-            data.paidAt ? "Successful" : isTrial ? "Free Trial" : "Pending"
-          }
-          isDark={isDark}
-        />
-      </div>
-
-      {/* CTA Section for Trial Users */}
-      {isTrial && isActive && (
-        <div
-          className={`mt-8 p-4 rounded-xl border flex flex-col md:flex-row items-center justify-between gap-4 ${isDark ? "bg-gray-800 border-gray-600" : "bg-white/50 border-gray-200"}`}
-        >
-          <div className="flex items-center gap-3">
-            <div className="p-2 bg-orange-100 text-orange-600 rounded-full">
-              <FiArrowUpCircle size={24} />
-            </div>
-            <div>
-              <p className="font-bold text-sm">Trial ends soon!</p>
-              <p className="text-xs opacity-70">
-                Upgrade now to keep your data and features.
+      <div className="grid grid-cols-2 gap-2 p-3 sm:p-4 lg:grid-cols-3">
+        {details.map(({ icon: Icon, label, value, warn }) => (
+          <div
+            key={label}
+            className={`flex min-w-0 items-start gap-2.5 rounded-xl border-2 p-2.5 ${warn ? "border-red-500/40 bg-red-500/10" : t.inner}`}
+          >
+            <Icon
+              size={14}
+              className={`mt-0.5 shrink-0 ${warn ? "text-red-500" : "text-slate-400"}`}
+            />
+            <div className="min-w-0">
+              <p className="truncate text-[12px] font-bold uppercase tracking-wider text-slate-400">
+                {label}
+              </p>
+              <p
+                className={`truncate text-[14px] font-black ${warn ? "text-red-500" : t.heading}`}
+              >
+                {value}
               </p>
             </div>
           </div>
+        ))}
+      </div>
 
-          <Link to={getUpgradePath(crmType)}>
-            <button
-              className={`px-6 py-2 rounded-lg text-white text-sm font-bold shadow-lg transition-transform hover:scale-105 ${currentTheme.btn}`}
-            >
-              Upgrade Plan
-            </button>
+      {isTrial && isActive && (
+        <div
+          className={`mx-3 mb-3 flex flex-col gap-3 rounded-xl border-2 border-amber-500/30 bg-amber-500/10 p-3 sm:mx-4 sm:mb-4 sm:flex-row sm:items-center sm:justify-between`}
+        >
+          <div className="flex items-start gap-2.5">
+            <FiArrowUpCircle
+              size={16}
+              className="mt-0.5 shrink-0 text-amber-600"
+            />
+            <div>
+              <p className={`text-[14px] font-black ${t.heading}`}>
+                Your trial ends{" "}
+                {daysRemaining
+                  ? `in ${daysRemaining} day${daysRemaining === 1 ? "" : "s"}`
+                  : "soon"}
+              </p>
+              <p className={`text-[12px] ${t.muted}`}>
+                Upgrade now to keep your data and every feature.
+              </p>
+            </div>
+          </div>
+          <Link
+            to={getUpgradePath(crmType)}
+            className={`${btnBase} h-10 shrink-0 px-5 shadow-lg ${t.btnPrimary}`}
+          >
+            Upgrade plan
           </Link>
         </div>
       )}
-    </div>
+    </section>
   );
 }
 
-/* ----------------------------------------------------------------
-   COMPONENT: DetailBox (Individual Stats)
----------------------------------------------------------------- */
-function DetailBox({ icon, label, value, highlight, isDark }) {
-  return (
-    <div
-      className={`flex items-center gap-4 p-3 rounded-xl transition-colors ${
-        highlight
-          ? "bg-red-50 border border-red-200 dark:bg-red-900/20 dark:border-red-800"
-          : "bg-transparent"
-      }`}
-    >
-      <div
-        className={`text-2xl ${highlight ? "text-red-500" : isDark ? "text-gray-400" : "text-gray-400"}`}
-      >
-        {icon}
-      </div>
-      <div>
-        <p
-          className={`text-xs uppercase font-bold tracking-wider ${isDark ? "text-gray-500" : "text-gray-400"}`}
-        >
-          {label}
-        </p>
-        <p
-          className={`text-lg font-semibold ${highlight ? "text-red-600 dark:text-red-400" : ""}`}
-        >
-          {value}
-        </p>
-      </div>
-    </div>
-  );
-}
-
-/* ----------------------------------------------------------------
-   COMPONENT: HistoryItem (Accordion)
----------------------------------------------------------------- */
+/* ---------- history row ---------- */
 function HistoryItem({ item, isOpen, toggle, isDark }) {
+  const t = tk(isDark);
+  const st = styleFor(item.status);
   return (
-    <div className="transition-colors hover:bg-gray-50 dark:hover:bg-gray-700/50">
-      <div
+    <div className={`border-b-2 last:border-0 ${t.line}`}>
+      <button
+        type="button"
         onClick={toggle}
-        className="p-4 cursor-pointer flex justify-between items-center"
+        aria-expanded={isOpen}
+        className={`flex w-full items-center gap-3 px-3 py-3 text-left transition sm:px-4 ${isDark ? "hover:bg-white/5" : "hover:bg-[#F8FAFC]"}`}
       >
-        <div className="flex items-center gap-4">
-          <div
-            className={`p-2 rounded-lg ${item.status === "ACTIVE" ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-500"}`}
-          >
-            <FiCreditCard />
-          </div>
-          <div>
-            <p className="font-bold text-sm">{item.plan}</p>
-            <p className="text-xs text-gray-500">
-              {new Date(item.createdAt).toLocaleDateString()}
-            </p>
-          </div>
-        </div>
-        <div className="flex items-center gap-4">
-          <span className="font-bold">₹{item.amount}</span>
-          <span
-            className={`transform transition-transform ${isOpen ? "rotate-180" : ""}`}
-          >
-            ▼
-          </span>
-        </div>
-      </div>
-
-      {/* Expanded Content */}
-      {isOpen && (
         <div
-          className={`px-4 pb-4 pt-0 text-sm grid grid-cols-2 gap-y-2 ${isDark ? "text-gray-300" : "text-gray-600"}`}
+          className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${item.status === "ACTIVE" ? "bg-green-500/10 text-green-600" : `${t.inner} border text-slate-400`}`}
         >
-          <p>
-            <b>Payment ID:</b> {item.paymentId || "-"}
+          <FiCreditCard size={14} />
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className={`truncate text-[14px] font-black ${t.heading}`}>
+            {item.plan}
           </p>
-          <p>
-            <b>Sub ID:</b> {item.subscriptionId || "-"}
-          </p>
-          <p>
-            <b>Period:</b> {item.billingPeriod}
-          </p>
-          <p>
-            <b>Status:</b> {item.status}
-          </p>
-          <p className="col-span-2 text-xs opacity-50 mt-2">
-            Invoice generated on {new Date(item.updatedAt).toLocaleString()}
-          </p>
+          <p className={`text-[12px] ${t.muted}`}>{fmtDate(item.createdAt)}</p>
+        </div>
+        <span
+          className={`hidden rounded-lg border px-2 py-0.5 text-[12px] font-black uppercase tracking-wider sm:inline ${st.pill}`}
+        >
+          {st.label}
+        </span>
+        <span className={`font-mono text-[14px] font-black ${t.heading}`}>
+          {inr(item.amount)}
+        </span>
+        <FiChevronDown
+          size={16}
+          className={`shrink-0 text-slate-400 transition-transform ${isOpen ? "rotate-180" : ""}`}
+        />
+      </button>
+
+      {isOpen && (
+        <div className="px-3 pb-3 sm:px-4">
+          <dl
+            className={`grid grid-cols-2 gap-2 rounded-xl border-2 p-3 ${t.inner}`}
+          >
+            {[
+              ["Payment ID", item.paymentId || "—"],
+              ["Subscription ID", item.subscriptionId || "—"],
+              ["Period", item.billingPeriod || "—"],
+              ["Status", st.label],
+            ].map(([k, v]) => (
+              <div key={k} className="min-w-0">
+                <dt className="text-[12px] font-bold uppercase tracking-wider text-slate-400">
+                  {k}
+                </dt>
+                <dd
+                  className={`break-all font-mono text-[12px] font-bold ${t.heading}`}
+                >
+                  {v}
+                </dd>
+              </div>
+            ))}
+            <p className={`col-span-2 text-[12px] ${t.muted}`}>
+              Updated{" "}
+              {item.updatedAt
+                ? new Date(item.updatedAt).toLocaleString("en-IN")
+                : "—"}
+            </p>
+          </dl>
         </div>
       )}
     </div>

@@ -1,6 +1,5 @@
 // client/src/components/UpgradePlans.jsx
 import React, { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
 import { useTheme } from "../../contexts/ThemeContext";
 import PaymentModal from "../PaymentModal";
 import {
@@ -9,610 +8,445 @@ import {
   Crown,
   ArrowRight,
   Check,
-  Sparkles,
   Shield,
   Clock,
   TrendingUp,
-  X,
+  Headphones,
+  Car,
+  BadgeCheck,
 } from "lucide-react";
+import {
+  tk,
+  btnBase,
+  PageHeading,
+} from "../../pages/clients/components/clientUi";
+
+// Same server for local and live builds (the old "http://localhost:1" never worked locally)
+const API =
+  import.meta.env.VITE_API_BASE_URL ||
+  "https://auto-garage-crm-zrxc.onrender.com";
+const YEARLY_DISCOUNT = 0.1;
+
+const carPlans = [
+  {
+    id: "basic",
+    name: "Basic",
+    tagline: "For small garages",
+    numericPrice: 1000,
+    icon: Zap,
+    features: [
+      "Upload RC images (up to 10/day)",
+      "Basic OCR extraction",
+      "Save history locally",
+      "CSV/EXCEL, PDF export",
+      "Email support",
+    ],
+  },
+  {
+    id: "standard",
+    name: "Standard",
+    tagline: "Most popular choice",
+    numericPrice: 2000,
+    icon: Star,
+    badge: "POPULAR",
+    features: [
+      "Unlimited uploads",
+      "High-accuracy OCR",
+      "Priority support",
+      "Export CSV, PDF",
+      "SMS/WhatsApp Alerts",
+      "Team accounts (up to 3)",
+    ],
+  },
+  {
+    id: "premium",
+    name: "Premium",
+    tagline: "For growing businesses",
+    numericPrice: 3000,
+    icon: Crown,
+    badge: "BEST VALUE",
+    features: [
+      "Everything in Standard",
+      "Team accounts (up to 10)",
+      "Maintenance Alert SMS",
+      "Bulk processing",
+      "Dedicated manager",
+      "Auto Invoice",
+      "Staff Salary Management",
+      "Online Payment Options",
+    ],
+  },
+];
+
+const bikePlans = [
+  { ...carPlans[0], numericPrice: 600 },
+  { ...carPlans[1], numericPrice: 1200 },
+  { ...carPlans[2], numericPrice: 2000 },
+];
+
+const washingPlans = [
+  {
+    id: "standard",
+    name: "Standard",
+    tagline: "Most popular choice",
+    numericPrice: 500,
+    icon: Star,
+    badge: "POPULAR",
+    features: [
+      "Unlimited uploads",
+      "Priority support",
+      "Export CSV, PDF",
+      "SMS/WhatsApp Alerts",
+      "Team accounts (up to 3)",
+    ],
+  },
+];
+
+const TRUST = [
+  { icon: Shield, label: "Secure payment", desc: "Bank-level encryption" },
+  { icon: Clock, label: "Instant access", desc: "Start immediately" },
+  { icon: TrendingUp, label: "Cancel anytime", desc: "No commitments" },
+  { icon: Headphones, label: "24/7 support", desc: "Always here to help" },
+];
+
+const readUser = () => {
+  try {
+    return JSON.parse(localStorage.getItem("user"));
+  } catch {
+    return null;
+  }
+};
+
+const inr = (v) => `₹${Number(v || 0).toLocaleString("en-IN")}`;
 
 export default function UpgradePlans() {
   const { isDark } = useTheme();
-  const navigate = useNavigate();
+  const t = tk(isDark);
   const [billingPeriod, setBillingPeriod] = useState("monthly");
   const [showModal, setShowModal] = useState(false);
   const [selectedPlan, setSelectedPlan] = useState(null);
-  const [planType, setPlanType] = useState("car");
+  const [planType] = useState("car"); // this page sells the Car garage plans
   const [currentPlan, setCurrentPlan] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  // Fetch current user's plan
+  const user = readUser();
+
   useEffect(() => {
     const fetchCurrentPlan = async () => {
       try {
         const token = localStorage.getItem("token");
-        const user = JSON.parse(localStorage.getItem("user"));
-
-        if (!token || !user?.email) {
-          setLoading(false);
-          return;
-        }
-
-        const API =
-          window.location.hostname === "localhost"
-            ? "http://localhost:1"
-            : "https://auto-garage-crm-zrxc.onrender.com";
+        const u = readUser();
+        if (!token || !u?.email) return;
 
         const response = await fetch(
-          `${API}/api/payments/user-plan/${user.email}`,
+          `${API}/api/payments/user-plan/${encodeURIComponent(u.email)}`,
           {
-            headers: {
-              Authorization: `Bearer ${token}`,
-            },
-          }
+            headers: { Authorization: `Bearer ${token}` },
+          },
         );
-
         const data = await response.json();
-        if (data.success && data.payment) {
-          setCurrentPlan(data.payment);
-        }
+        // supports both response shapes used by the server
+        const plan = (data.success && data.payment) || data.currentPlan || null;
+        if (plan) setCurrentPlan(plan);
       } catch (error) {
         console.error("Error fetching current plan:", error);
       } finally {
         setLoading(false);
       }
     };
-
     fetchCurrentPlan();
   }, []);
 
-  // Car Plans
-  const carPlans = [
-    {
-      id: "basic",
-      name: "Basic",
-      tagline: "For small garages",
-      numericPrice: 1000,
-      icon: Zap,
-      features: [
-        "Upload RC images (up to 10/day)",
-        "Basic OCR extraction",
-        "Save history locally",
-        "CSV/EXCEL, PDF export",
-        "Email support",
-      ],
-    },
-    {
-      id: "standard",
-      name: "Standard",
-      tagline: "Most popular choice",
-      numericPrice: 2000,
-      icon: Star,
-      badge: "POPULAR",
-      features: [
-        "Unlimited uploads",
-        "High-accuracy OCR",
-        "Priority support",
-        "Export CSV, PDF",
-        "SMS/WhatsApp Alerts",
-        "Team accounts (up to 3)",
-      ],
-    },
-    {
-      id: "premium",
-      name: "Premium",
-      tagline: "For growing businesses",
-      numericPrice: 3000,
-      icon: Crown,
-      badge: "BEST VALUE",
-      features: [
-        "Everything in Standard",
-        "Team accounts (up to 10)",
-        "Maintenance Alert SMS",
-        "Bulk processing",
-        "Dedicated manager",
-        "Auto Invoice",
-        "Staff Salary Management",
-        "Online Payment Options",
-      ],
-    },
-  ];
+  const activePlans =
+    planType === "bike"
+      ? bikePlans
+      : planType === "washing"
+        ? washingPlans
+        : carPlans;
 
-  // Bike Plans
-  const bikePlans = [
-    {
-      id: "basic",
-      name: "Basic",
-      tagline: "For small garages",
-      numericPrice: 600,
-      icon: Zap,
-      features: [
-        "Upload RC images (up to 10/day)",
-        "Basic OCR extraction",
-        "Save history locally",
-        "CSV/EXCEL, PDF export",
-        "Email support",
-      ],
-    },
-    {
-      id: "standard",
-      name: "Standard",
-      tagline: "Most popular choice",
-      numericPrice: 1200,
-      icon: Star,
-      badge: "POPULAR",
-      features: [
-        "Unlimited uploads",
-        "High-accuracy OCR",
-        "Priority support",
-        "Export CSV, PDF",
-        "SMS/WhatsApp Alerts",
-        "Team accounts (up to 3)",
-      ],
-    },
-    {
-      id: "premium",
-      name: "Premium",
-      tagline: "For growing businesses",
-      numericPrice: 2000,
-      icon: Crown,
-      badge: "BEST VALUE",
-      features: [
-        "Everything in Standard",
-        "Team accounts (up to 10)",
-        "Maintenance Alert SMS",
-        "Bulk processing",
-        "Dedicated manager",
-        "Auto Invoice",
-        "Staff Salary Management",
-        "Online Payment Options",
-      ],
-    },
-  ];
-
-  // Washing Plans
-  const washingPlans = [
-    {
-      id: "standard",
-      name: "Standard",
-      tagline: "Most popular choice",
-      numericPrice: 500,
-      icon: Star,
-      badge: "POPULAR",
-      features: [
-        "Unlimited uploads",
-        "Priority support",
-        "Export CSV, PDF",
-        "SMS/WhatsApp Alerts",
-        "Team accounts (up to 3)",
-      ],
-    },
-  ];
-
-  // Get active plans based on selected type
-  let activePlans = carPlans;
-  if (planType === "bike") activePlans = bikePlans;
-  if (planType === "washing") activePlans = washingPlans;
+  const isCurrentPlan = (plan) =>
+    String(currentPlan?.plan || "").toLowerCase() === plan.name.toLowerCase();
 
   const handlePlanSelect = (plan) => {
-    // Check if trying to select current plan
-    if (
-      currentPlan &&
-      currentPlan.plan.toLowerCase() === plan.name.toLowerCase()
-    ) {
-      alert("You are already subscribed to this plan!");
-      return;
-    }
-
+    if (isCurrentPlan(plan)) return;
     setSelectedPlan(plan);
     setShowModal(true);
   };
 
   const handlePaymentComplete = () => {
     setShowModal(false);
-    // Redirect to dashboard after successful payment
-    navigate("/car-dashboard");
-    // Refresh the page to load new plan data
-    window.location.reload();
+    // full reload into the dashboard so the new plan is picked up everywhere
+    window.location.assign("/car-dashboard");
   };
 
-  // Check if a plan is the current active plan
-  const isCurrentPlan = (plan) => {
-    return (
-      currentPlan && currentPlan.plan.toLowerCase() === plan.name.toLowerCase()
+  const priceFor = (plan) => {
+    const yearlyTotal = Math.round(
+      plan.numericPrice * 12 * (1 - YEARLY_DISCOUNT),
     );
+    return billingPeriod === "yearly"
+      ? {
+          perMonth: Math.round(yearlyTotal / 12),
+          total: yearlyTotal,
+          saved: plan.numericPrice * 12 - yearlyTotal,
+        }
+      : { perMonth: plan.numericPrice, total: plan.numericPrice, saved: 0 };
   };
-
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-violet-500"></div>
-      </div>
-    );
-  }
-  const user = JSON.parse(localStorage.getItem("user"));
 
   return (
-    <div
-      className={`min-h-screen transition-colors duration-300 lg:ml-20 ${
-        isDark ? " text-white" : " text-gray-900"
-      }`}
-    >
-      {/* Header Section */}
-      <section className="relative z-10 px-4 sm:px-6  py-12">
-        <div className="max-w-7xl mx-auto text-center space-y-6">
-          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-gradient-to-r from-violet-500/10 to-fuchsia-500/10 border border-violet-500/20 backdrop-blur-sm">
-            <Sparkles className="w-4 h-4 text-violet-400" />
+    <div className="min-h-screen lg:ml-16">
+      <div className="mx-auto max-w-[1200px] space-y-4 sm:space-y-6">
+        <PageHeading
+          isDark={isDark}
+          title="Upgrade"
+          accent="your plan."
+          subtitle="Unlock more features as your garage grows. Change or cancel anytime."
+          right={
             <span
-              className={`text-sm font-medium ${
-                isDark ? "text-violet-300" : "text-violet-700"
-              }`}
-            >
-              Upgrade your plan to unlock more features
-            </span>
-          </div>
-
-          {/* Current Plan Badge */}
-          {currentPlan && (
-            <div
-              className={`inline-flex items-center gap-2 px-4 py-2 rounded-full ${
+              className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-[12px] font-black uppercase tracking-[0.15em] ${
                 isDark
-                  ? "bg-green-500/10 border border-green-500/20"
-                  : "bg-green-50 border border-green-200"
+                  ? "border-white/10 bg-white/5 text-white"
+                  : "border-[#CBD5E1] bg-white text-[#001F3F]"
               }`}
             >
-              <Shield className="w-4 h-4 text-green-500" />
-              <span className="text-sm font-medium text-green-600">
-                Current Plan: {currentPlan.plan} ({currentPlan.status})
+              <Car size={12} /> Car garage plans
+            </span>
+          }
+        />
+
+        {/* current plan + billing switch */}
+        <div
+          className={`flex flex-col gap-3 rounded-2xl border-2 p-3 sm:flex-row sm:items-center sm:justify-between sm:p-4 ${t.card}`}
+        >
+          {loading ? (
+            <div
+              className={`h-10 w-56 animate-pulse rounded-xl ${isDark ? "bg-white/5" : "bg-[#F8FAFC]"}`}
+            />
+          ) : currentPlan ? (
+            <div className="flex items-center gap-3">
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-green-500/10 text-green-600">
+                <BadgeCheck size={16} />
               </span>
+              <div>
+                <p className="text-[12px] font-bold uppercase tracking-wider text-slate-400">
+                  Your current plan
+                </p>
+                <p className={`text-[14px] font-black ${t.heading}`}>
+                  {currentPlan.plan}{" "}
+                  {currentPlan.status && (
+                    <span className={`font-medium lowercase italic ${t.muted}`}>
+                      ({String(currentPlan.status).toLowerCase()})
+                    </span>
+                  )}
+                </p>
+              </div>
             </div>
+          ) : (
+            <p className={`text-[14px] font-semibold ${t.muted}`}>
+              Pick the plan that fits your garage.
+            </p>
           )}
 
-          <div className="space-y-4">
-            <h1 className="text-4xl sm:text-5xl font-bold tracking-tight">
-              <span
-                className={`block mb-2 ${
-                  isDark ? "text-white" : "text-gray-900"
-                }`}
-              >
-                Choose Your Perfect Plan
-              </span>
-              <span className="block bg-gradient-to-r from-violet-400 via-fuchsia-400 to-pink-400 bg-clip-text text-transparent">
-                Scale as you grow
-              </span>
-            </h1>
-
-            <p
-              className={`text-lg max-w-2xl mx-auto ${
-                isDark ? "text-gray-400" : "text-gray-600"
-              }`}
+          <div className="flex items-center gap-2">
+            <div
+              className={`grid grid-cols-2 gap-1 rounded-xl border-2 p-1 ${t.inner}`}
+              role="radiogroup"
+              aria-label="Billing period"
             >
-              Flexible pricing that adapts to your business needs
-            </p>
-          </div>
-
-          {/* Billing Period Toggle */}
-          <div className="flex items-center justify-center gap-4 pt-4">
-            <span
-              className={`text-sm font-medium ${
-                billingPeriod === "monthly" ? "text-white" : "text-gray-500"
-              }`}
-            >
-              Monthly
-            </span>
-
-            <button
-              onClick={() =>
-                setBillingPeriod(
-                  billingPeriod === "monthly" ? "yearly" : "monthly"
-                )
-              }
-              className={`relative w-16 h-8 rounded-full transition ${
-                billingPeriod === "yearly"
-                  ? "bg-gradient-to-r from-violet-500 to-fuchsia-500"
-                  : "bg-gray-700"
-              }`}
-            >
-              <div
-                className={`absolute top-1 w-6 h-6 bg-white rounded-full transition ${
-                  billingPeriod === "yearly" ? "translate-x-9" : "translate-x-1"
-                }`}
-              />
-            </button>
-
-            <span
-              className={`text-sm font-medium ${
-                billingPeriod === "yearly" ? "text-white" : "text-gray-500"
-              }`}
-            >
-              Yearly
-            </span>
-
-            <span className="px-3 py-1 rounded-full bg-green-500 text-white text-xs font-bold">
+              {["monthly", "yearly"].map((p) => {
+                const on = billingPeriod === p;
+                return (
+                  <button
+                    key={p}
+                    type="button"
+                    role="radio"
+                    aria-checked={on}
+                    onClick={() => setBillingPeriod(p)}
+                    className={`h-9 rounded-lg px-4 text-[12px] font-black uppercase tracking-[0.15em] transition ${
+                      on ? t.btnPrimary : `${t.muted} hover:opacity-80`
+                    }`}
+                  >
+                    {p}
+                  </button>
+                );
+              })}
+            </div>
+            <span className="rounded-lg border border-green-500/30 bg-green-500/10 px-2 py-1 text-[12px] font-black uppercase tracking-wider text-green-600">
               Save 10%
             </span>
           </div>
-
-          {/* Plan Type Selector */}
-          <div className="flex justify-center gap-4 mt-6">
-            <button
-              onClick={() => setPlanType("car")}
-              className={`px-6 py-3 rounded-xl font-semibold transition-all ${
-                planType === "car"
-                  ? "bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white shadow-lg"
-                  : isDark
-                  ? "bg-gray-800 text-gray-300 border border-gray-700"
-                  : "bg-gray-200 text-gray-700"
-              }`}
-            >
-              Car Plans
-            </button>
-          </div>
         </div>
-      </section>
 
-      {/* Pricing Cards */}
-      <section className="relative z-10 px-4 sm:px-1 pb-20 pt-12">
+        {/* plan cards */}
         <div
-          className={`max-w-7xl mx-auto gap-8 ${
+          className={
             activePlans.length === 1
-              ? "flex justify-center"
-              : "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3"
-          }`}
+              ? "mx-auto max-w-md"
+              : "grid grid-cols-1 gap-4 md:grid-cols-3 md:items-stretch"
+          }
         >
           {activePlans.map((plan) => {
             const Icon = plan.icon;
-            const isPopular = plan.badge === "POPULAR";
+            const featured = plan.badge === "POPULAR";
             const isCurrent = isCurrentPlan(plan);
-            const yearlyDiscount = 0.1;
-            const finalPrice =
-              billingPeriod === "yearly"
-                ? Math.round(plan.numericPrice * 12 * (1 - yearlyDiscount))
-                : plan.numericPrice;
-            const monthlyEquivalent =
-              billingPeriod === "yearly"
-                ? Math.round(finalPrice / 12)
-                : plan.numericPrice;
+            const price = priceFor(plan);
+
+            // featured card is solid navy (white in dark mode) like the landing page
+            const shell = isCurrent
+              ? `${t.card} !border-green-500/60`
+              : featured
+                ? isDark
+                  ? "border-white bg-white text-[#001F3F] shadow-2xl shadow-black/30"
+                  : "border-[#001F3F] bg-[#001F3F] text-white shadow-2xl shadow-[#001F3F]/20"
+                : t.card;
+            const head = featured && !isCurrent ? "" : t.heading;
+            const muted = featured && !isCurrent ? "opacity-70" : t.muted;
+            const chip =
+              featured && !isCurrent
+                ? isDark
+                  ? "bg-[#001F3F] text-white"
+                  : "bg-white text-[#001F3F]"
+                : t.chipNavy;
 
             return (
-              <div
+              <article
                 key={plan.id}
-                className={`relative ${
-                  isPopular ? "lg:scale-105 lg:-mt-4" : ""
-                } ${activePlans.length === 1 ? "w-full max-w-[400px]" : ""}`}
+                className={`relative flex flex-col rounded-2xl border-2 p-4 transition sm:p-5 ${shell} ${featured ? "md:-my-2 md:py-7" : ""}`}
               >
-                {/* Popular/Current Badge */}
                 {(plan.badge || isCurrent) && (
-                  <div className="absolute -top-4 left-1/2 -translate-x-1/2 z-10">
-                    <div
-                      className={`px-4 py-1.5 rounded-full text-white text-xs font-bold shadow-lg flex items-center gap-1.5 ${
-                        isCurrent
-                          ? "bg-gradient-to-r from-green-500 to-emerald-500"
-                          : "bg-gradient-to-r from-violet-500 to-fuchsia-500"
-                      }`}
-                    >
-                      {isCurrent ? (
-                        <>
-                          <Check className="w-3 h-3" />
-                          CURRENT PLAN
-                        </>
-                      ) : (
-                        <>
-                          <Star className="w-3 h-3 fill-current" />
-                          {plan.badge}
-                        </>
-                      )}
-                    </div>
-                  </div>
+                  <span
+                    className={`absolute right-4 top-4 inline-flex items-center gap-1 rounded-lg px-2 py-0.5 text-[12px] font-black uppercase tracking-wider ${
+                      isCurrent
+                        ? "bg-green-600 text-white"
+                        : featured
+                          ? isDark
+                            ? "bg-[#001F3F] text-white"
+                            : "bg-white text-[#001F3F]"
+                          : t.chipNavy
+                    }`}
+                  >
+                    {isCurrent ? <Check size={12} /> : <Star size={12} />}
+                    {isCurrent
+                      ? "Current"
+                      : plan.badge === "BEST VALUE"
+                        ? "Best value"
+                        : "Popular"}
+                  </span>
                 )}
 
+                <span
+                  className={`mb-4 flex h-10 w-10 items-center justify-center rounded-xl ${chip}`}
+                >
+                  <Icon size={16} />
+                </span>
+
+                <h2
+                  className={`text-[16px] font-black uppercase tracking-tight ${head}`}
+                >
+                  {plan.name}
+                </h2>
+                <p className={`text-[14px] ${muted}`}>{plan.tagline}</p>
+
                 <div
-                  className={`h-full rounded-3xl p-8 transition-all duration-300 hover:scale-[1.02] ${
+                  className={`my-4 border-y-2 py-3 ${featured && !isCurrent ? (isDark ? "border-[#001F3F]/10" : "border-white/10") : t.line}`}
+                >
+                  <p className={`flex items-baseline gap-1 ${head}`}>
+                    <span className="font-mono text-[16px] font-black">
+                      {inr(price.perMonth)}
+                    </span>
+                    <span className={`text-[14px] font-semibold ${muted}`}>
+                      / month
+                    </span>
+                  </p>
+                  <p className={`text-[12px] font-semibold ${muted}`}>
+                    {billingPeriod === "yearly" ? (
+                      <>
+                        {inr(price.total)} billed yearly ·{" "}
+                        <span className="font-black text-green-500">
+                          save {inr(price.saved)}
+                        </span>
+                      </>
+                    ) : (
+                      "Billed monthly"
+                    )}
+                  </p>
+                </div>
+
+                <ul className="mb-5 flex-1 space-y-2.5">
+                  {plan.features.map((feature) => (
+                    <li
+                      key={feature}
+                      className="flex items-start gap-2.5 text-[14px] font-medium"
+                    >
+                      <span
+                        className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-md ${
+                          featured && !isCurrent
+                            ? isDark
+                              ? "bg-[#001F3F] text-white"
+                              : "bg-white/15 text-white"
+                            : "bg-green-500/10 text-green-600"
+                        }`}
+                      >
+                        <Check size={12} strokeWidth={3} />
+                      </span>
+                      <span className={featured && !isCurrent ? "" : t.body}>
+                        {feature}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+
+                <button
+                  type="button"
+                  onClick={() => handlePlanSelect(plan)}
+                  disabled={isCurrent}
+                  className={`${btnBase} h-11 w-full ${
                     isCurrent
-                      ? "bg-gradient-to-br from-green-500/20 to-emerald-500/20 border-2 border-green-500/50"
-                      : isPopular
-                      ? "bg-gradient-to-br from-violet-500 to-fuchsia-500 text-white shadow-2xl shadow-violet-500/25 border-2 border-violet-400/50"
-                      : isDark
-                      ? "bg-gray-800/50 backdrop-blur-xl border-2 border-gray-700/50 hover:border-violet-500/50"
-                      : "bg-white border-2 border-gray-200 hover:border-violet-500/50 shadow-xl"
+                      ? `border-2 ${t.btnGhost}`
+                      : featured
+                        ? isDark
+                          ? "bg-[#001F3F] text-white hover:bg-black"
+                          : "bg-white text-[#001F3F] hover:bg-blue-50"
+                        : t.btnPrimary
                   }`}
                 >
-                  {/* Icon */}
-                  <div
-                    className={`inline-flex p-3 rounded-2xl mb-6 ${
-                      isPopular
-                        ? "bg-white/20 backdrop-blur-sm"
-                        : "bg-gradient-to-br from-violet-500/10 to-fuchsia-500/10"
-                    }`}
-                  >
-                    <Icon
-                      className={`w-7 h-7 ${
-                        isPopular ? "text-white" : "text-violet-500"
-                      }`}
-                    />
-                  </div>
-
-                  {/* Plan Name */}
-                  <div className="mb-6">
-                    <h3 className="text-2xl font-bold mb-2">{plan.name}</h3>
-                    <p
-                      className={`text-sm ${
-                        isPopular
-                          ? "text-white/80"
-                          : isDark
-                          ? "text-gray-400"
-                          : "text-gray-600"
-                      }`}
-                    >
-                      {plan.tagline}
-                    </p>
-                  </div>
-
-                  {/* Price */}
-                  <div className="mb-8">
-                    <div className="flex items-baseline gap-2 mb-1">
-                      <span className="text-5xl font-bold">
-                        ₹{monthlyEquivalent}
-                      </span>
-                      <span
-                        className={`text-lg ${
-                          isPopular
-                            ? "text-white/70"
-                            : isDark
-                            ? "text-gray-400"
-                            : "text-gray-600"
-                        }`}
-                      >
-                        /mo
-                      </span>
-                    </div>
-                    {billingPeriod === "yearly" && (
-                      <p
-                        className={`text-sm ${
-                          isPopular
-                            ? "text-white/70"
-                            : isDark
-                            ? "text-gray-400"
-                            : "text-gray-600"
-                        }`}
-                      >
-                        ₹{finalPrice} billed annually
-                      </p>
-                    )}
-                  </div>
-
-                  {/* Features */}
-                  <ul className="space-y-4 mb-8">
-                    {plan.features.map((feature, idx) => (
-                      <li key={idx} className="flex items-start gap-3">
-                        <div
-                          className={`flex-shrink-0 w-5 h-5 rounded-full flex items-center justify-center ${
-                            isPopular ? "bg-white/20" : "bg-green-500/10"
-                          }`}
-                        >
-                          <Check
-                            className={`w-3 h-3 ${
-                              isPopular ? "text-white" : "text-green-500"
-                            }`}
-                          />
-                        </div>
-                        <span className="text-sm">{feature}</span>
-                      </li>
-                    ))}
-                  </ul>
-
-                  {/* CTA Button */}
-                  <button
-                    onClick={() => handlePlanSelect(plan)}
-                    disabled={isCurrent}
-                    className={`w-full py-4 rounded-xl font-semibold transition-all flex items-center justify-center gap-2 ${
-                      isCurrent
-                        ? "bg-gray-500 text-white cursor-not-allowed opacity-60"
-                        : isPopular
-                        ? "bg-white text-violet-600 hover:bg-gray-50 shadow-lg"
-                        : "bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white hover:shadow-lg hover:shadow-violet-500/25"
-                    }`}
-                  >
-                    <span>{isCurrent ? "Current Plan" : "Upgrade Now"}</span>
-                    {!isCurrent && <ArrowRight className="w-5 h-5" />}
-                  </button>
-                </div>
-              </div>
+                  {isCurrent ? (
+                    <>
+                      <Check size={14} /> Your current plan
+                    </>
+                  ) : (
+                    <>
+                      Choose {plan.name} <ArrowRight size={14} />
+                    </>
+                  )}
+                </button>
+              </article>
             );
           })}
         </div>
-      </section>
 
-      {/* Trust Indicators */}
-      <section
-        className={`relative z-10 px-4 sm:px-1 py-12 ${
-          isDark ? "" : "bg-gray-50"
-        }`}
-      >
-        <div className="max-w-7xl mx-auto">
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-8">
-            {[
-              {
-                icon: Shield,
-                label: "Secure Payment",
-                desc: "Bank-level encryption",
-              },
-              {
-                icon: Clock,
-                label: "Instant Access",
-                desc: "Start immediately",
-              },
-              {
-                icon: TrendingUp,
-                label: "Cancel Anytime",
-                desc: "No commitments",
-              },
-              {
-                icon: Star,
-                label: "24/7 Support",
-                desc: "Always here to help",
-              },
-            ].map((item, index) => {
-              const Icon = item.icon;
-              return (
-                <div
-                  key={index}
-                  className="relative group rounded-2xl p-[1px] transition-all duration-300 hover:shadow-lg"
-                  style={{
-                    // Shiny Gradient Border
-                    background: isDark
-                      ? "linear-gradient(135deg, #1E3A8A, #3B82F6, #8B5CF6)" // Dark: Deep Blue -> Purple
-                      : "linear-gradient(135deg, #E0E7FF, #6366F1, #E0E7FF)", // Light: Soft Violet Shine
-                  }}
-                >
-                  {/* Inner Card Content */}
-                  <div
-                    className="relative h-full w-full rounded-2xl p-6 text-center space-y-3"
-                    style={{
-                      backgroundColor: isDark ? "#020D36" : "#FFFFFF", // Card Background
-                    }}
-                  >
-                    {/* Icon Container */}
-                    <div
-                      className="inline-flex p-4 rounded-2xl transition-transform duration-300 group-hover:scale-110"
-                      style={{
-                        backgroundColor: isDark
-                          ? "rgba(139, 92, 246, 0.1)" // Dark Mode Icon BG
-                          : "#F5F3FF", // Light Mode Icon BG
-                      }}
-                    >
-                      <Icon
-                        className="w-8 h-8"
-                        style={{
-                          color: isDark ? "#8B5CF6" : "#7C3AED", // Violet Icon Color
-                        }}
-                      />
-                    </div>
-
-                    {/* Text Content */}
-                    <div>
-                      <p
-                        className="font-semibold mb-1"
-                        style={{ color: isDark ? "#E5E7EB" : "#0F172A" }}
-                      >
-                        {item.label}
-                      </p>
-                      <p
-                        className="text-sm"
-                        style={{ color: isDark ? "#94A3B8" : "#475569" }}
-                      >
-                        {item.desc}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+        {/* trust row */}
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          {TRUST.map(({ icon: Icon, label, desc }) => (
+            <div
+              key={label}
+              className={`flex items-center gap-3 rounded-2xl border-2 p-3 sm:p-4 ${t.card}`}
+            >
+              <span
+                className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${t.chipNavy}`}
+              >
+                <Icon size={14} />
+              </span>
+              <div className="min-w-0">
+                <p className={`truncate text-[14px] font-black ${t.heading}`}>
+                  {label}
+                </p>
+                <p className={`truncate text-[12px] ${t.muted}`}>{desc}</p>
+              </div>
+            </div>
+          ))}
         </div>
-      </section>
+      </div>
 
-      {/* Payment Modal */}
       <PaymentModal
         show={showModal}
         plan={selectedPlan}
@@ -621,8 +455,8 @@ export default function UpgradePlans() {
         planType={planType}
         onClose={() => setShowModal(false)}
         onComplete={handlePaymentComplete}
-        userData={user} // <-- added
-        isUpgradePage={true} // <-- added flag
+        userData={user}
+        isUpgradePage={true}
       />
     </div>
   );

@@ -1,19 +1,14 @@
-import { Calendar, Sparkles, ChevronDown, TrendingUp } from "lucide-react";
-
-const MONTHS = [
-  { label: "January", value: 1 },
-  { label: "February", value: 2 },
-  { label: "March", value: 3 },
-  { label: "April", value: 4 },
-  { label: "May", value: 5 },
-  { label: "June", value: 6 },
-  { label: "July", value: 7 },
-  { label: "August", value: 8 },
-  { label: "September", value: 9 },
-  { label: "October", value: 10 },
-  { label: "November", value: 11 },
-  { label: "December", value: 12 },
-];
+// client/src/components/Car/SalaryFilters.jsx
+import React from "react";
+import {
+  ChevronLeft,
+  ChevronRight,
+  Sparkles,
+  Download,
+  Calendar,
+} from "lucide-react";
+import { useTheme } from "../../contexts/ThemeContext";
+import { tk, btnBase, MONTHS } from "./staffUi";
 
 export default function SalaryFilters({
   month,
@@ -23,74 +18,100 @@ export default function SalaryFilters({
   onGenerate,
   onDownload,
   disabled,
+  isDark: isDarkProp,
 }) {
+  const theme = useTheme();
+  const isDark = isDarkProp ?? theme?.isDark;
+  const t = tk(isDark);
+
+  const shift = (delta) => {
+    const m0 = Number(month) || new Date().getMonth() + 1;
+    const y0 = Number(year) || new Date().getFullYear();
+    const d = new Date(y0, m0 - 1 + delta, 1);
+    onMonthChange(d.getMonth() + 1);
+    onYearChange(d.getFullYear());
+  };
+
+  const field = `h-10 rounded-xl border-2 text-[14px] font-bold outline-none transition ${t.input}`;
+  const stepBtn = `${btnBase} h-10 w-10 shrink-0 border-2 ${t.btnGhost}`;
+
   return (
-    <div className="flex flex-col sm:flex-row items-end gap-4 w-full">
-      {/* Month Selector */}
-      <div className="w-full sm:w-auto relative group">
-        <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5 ml-1">
-          Month
-        </label>
-        <div className="relative">
-          <select
-            value={month ?? ""}
-            onChange={(e) =>
-              onMonthChange(e.target.value === "" ? "" : Number(e.target.value))
-            }
-            className="w-full sm:w-48 appearance-none bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-gray-100 text-sm rounded-xl px-4 py-2.5 pr-10 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all cursor-pointer"
+    <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+      <div>
+        <p className="mb-1.5 text-[12px] font-bold uppercase tracking-wider text-slate-400">
+          Pay period
+        </p>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => shift(-1)}
+            aria-label="Previous month"
+            className={stepBtn}
           >
-            <option value="">Select Month</option>
-            {MONTHS.map((m) => (
-              <option key={m.value} value={m.value}>
-                {m.label}
-              </option>
-            ))}
-          </select>
-          <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none group-hover:text-blue-500 transition-colors" />
+            <ChevronLeft size={16} />
+          </button>
+          <div className="relative min-w-0 flex-1 sm:w-44 sm:flex-none">
+            <select
+              aria-label="Month"
+              value={month ?? ""}
+              onChange={(e) => onMonthChange(Number(e.target.value))}
+              className={`${field} w-full cursor-pointer appearance-none px-3 pr-8 ${isDark ? "[&>option]:bg-[#000814]" : ""}`}
+            >
+              {MONTHS.map((m) => (
+                <option key={m.value} value={m.value}>
+                  {m.label}
+                </option>
+              ))}
+            </select>
+            <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[12px] text-slate-400">
+              ▼
+            </span>
+          </div>
+          <div className="relative w-24 shrink-0">
+            <Calendar
+              size={14}
+              className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
+            />
+            <input
+              aria-label="Year"
+              type="number"
+              inputMode="numeric"
+              value={year ?? ""}
+              onChange={(e) =>
+                onYearChange(
+                  e.target.value === "" ? "" : Number(e.target.value),
+                )
+              }
+              placeholder="YYYY"
+              className={`${field} w-full pl-8 pr-2`}
+            />
+          </div>
+          <button
+            type="button"
+            onClick={() => shift(1)}
+            aria-label="Next month"
+            className={stepBtn}
+          >
+            <ChevronRight size={16} />
+          </button>
         </div>
       </div>
 
-      {/* Year Input */}
-      <div className="w-full sm:w-auto">
-        <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5 ml-1">
-          Year
-        </label>
-        <div className="relative">
-          <input
-            type="number"
-            value={year ?? ""}
-            onChange={(e) =>
-              onYearChange(e.target.value === "" ? "" : Number(e.target.value))
-            }
-            className="w-full sm:w-32 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-gray-100 text-sm rounded-xl px-4 py-2.5 pl-10 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
-            placeholder="YYYY"
-          />
-          <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-        </div>
-      </div>
-
-      {/* Action Button */}
-      <div className="w-full flex gap-4 sm:w-auto sm:ml-auto">
+      <div className="grid grid-cols-2 gap-2 sm:flex">
         <button
+          type="button"
           onClick={onGenerate}
-          className="w-full sm:w-auto flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-6 py-2.5 rounded-xl text-sm font-medium shadow-lg shadow-blue-500/30 hover:shadow-blue-500/40 transform hover:-translate-y-0.5 active:translate-y-0 transition-all duration-200"
+          className={`${btnBase} h-10 px-4 shadow-lg ${t.btnPrimary}`}
         >
-          <Sparkles className="w-4 h-4" />
-          <span>Generate / Prepare</span>
+          <Sparkles size={14} /> Prepare payroll
         </button>
         <button
+          type="button"
           onClick={onDownload}
           disabled={disabled}
-          className={`w-full sm:w-auto flex items-center justify-center gap-2 px-6 py-2.5 rounded-xl text-sm font-medium shadow-lg transition-all
-    ${
-      disabled
-        ? "bg-gray-300 text-gray-500 cursor-not-allowed"
-        : "bg-green-600 hover:bg-green-700 text-white shadow-emerald-500/30"
-    }
-  `}
+          className={`${btnBase} h-10 border-2 px-4 ${t.btnGhost}`}
         >
-          <TrendingUp className="w-4 h-4" />
-          Download Report
+          <Download size={14} /> Export CSV
         </button>
       </div>
     </div>

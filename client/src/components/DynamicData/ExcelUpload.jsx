@@ -1,9 +1,19 @@
 import { useRef, useState } from "react";
 import * as XLSX from "xlsx";
+import {
+  FileSpreadsheet,
+  Upload,
+  X,
+  ArrowRight,
+  Loader2,
+  Info,
+} from "lucide-react";
+import { tk, btnBase, Banner } from "./dynamicUi";
 
 const MAX_ROWS = 500;
 
 const ExcelUpload = ({ onProceed, isDark, importProgress }) => {
+  const t = tk(isDark);
   const [parsedData, setParsedData] = useState([]);
   const [fileName, setFileName] = useState("");
   const [error, setError] = useState("");
@@ -23,9 +33,9 @@ const ExcelUpload = ({ onProceed, isDark, importProgress }) => {
   const processFile = (file) => {
     if (!file) return;
 
-    const validExt = /\.(xlsx|xls)$/i.test(file.name);
-    if (!validExt) {
+    if (!/\.(xlsx|xls)$/i.test(file.name)) {
       setError("Please upload a valid Excel file (.xlsx or .xls).");
+      if (inputRef.current) inputRef.current.value = "";
       return;
     }
 
@@ -37,16 +47,15 @@ const ExcelUpload = ({ onProceed, isDark, importProgress }) => {
 
     reader.onload = (evt) => {
       try {
-        const data = evt.target.result;
-        const workbook = XLSX.read(data, { type: "binary" });
-        const sheetName = workbook.SheetNames[0];
-        const sheet = workbook.Sheets[sheetName];
+        const workbook = XLSX.read(new Uint8Array(evt.target.result), {
+          type: "array",
+        });
+        const sheet = workbook.Sheets[workbook.SheetNames[0]];
         const json = XLSX.utils.sheet_to_json(sheet, { defval: "" });
 
         if (json.length === 0) {
           setError("This file doesn't contain any rows to import.");
           setParsedData([]);
-          setIsParsing(false);
           return;
         }
 
@@ -66,6 +75,7 @@ const ExcelUpload = ({ onProceed, isDark, importProgress }) => {
         setParsedData([]);
       } finally {
         setIsParsing(false);
+        if (inputRef.current) inputRef.current.value = ""; // allow picking the same file again
       }
     };
 
@@ -74,17 +84,13 @@ const ExcelUpload = ({ onProceed, isDark, importProgress }) => {
       setIsParsing(false);
     };
 
-    reader.readAsBinaryString(file);
-  };
-
-  const handleFile = (e) => {
-    processFile(e.target.files?.[0]);
+    reader.readAsArrayBuffer(file);
   };
 
   const handleDrop = (e) => {
     e.preventDefault();
     setIsDragging(false);
-    if (isImporting) return;
+    if (isImporting || isParsing) return;
     processFile(e.dataTransfer.files?.[0]);
   };
 
@@ -93,199 +99,166 @@ const ExcelUpload = ({ onProceed, isDark, importProgress }) => {
     onProceed(parsedData);
   };
 
-  const previewColumns =
-    parsedData.length > 0 ? Object.keys(parsedData[0]).slice(0, 4) : [];
+  const allColumns = parsedData.length > 0 ? Object.keys(parsedData[0]) : [];
+  const previewColumns = allColumns.slice(0, 4);
+  const pct =
+    isImporting && importProgress.total
+      ? Math.min(
+          100,
+          Math.round((importProgress.current / importProgress.total) * 100),
+        )
+      : 0;
 
   return (
-    <div
-      className={`rounded-2xl p-1 transition-colors duration-300 ${
-        isDark ? "bg-gray-800" : "bg-white"
-      }`}
-    >
-      <div className="flex flex-col gap-4">
-        {/* DROP ZONE / FILE PICKER */}
-        {parsedData.length === 0 && (
-          <label
-            onDragOver={(e) => {
-              e.preventDefault();
-              if (!isImporting) setIsDragging(true);
-            }}
-            onDragLeave={() => setIsDragging(false)}
-            onDrop={handleDrop}
-            className={`relative group flex flex-col sm:flex-row items-center justify-center gap-3 px-6 py-8 sm:py-6 border-2 border-dashed rounded-2xl transition-all text-center sm:text-left ${
-              isImporting ? "opacity-60 pointer-events-none" : "cursor-pointer"
-            } ${
-              isDragging
-                ? isDark
-                  ? "border-blue-500 bg-blue-500/10"
-                  : "border-blue-500 bg-blue-50/60"
-                : isDark
-                  ? "bg-gray-700/50 border-gray-600 group-hover:bg-gray-700"
-                  : "bg-slate-50 border-slate-200 group-hover:bg-white"
-            } group-hover:border-blue-500`}
+    <div className="space-y-3">
+      {/* drop zone */}
+      {parsedData.length === 0 && (
+        <label
+          onDragOver={(e) => {
+            e.preventDefault();
+            if (!isImporting) setIsDragging(true);
+          }}
+          onDragLeave={() => setIsDragging(false)}
+          onDrop={handleDrop}
+          className={`flex flex-col items-center justify-center gap-3 rounded-2xl border-2 border-dashed px-4 py-6 text-center transition sm:flex-row sm:text-left ${
+            isImporting || isParsing
+              ? "pointer-events-none opacity-60"
+              : "cursor-pointer"
+          } ${
+            isDragging
+              ? isDark
+                ? "border-white bg-white/10"
+                : "border-[#001F3F] bg-[#F8FAFC]"
+              : isDark
+                ? "border-white/15 bg-white/5 hover:border-white/40"
+                : "border-[#CBD5E1] bg-[#F8FAFC] hover:border-[#001F3F]"
+          }`}
+        >
+          <input
+            ref={inputRef}
+            type="file"
+            accept=".xlsx,.xls"
+            onChange={(e) => processFile(e.target.files?.[0])}
+            className="hidden"
+            disabled={isImporting || isParsing}
+          />
+          <span
+            className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${t.chipNavy}`}
           >
-            <input
-              ref={inputRef}
-              type="file"
-              accept=".xlsx,.xls"
-              onChange={handleFile}
-              className="hidden"
-              disabled={isImporting || isParsing}
-            />
-            <div className={isDark ? "text-blue-400" : "text-blue-600"}>
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                className="h-8 w-8 sm:h-6 sm:w-6"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2.5}
-                  d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-                />
-              </svg>
-            </div>
-            <div>
-              <p
-                className={`font-black text-xs uppercase tracking-widest ${
-                  isDark
-                    ? "text-gray-300 group-hover:text-blue-400"
-                    : "text-slate-600 group-hover:text-blue-600"
-                }`}
-              >
-                {isParsing ? "Reading file..." : "Import Excel"}
-              </p>
-              <p
-                className={`text-[11px] font-medium mt-1 ${
-                  isDark ? "text-gray-500" : "text-slate-400"
-                }`}
-              >
-                Drag & drop a .xlsx / .xls file here, or click to browse · max{" "}
-                {MAX_ROWS} rows
-              </p>
-            </div>
-          </label>
-        )}
-
-        {/* ERROR / WARNING BANNER */}
-        {error && (
-          <div
-            className={`flex items-start gap-2 px-4 py-3 rounded-xl border text-xs font-semibold ${
-              isDark
-                ? "bg-amber-900/30 border-amber-800 text-amber-300"
-                : "bg-amber-50 border-amber-200 text-amber-700"
-            }`}
-          >
-            <span className="mt-0.5">⚠</span>
-            <span>{error}</span>
-          </div>
-        )}
-
-        {/* PARSED DATA STATE */}
-        {parsedData.length > 0 && (
-          <div className="w-full animate-in slide-in-from-bottom-2 duration-500 space-y-3">
-            <div
-              className={`flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-2 p-4 rounded-2xl shadow-xl ${
-                isDark
-                  ? "bg-gray-800 border-emerald-500/30"
-                  : "bg-white border-emerald-500/20"
-              } shadow-emerald-500/5`}
+            {isParsing ? (
+              <Loader2 size={16} className="animate-spin" />
+            ) : (
+              <Upload size={16} />
+            )}
+          </span>
+          <span className="min-w-0">
+            <span
+              className={`block text-[14px] font-black uppercase tracking-tight ${t.heading}`}
             >
-              <div className="flex flex-col min-w-0">
-                <div className="flex items-center gap-2">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse shrink-0"></span>
-                  <p
-                    className={`font-black text-xs truncate ${
-                      isDark ? "text-white" : "text-slate-900"
-                    }`}
-                  >
-                    {fileName}
-                  </p>
-                </div>
-                <p
-                  className={`text-[10px] font-bold uppercase tracking-tighter mt-0.5 ${
-                    isDark ? "text-gray-500" : "text-slate-400"
-                  }`}
-                >
-                  {parsedData.length} record{parsedData.length !== 1 ? "s" : ""}{" "}
-                  ready
+              {isParsing ? (
+                "Reading file…"
+              ) : (
+                <>
+                  Import{" "}
+                  <span className="font-light lowercase italic">excel</span>
+                </>
+              )}
+            </span>
+            <span className={`block text-[12px] font-medium ${t.muted}`}>
+              Drag & drop a .xlsx / .xls file, or tap to browse · max {MAX_ROWS}{" "}
+              rows
+            </span>
+          </span>
+        </label>
+      )}
+
+      <Banner tone="warning">{error}</Banner>
+
+      {/* parsed file */}
+      {parsedData.length > 0 && (
+        <div className={`rounded-2xl border-2 p-3 sm:p-4 ${t.inner}`}>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex min-w-0 items-center gap-3">
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-green-500/10 text-green-600">
+                <FileSpreadsheet size={16} />
+              </span>
+              <div className="min-w-0">
+                <p className={`truncate text-[14px] font-black ${t.heading}`}>
+                  {fileName}
+                </p>
+                <p className={`truncate text-[12px] font-medium ${t.muted}`}>
+                  <span className="font-black uppercase tracking-wider text-green-600">
+                    {parsedData.length} record
+                    {parsedData.length !== 1 ? "s" : ""} ready
+                  </span>
                   {previewColumns.length > 0 && (
-                    <span className="normal-case font-medium tracking-normal">
+                    <>
                       {" "}
-                      · columns: {previewColumns.join(", ")}
-                      {Object.keys(parsedData[0]).length > 4 ? "…" : ""}
-                    </span>
+                      · {previewColumns.join(", ")}
+                      {allColumns.length > 4
+                        ? ` +${allColumns.length - 4} more`
+                        : ""}
+                    </>
                   )}
                 </p>
               </div>
-
-              <div className="flex gap-2 shrink-0">
-                <button
-                  onClick={resetState}
-                  disabled={isImporting}
-                  className={`px-4 py-2.5 font-bold text-xs transition-colors disabled:opacity-40 ${
-                    isDark
-                      ? "text-gray-400 hover:text-gray-200"
-                      : "text-slate-400 hover:text-slate-600"
-                  }`}
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleProceed}
-                  disabled={isImporting}
-                  className="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-black text-xs uppercase tracking-widest transition-all shadow-lg shadow-emerald-900/20 active:scale-95 disabled:opacity-60 disabled:active:scale-100 flex items-center gap-2"
-                >
-                  {isImporting ? (
-                    <>
-                      <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                      Importing {importProgress.current}/{importProgress.total}
-                    </>
-                  ) : (
-                    "Proceed"
-                  )}
-                </button>
-              </div>
             </div>
 
-            {/* IMPORT PROGRESS BAR */}
-            {isImporting && (
+            <div className="grid shrink-0 grid-cols-2 gap-2 sm:flex">
+              <button
+                type="button"
+                onClick={resetState}
+                disabled={isImporting}
+                className={`${btnBase} h-10 border-2 px-4 ${t.btnGhost}`}
+              >
+                <X size={14} /> Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleProceed}
+                disabled={isImporting}
+                className={`${btnBase} h-10 px-4 ${t.btnPrimary}`}
+              >
+                {isImporting ? (
+                  <>
+                    <Loader2 size={14} className="animate-spin" />
+                    {importProgress.current}/{importProgress.total}
+                  </>
+                ) : (
+                  <>
+                    Import <ArrowRight size={14} />
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+
+          {isImporting && (
+            <div className="mt-3">
               <div
-                className={`h-1.5 w-full rounded-full overflow-hidden ${
-                  isDark ? "bg-gray-700" : "bg-slate-100"
-                }`}
+                className={`h-2 w-full overflow-hidden rounded-md ${isDark ? "bg-white/10" : "bg-[#E2E8F0]"}`}
               >
                 <div
-                  className="h-full bg-emerald-500 transition-all duration-200"
-                  style={{
-                    width: `${Math.min(
-                      100,
-                      Math.round(
-                        (importProgress.current / importProgress.total) * 100,
-                      ),
-                    )}%`,
-                  }}
+                  className={`h-full transition-all duration-200 ${isDark ? "bg-white" : "bg-[#001F3F]"}`}
+                  style={{ width: `${pct}%` }}
                 />
               </div>
-            )}
-          </div>
-        )}
+              <p className={`mt-1 text-right text-[12px] font-bold ${t.muted}`}>
+                {pct}% imported
+              </p>
+            </div>
+          )}
+        </div>
+      )}
 
-        {/* QUICK TIP (Only when empty) */}
-        {parsedData.length === 0 && !error && (
-          <p
-            className={`ml-1 text-[10px] font-bold uppercase tracking-widest flex items-center gap-2 ${
-              isDark ? "text-gray-500" : "text-slate-400"
-            }`}
-          >
-            <span className="text-blue-500">★</span> New columns are created
-            automatically as TEXT fields
-          </p>
-        )}
-      </div>
+      {parsedData.length === 0 && !error && (
+        <p
+          className={`flex items-center gap-1.5 text-[12px] font-medium ${t.muted}`}
+        >
+          <Info size={12} className="shrink-0" /> New columns from the file are
+          created automatically as Text fields.
+        </p>
+      )}
     </div>
   );
 };

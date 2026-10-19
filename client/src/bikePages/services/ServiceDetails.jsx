@@ -1,20 +1,17 @@
+// client/src/bikePages/services/ServiceDetails.jsx
 import React, { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { useTheme } from "../../contexts/ThemeContext";
 import {
   ArrowLeft,
   Calendar,
   IndianRupee,
   Edit2,
-  FileText,
   Printer,
   User,
   Phone,
   Mail,
   Bike,
-  Hash,
   Wrench,
-  Tag,
   CheckCircle,
   Clock,
   AlertCircle,
@@ -22,76 +19,101 @@ import {
   Loader2,
   Image as ImageIcon,
   Package,
-  Send,
+  FileText,
+  Flag,
+  ChevronRight,
 } from "lucide-react";
-import { FaWhatsapp, FaCheckCircle, FaExclamationCircle } from "react-icons/fa";
+import { FaWhatsapp } from "react-icons/fa";
 import { Toaster, toast } from "react-hot-toast";
+import { useTheme } from "../../contexts/ThemeContext";
 import api from "../../utils/axiosInstance";
 
-/**
- * BACKEND ROUTE ALIGNMENT (Based on Debug Steps)
- * ===============================================
- * Base Prefix: /api/bike-services
- *
- * 1. Approval: POST /:id/whatsapp-approval
- *    -> Full URL: /api/bike-services/${id}/whatsapp-approval
- *
- * 2. Ready Alert: POST /:id/whatsapp-ready
- *    -> Full URL: /api/bike-services/${id}/whatsapp-ready
- */
+const API_BASE = import.meta.env.VITE_API_BASE_URL || "";
 
-// Approval Status Meta
+const money = (n) =>
+  `₹${Number(n || 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+const fmtDate = (d) =>
+  d
+    ? new Date(d).toLocaleDateString("en-IN", {
+        weekday: "short",
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+      })
+    : "—";
+
 const approvalMeta = {
-  PENDING: {
-    label: "Pending Customer Approval",
-    color: (isDark) =>
-      isDark
-        ? "text-yellow-400 bg-yellow-400/10 border-yellow-400/20"
-        : "text-yellow-800 bg-yellow-100 border-yellow-200",
-  },
-  APPROVED: {
-    label: "Approved by Customer",
-    color: (isDark) =>
-      isDark
-        ? "text-green-400 bg-green-400/10 border-green-400/20"
-        : "text-green-800 bg-green-100 border-green-200",
-  },
-  REJECTED: {
-    label: "Rejected by Customer",
-    color: (isDark) =>
-      isDark
-        ? "text-red-400 bg-red-400/10 border-red-400/20"
-        : "text-red-800 bg-red-100 border-red-200",
-  },
-  CONDITION_REQUESTED: {
-    label: "Approved with Conditions",
-    color: (isDark) =>
-      isDark
-        ? "text-orange-400 bg-orange-400/10 border-orange-400/20"
-        : "text-orange-800 bg-orange-100 border-orange-200",
-  },
-  READY_SENT: {
-    label: "Vehicle Ready (Sent)",
-    color: (isDark) =>
-      isDark
-        ? "text-green-400 bg-green-400/10 border-green-400/20"
-        : "text-green-800 bg-green-100 border-green-200",
-  },
+  PENDING: { label: "Waiting for customer", tone: "amber" },
+  APPROVED: { label: "Approved by customer", tone: "emerald" },
+  REJECTED: { label: "Rejected by customer", tone: "rose" },
+  CONDITION_REQUESTED: { label: "Approved with conditions", tone: "orange" },
+  READY_SENT: { label: "Vehicle ready (sent)", tone: "emerald" },
 };
 
-const ServiceDetails = () => {
+const toneCls = (tone, isDark) =>
+  ({
+    amber: isDark
+      ? "bg-amber-500/10 text-amber-300 ring-amber-400/20"
+      : "bg-amber-50 text-amber-700 ring-amber-600/20",
+    emerald: isDark
+      ? "bg-emerald-500/10 text-emerald-300 ring-emerald-400/20"
+      : "bg-emerald-50 text-emerald-700 ring-emerald-600/20",
+    rose: isDark
+      ? "bg-rose-500/10 text-rose-300 ring-rose-400/20"
+      : "bg-rose-50 text-rose-700 ring-rose-600/20",
+    orange: isDark
+      ? "bg-orange-500/10 text-orange-300 ring-orange-400/20"
+      : "bg-orange-50 text-orange-700 ring-orange-600/20",
+    blue: isDark
+      ? "bg-blue-500/10 text-blue-300 ring-blue-400/20"
+      : "bg-blue-50 text-blue-700 ring-blue-600/20",
+    gray: isDark
+      ? "bg-white/5 text-gray-300 ring-white/10"
+      : "bg-gray-100 text-gray-600 ring-gray-500/20",
+  })[tone];
+
+const statusTone = (status) =>
+  ({ Completed: "emerald", "In Progress": "blue", Cancelled: "rose" })[
+    status
+  ] || "amber";
+
+const getTokens = (isDark) =>
+  isDark
+    ? {
+        page: "bg-gray-900 text-gray-100",
+        card: "bg-gray-800 border-gray-700",
+        border: "border-gray-700",
+        muted: "text-gray-400",
+        faint: "text-gray-500",
+        thead: "bg-white/[0.03] text-gray-400",
+        btn2: "border-gray-600 text-gray-200 hover:bg-gray-700",
+        soft: "bg-gray-900/50",
+        chip: "bg-gray-900 text-gray-200 border-gray-600",
+      }
+    : {
+        page: "bg-gray-50 text-gray-800",
+        card: "bg-white border-gray-200",
+        border: "border-gray-200",
+        muted: "text-gray-500",
+        faint: "text-gray-400",
+        thead: "bg-gray-50 text-gray-500",
+        btn2: "border-gray-300 text-gray-700 hover:bg-gray-50",
+        soft: "bg-gray-50",
+        chip: "bg-gray-100 text-gray-700 border-gray-200",
+      };
+
+export default function ServiceDetails() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { isDark } = useTheme();
+  const t = getTokens(isDark);
 
   const [service, setService] = useState(null);
   const [loading, setLoading] = useState(true);
   const [sendingWhatsApp, setSendingWhatsApp] = useState(false);
+  const [sendingReady, setSendingReady] = useState(false);
+  const [confirmReady, setConfirmReady] = useState(false);
   const [waError, setWaError] = useState("");
-
-  useEffect(() => {
-    fetchService();
-  }, [id]);
 
   const fetchService = async () => {
     try {
@@ -101,9 +123,8 @@ const ServiceDetails = () => {
     } catch (err) {
       console.error("Fetch service error:", err);
       toast.error(
-        err.response?.data?.message || "Failed to load service details"
+        err.response?.data?.message || "Failed to load service details",
       );
-
       if (err.response?.status === 403 || err.response?.status === 404) {
         setTimeout(() => navigate("/bike-services"), 2000);
       }
@@ -112,19 +133,19 @@ const ServiceDetails = () => {
     }
   };
 
-  // ✅ Matches: router.post("/:id/whatsapp-approval", ...)
+  useEffect(() => {
+    fetchService();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id]);
+
+  /* ---------------- actions (same endpoints as before) ---------------- */
   const handleSendWhatsAppApproval = async () => {
     try {
       setSendingWhatsApp(true);
       setWaError("");
-
-      // Direct call to the clean route
-      const res = await api.post(
-        `/api/bike-service/${id}/whatsapp-approval`
-      );
-
+      await api.post(`/api/bike-service/${id}/whatsapp-approval`);
       await fetchService();
-      toast.success("WhatsApp Approval Sent!");
+      toast.success("Approval request sent on WhatsApp");
     } catch (err) {
       const msg = err.response?.data?.message || "Failed to send WhatsApp";
       setWaError(msg);
@@ -134,43 +155,49 @@ const ServiceDetails = () => {
     }
   };
 
-  // ✅ Matches: router.post("/:id/whatsapp-ready", ...)
   const handleSendReadyAlert = async () => {
-    if (!window.confirm("Notify the client and mark as Paid?")) return;
-
     try {
-      // Direct call to the clean route
+      setSendingReady(true);
       const res = await api.post(`/api/bike-service/${id}/whatsapp-ready`);
-
       if (res.status === 200) {
-        toast.success("Ready alert sent & Status updated to Paid!");
+        toast.success("Ready alert sent & marked as paid");
         fetchService();
       } else {
         toast.error(res.data?.message || "Failed to update status");
       }
     } catch (err) {
       console.error(err);
-      toast.error("Network error");
+      toast.error(err.response?.data?.message || "Failed to send ready alert");
+    } finally {
+      setSendingReady(false);
+      setConfirmReady(false);
     }
   };
 
-  const handlePrint = () => {
-    window.print();
-  };
+  const goToInvoice = () =>
+    navigate("/bill/new", {
+      state: {
+        id: service.id,
+        bikeId: service.client?.id,
+        clientName: service.client?.ownerName,
+        vehicle:
+          `${service.client?.bikeBrand || ""} ${service.client?.bikeModel || ""}`.trim(),
+        serviceCategory: service.category?.name || service.categoryText,
+        serviceSubCategory: service.subService?.name || service.subServiceText,
+        serviceItems: service.serviceItems || [],
+        discountType: service.discountType,
+        discount: service.discount,
+        advancePaid: service.advancePaid,
+      },
+    });
 
+  /* ---------------- states ---------------- */
   if (loading) {
     return (
       <div
-        className={`min-h-screen flex items-center justify-center ${
-          isDark ? "bg-gray-900" : "bg-gradient-to-br from-gray-50 to-gray-100"
-        }`}
+        className={`flex min-h-screen items-center justify-center ${t.page}`}
       >
-        <div className="flex flex-col items-center gap-4">
-          <Loader2 className="animate-spin text-green-500" size={48} />
-          <p className={`text-lg ${isDark ? "text-gray-400" : "text-gray-600"}`}>
-            Loading service details...
-          </p>
-        </div>
+        <Loader2 className="h-6 w-6 animate-spin text-blue-500" />
       </div>
     );
   }
@@ -178,455 +205,479 @@ const ServiceDetails = () => {
   if (!service) {
     return (
       <div
-        className={`min-h-screen flex items-center justify-center ${
-          isDark ? "bg-gray-900" : "bg-gradient-to-br from-gray-50 to-gray-100"
-        }`}
+        className={`flex min-h-screen flex-col items-center justify-center p-6 text-center ${t.page}`}
       >
-        <div className="flex flex-col items-center gap-4">
-          <AlertCircle size={48} className="text-red-500" />
-          <p className={`text-lg ${isDark ? "text-gray-400" : "text-gray-600"}`}>
-            Service not found
-          </p>
-          <button
-            onClick={() => navigate("/bike-services")}
-            className="mt-4 px-6 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
-          >
-            Back to Services
-          </button>
-        </div>
+        <Toaster />
+        <AlertCircle size={28} className="mb-3 text-rose-500" />
+        <p className="text-[14px] font-medium">Service not found</p>
+        <button
+          onClick={() => navigate("/bike-services")}
+          className="mt-4 h-9 rounded-md bg-blue-600 px-4 text-[14px] font-medium text-white hover:bg-blue-700"
+        >
+          Back to services
+        </button>
       </div>
     );
   }
 
+  const title =
+    service.subService?.name ||
+    service.subServiceText ||
+    service.category?.name ||
+    service.categoryText ||
+    "Service";
+  const items = service.serviceItems || [];
+  const media = service.serviceMedia || [];
+  const client = service.client || {};
+  const approval = approvalMeta[service.approvalStatus];
+  const hasInvoice = Boolean(service.bikeInvoice);
+  const isPaid = service.paymentStatus === "Paid";
+
   return (
     <div
-      className={`min-h-screen p-6 transition-colors duration-300 ${
-        isDark ? "bg-gray-900" : "bg-gradient-to-br from-gray-50 to-gray-100"
-      }`}
+      className={`min-h-screen px-3 py-4 text-[14px] sm:px-5 lg:px-8 print:bg-white print:p-0 print:text-black ${t.page}`}
     >
-      <Toaster position="top-right" />
+      <Toaster
+        position="top-right"
+        toastOptions={{ style: { fontSize: "14px" } }}
+      />
 
-      <div className="max-w-6xl mx-auto animate-fade-in">
+      <div className="mx-auto max-w-6xl space-y-4">
         {/* Header */}
-        <div className="mb-8">
-          <button
-            onClick={() => navigate("/bike-services")}
-            className={`flex items-center gap-2 mb-4 px-4 py-2 rounded-lg transition-all duration-300 ${
-              isDark
-                ? "text-gray-400 hover:text-white hover:bg-gray-800"
-                : "text-gray-600 hover:text-gray-900 hover:bg-white"
-            }`}
-          >
-            <ArrowLeft size={20} />
-            Back to Services
-          </button>
-
-          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-            <div>
-              <h1 className="text-4xl font-bold mb-2 bg-gradient-to-r from-blue-500 to-blue-600 bg-clip-text text-transparent">
-                Service Details
-              </h1>
-              <p className={`text-sm ${isDark ? "text-gray-400" : "text-gray-600"}`}>
-                Complete information about this service
-              </p>
-            </div>
-
-            <div className="flex gap-3">
-              {/* Ready Alert Button */}
-              {service.approvalStatus === "READY_SENT" ? (
-                <div className="flex items-center gap-2 px-6 py-3 bg-green-500/10 text-green-600 border border-green-500/20 rounded-xl font-bold">
-                  <FaCheckCircle className="w-5 h-5" />
-                  Ready Alert Sent
-                </div>
-              ) : (
-                <button
-                  onClick={handleSendReadyAlert}
-                  className="flex items-center gap-2 px-6 py-3 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-all shadow-lg font-semibold"
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <button
+              onClick={() => navigate("/bike-services")}
+              className={`mb-2 inline-flex items-center gap-1.5 text-[12px] font-medium ${t.muted} hover:text-blue-600 print:hidden`}
+            >
+              <ArrowLeft size={14} /> Back to services
+            </button>
+            <div className="flex flex-wrap items-center gap-2">
+              <h1 className="text-[16px] font-semibold">{title}</h1>
+              <span
+                className={`rounded-full px-2 py-0.5 text-[12px] font-medium ring-1 ring-inset ${toneCls(statusTone(service.status), isDark)}`}
+              >
+                {service.status || "Pending"}
+              </span>
+              {service.priority && service.priority !== "Normal" && (
+                <span
+                  className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[12px] font-medium ring-1 ring-inset ${toneCls(["High", "Urgent"].includes(service.priority) ? "rose" : "gray", isDark)}`}
                 >
-                  <CheckCircle className="w-5 h-5" />
-                  Mark Ready & Notify
-                </button>
+                  <Flag size={11} /> {service.priority}
+                </span>
               )}
-
-              <button
-                onClick={handlePrint}
-                className={`group flex items-center gap-2 px-5 py-3 rounded-xl font-medium transition-all duration-300 hover:scale-105 active:scale-95 ${
-                  isDark
-                    ? "bg-gray-700 text-gray-300 hover:bg-gray-600"
-                    : "bg-white text-gray-700 hover:bg-gray-50 shadow-md"
-                }`}
-              >
-                <Printer
-                  size={18}
-                  className="group-hover:scale-110 transition-transform"
-                />
-                Print
-              </button>
-
-              <button
-                onClick={() => navigate(`/bike-services/${id}/edit`)}
-                className="group flex items-center gap-2 px-5 py-3 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-xl shadow-lg hover:shadow-xl hover:scale-105 active:scale-95 transition-all duration-300 font-medium"
-              >
-                <Edit2
-                  size={18}
-                  className="group-hover:rotate-12 transition-transform"
-                />
-                Edit Service
-              </button>
             </div>
+            <p className={`text-[12px] ${t.muted}`}>
+              Service #{service.id} · {client.ownerName || "Unknown customer"}
+              {client.regNumber ? ` · ${client.regNumber}` : ""}
+            </p>
           </div>
-        </div>
 
-        {/* Status Badge */}
-        <div
-          className={`mb-8 p-6 rounded-2xl border-2 text-center animate-slide-down ${
-            service.status === "Completed"
-              ? isDark
-                ? "bg-green-500/20 border-green-500/50"
-                : "bg-gradient-to-r from-green-50 to-emerald-50 border-green-200"
-              : service.status === "In Progress"
-                ? isDark
-                  ? "bg-blue-500/20 border-blue-500/50"
-                  : "bg-gradient-to-r from-blue-50 to-cyan-50 border-blue-200"
-                : isDark
-                  ? "bg-orange-500/20 border-orange-500/50"
-                  : "bg-gradient-to-r from-orange-50 to-red-50 border-orange-200"
-          }`}
-        >
-          <div className="flex items-center justify-center gap-3">
-            {service.status === "Completed" ? (
-              <CheckCircle size={32} className="text-green-500" />
+          <div className="grid grid-cols-3 gap-2 sm:flex print:hidden">
+            {service.approvalStatus === "READY_SENT" ? (
+              <span
+                className={`inline-flex h-9 items-center justify-center gap-1.5 rounded-md px-3 text-[14px] font-medium ring-1 ring-inset ${toneCls("emerald", isDark)}`}
+              >
+                <CheckCircle size={14} />{" "}
+                <span className="hidden sm:inline">Ready alert</span> sent
+              </span>
             ) : (
-              <Clock size={32} className="text-orange-600" />
+              <button
+                onClick={() => setConfirmReady(true)}
+                className="inline-flex h-9 items-center justify-center gap-1.5 rounded-md bg-indigo-600 px-3 text-[14px] font-medium text-white hover:bg-indigo-700"
+              >
+                <CheckCircle size={14} />{" "}
+                <span className="hidden sm:inline">Mark</span> ready
+              </button>
             )}
-            <h2
-              className={`text-3xl font-bold ${
-                service.status === "Completed"
-                  ? "text-green-600"
-                  : "text-orange-600"
-              }`}
+            <button
+              onClick={() => window.print()}
+              className={`inline-flex h-9 items-center justify-center gap-1.5 rounded-md border px-3 text-[14px] font-medium ${t.btn2}`}
             >
-              {service.status}
-            </h2>
+              <Printer size={14} /> Print
+            </button>
+            <button
+              onClick={() => navigate(`/bike-services/${id}/edit`)}
+              className="inline-flex h-9 items-center justify-center gap-1.5 rounded-md bg-blue-600 px-3 text-[14px] font-medium text-white hover:bg-blue-700"
+            >
+              <Edit2 size={14} /> Edit
+            </button>
           </div>
-          <p className={`mt-2 text-sm ${isDark ? "text-gray-400" : "text-gray-600"}`}>
-            {service.status === "Completed"
-              ? "Service completed"
-              : "Service in progress"}
-          </p>
         </div>
 
-        <div className="grid lg:grid-cols-3 gap-6 mb-6">
-          {/* Service Details */}
-          <div
-            className={`lg:col-span-2 rounded-2xl shadow-xl border-2 p-6 transition-all duration-300 animate-slide-up ${
-              isDark
-                ? "bg-gray-800 border-gray-700"
-                : "bg-white border-gray-100"
-            }`}
-          >
-            <h3
-              className={`flex items-center gap-2 text-xl font-bold mb-6 ${
-                isDark ? "text-white" : "text-gray-900"
-              }`}
-            >
-              <Wrench size={24} className="text-green-500" />
-              Service Information
-            </h3>
-
-            <div className="space-y-4">
-              <InfoRow
-                icon={<Tag size={18} className="text-blue-600" />}
-                label="Category"
-                value={service.category?.name || service.categoryText}
-                isDark={isDark}
-              />
-
-              <InfoRow
-                icon={<Wrench size={18} className="text-blue-600" />}
-                label="Sub Service"
-                value={service.subService?.name || service.subServiceText}
-                isDark={isDark}
-              />
-
-              <InfoRow
-                icon={<Calendar size={18} className="text-blue-500" />}
-                label="Service In Date"
-                value={new Date(service.inDate).toLocaleDateString("en-IN", {
-                  weekday: "long",
-                  year: "numeric",
-                  month: "long",
-                  day: "numeric",
-                })}
-                isDark={isDark}
-              />
-
-              {service.outDate && (
-                <InfoRow
-                  icon={<Calendar size={18} className="text-green-500" />}
-                  label="Service Out Date"
-                  value={new Date(service.outDate).toLocaleDateString("en-IN", {
-                    weekday: "long",
-                    year: "numeric",
-                    month: "long",
-                    day: "numeric",
-                  })}
-                  isDark={isDark}
-                />
-              )}
-
-              {service.expectedDelivery && (
-                <InfoRow
-                  icon={<Clock size={18} className="text-orange-500" />}
-                  label="Expected Delivery"
-                  value={new Date(service.expectedDelivery).toLocaleDateString(
-                    "en-IN",
-                    {
-                      weekday: "long",
-                      year: "numeric",
-                      month: "long",
-                      day: "numeric",
-                    }
-                  )}
-                  isDark={isDark}
-                />
-              )}
-
-              <InfoRow
-                icon={<Tag size={18} className="text-purple-500" />}
-                label="Priority"
-                value={service.priority}
-                isDark={isDark}
-              />
-
-              {service.assignedMechanic && (
-                <InfoRow
-                  icon={<User size={18} className="text-indigo-500" />}
-                  label="Assigned Mechanic"
-                  value={service.assignedMechanic}
-                  isDark={isDark}
-                />
-              )}
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+          {/* ---------- LEFT ---------- */}
+          <div className="space-y-4 lg:col-span-2">
+            {/* Job info */}
+            <Card t={t} icon={Wrench} title="Job details">
+              <div className="grid grid-cols-2 gap-x-6 gap-y-3 sm:grid-cols-3">
+                <Spec t={t} label="Category">
+                  {service.category?.name || service.categoryText || "—"}
+                </Spec>
+                <Spec t={t} label="Sub-service">
+                  {service.subService?.name || service.subServiceText || "—"}
+                </Spec>
+                <Spec t={t} label="Mechanic">
+                  {service.assignedMechanic || "Unassigned"}
+                </Spec>
+                <Spec t={t} label="In date" icon={Calendar}>
+                  {fmtDate(service.inDate)}
+                </Spec>
+                <Spec t={t} label="Expected delivery" icon={Clock}>
+                  {fmtDate(service.expectedDelivery)}
+                </Spec>
+                <Spec t={t} label="Out date" icon={Calendar}>
+                  {fmtDate(service.outDate)}
+                </Spec>
+              </div>
 
               {service.notes && (
                 <div
-                  className={`p-4 rounded-xl border-2 ${
-                    isDark
-                      ? "bg-gray-700/50 border-gray-600"
-                      : "bg-gray-50 border-gray-200"
-                  }`}
+                  className={`mt-4 rounded-md border px-3 py-2.5 ${isDark ? "border-amber-500/20 bg-amber-500/10" : "border-amber-200 bg-amber-50"}`}
                 >
-                  <div className="flex items-start gap-2 mb-2">
-                    <FileText
-                      size={18}
-                      className="text-indigo-500 mt-1 flex-shrink-0"
-                    />
-                    <span
-                      className={`font-semibold ${
-                        isDark ? "text-white" : "text-gray-900"
-                      }`}
-                    >
-                      Service Notes
-                    </span>
-                  </div>
-                  <p className={`text-sm ${isDark ? "text-gray-300" : "text-gray-700"}`}>
+                  <p className="flex items-center gap-1.5 text-[12px] font-semibold uppercase tracking-wide text-amber-600">
+                    <FileText size={12} /> Notes
+                  </p>
+                  <p
+                    className={`mt-1 whitespace-pre-wrap text-[14px] ${isDark ? "text-gray-200" : "text-gray-700"}`}
+                  >
                     {service.notes}
                   </p>
                 </div>
               )}
-            </div>
+            </Card>
+
+            {/* Items */}
+            <Card
+              t={t}
+              icon={Package}
+              title="Parts & labour"
+              right={
+                <span className={`text-[12px] ${t.muted}`}>
+                  {items.length} item{items.length === 1 ? "" : "s"}
+                </span>
+              }
+              flush
+            >
+              {items.length === 0 ? (
+                <p className={`px-4 py-8 text-center text-[14px] ${t.muted}`}>
+                  No parts or labour added yet.
+                </p>
+              ) : (
+                <>
+                  {/* desktop */}
+                  <div className="hidden overflow-x-auto sm:block">
+                    <table className="min-w-full text-left">
+                      <thead className={t.thead}>
+                        <tr className="text-[12px] font-medium uppercase tracking-wide">
+                          <th className="px-4 py-2 font-medium">Item</th>
+                          <th className="px-4 py-2 text-right font-medium">
+                            Qty
+                          </th>
+                          <th className="px-4 py-2 text-right font-medium">
+                            Rate
+                          </th>
+                          <th className="px-4 py-2 text-right font-medium">
+                            GST
+                          </th>
+                          <th className="px-4 py-2 text-right font-medium">
+                            Total
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody
+                        className={`divide-y ${isDark ? "divide-white/5" : "divide-gray-100"}`}
+                      >
+                        {items.map((item, idx) => (
+                          <tr key={item.id || idx} className="text-[14px]">
+                            <td className="px-4 py-2.5">
+                              <div className="flex items-center gap-2">
+                                <span
+                                  className={`rounded px-1.5 py-0.5 text-[12px] font-medium ring-1 ring-inset ${toneCls(item.type === "Part" ? "blue" : "emerald", isDark)}`}
+                                >
+                                  {item.type}
+                                </span>
+                                <span>{item.name}</span>
+                              </div>
+                            </td>
+                            <td className="px-4 py-2.5 text-right tabular-nums">
+                              {item.quantity}
+                            </td>
+                            <td className="px-4 py-2.5 text-right tabular-nums">
+                              {money(item.unitPrice)}
+                            </td>
+                            <td
+                              className={`px-4 py-2.5 text-right text-[12px] tabular-nums ${t.muted}`}
+                            >
+                              {Number(item.cgst || 0) + Number(item.sgst || 0)}%
+                            </td>
+                            <td className="px-4 py-2.5 text-right font-medium tabular-nums">
+                              {money(item.total)}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  {/* mobile */}
+                  <ul
+                    className={`divide-y sm:hidden ${isDark ? "divide-white/5" : "divide-gray-100"}`}
+                  >
+                    {items.map((item, idx) => (
+                      <li
+                        key={item.id || idx}
+                        className="flex items-start justify-between gap-3 px-4 py-2.5"
+                      >
+                        <div className="min-w-0">
+                          <p className="truncate text-[14px]">{item.name}</p>
+                          <p className={`text-[12px] ${t.muted}`}>
+                            {item.type} · {item.quantity} ×{" "}
+                            {money(item.unitPrice)}
+                            {Number(item.cgst || 0) + Number(item.sgst || 0)
+                              ? ` · GST ${Number(item.cgst || 0) + Number(item.sgst || 0)}%`
+                              : ""}
+                          </p>
+                        </div>
+                        <p className="shrink-0 text-[14px] font-medium">
+                          {money(item.total)}
+                        </p>
+                      </li>
+                    ))}
+                  </ul>
+                </>
+              )}
+            </Card>
+
+            {/* Customer */}
+            <Card
+              t={t}
+              icon={User}
+              title="Customer & bike"
+              right={
+                client.id && (
+                  <button
+                    onClick={() => navigate(`/bikes/${client.id}`)}
+                    className="inline-flex items-center gap-0.5 text-[12px] font-medium text-blue-600 hover:underline print:hidden"
+                  >
+                    View client <ChevronRight size={12} />
+                  </button>
+                )
+              }
+            >
+              <div className="grid grid-cols-1 gap-x-6 gap-y-3 sm:grid-cols-2">
+                <Spec t={t} label="Owner" icon={User}>
+                  {client.ownerName || "—"}
+                </Spec>
+                <Spec t={t} label="Phone" icon={Phone}>
+                  {client.phone ? (
+                    <a href={`tel:${client.phone}`} className="hover:underline">
+                      {client.phone}
+                    </a>
+                  ) : (
+                    "—"
+                  )}
+                </Spec>
+                <Spec t={t} label="Email" icon={Mail}>
+                  {client.email ? (
+                    <a
+                      href={`mailto:${client.email}`}
+                      className="break-all hover:underline"
+                    >
+                      {client.email}
+                    </a>
+                  ) : (
+                    "—"
+                  )}
+                </Spec>
+                <Spec t={t} label="Bike" icon={Bike}>
+                  {[client.bikeBrand, client.bikeModel]
+                    .filter(Boolean)
+                    .join(" ") || "—"}
+                  {client.regNumber && (
+                    <span
+                      className={`ml-2 rounded border px-1.5 font-mono text-[12px] ${t.chip}`}
+                    >
+                      {client.regNumber}
+                    </span>
+                  )}
+                </Spec>
+              </div>
+            </Card>
+
+            {/* Photos */}
+            {media.length > 0 && (
+              <Card
+                t={t}
+                icon={ImageIcon}
+                title="Photos"
+                right={
+                  <span className={`text-[12px] ${t.muted}`}>
+                    {media.length}
+                  </span>
+                }
+              >
+                <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 lg:grid-cols-5">
+                  {media.map((m, idx) => {
+                    const src =
+                      m.r2Url || `${API_BASE}/api/bike-services/media/${m.id}`;
+                    return (
+                      <a
+                        key={m.id || idx}
+                        href={src}
+                        target="_blank"
+                        rel="noreferrer"
+                        className={`group relative aspect-square overflow-hidden rounded-md border ${t.border}`}
+                        title={m.fileName}
+                      >
+                        <img
+                          src={src}
+                          alt={m.fileName || "Service photo"}
+                          className="h-full w-full object-cover transition group-hover:scale-105"
+                          loading="lazy"
+                        />
+                      </a>
+                    );
+                  })}
+                </div>
+              </Card>
+            )}
           </div>
 
-          {/* Right Column Stack */}
-          <div className="space-y-6">
-            {/* Billing Summary */}
-            <div
-              className={`rounded-2xl shadow-xl border-2 p-6 transition-all duration-300 animate-slide-up ${
-                isDark
-                  ? "bg-gray-800 border-gray-700"
-                  : "bg-white border-gray-100"
-              }`}
-              style={{ animationDelay: "100ms" }}
-            >
-              <h3
-                className={`flex items-center gap-2 text-xl font-bold mb-6 ${
-                  isDark ? "text-white" : "text-gray-900"
-                }`}
-              >
-                <IndianRupee size={24} className="text-green-500" />
-                Billing Summary
-              </h3>
-
-              <div className="space-y-3">
-                <CostRow
-                  label="Parts Subtotal"
-                  amount={service.partsSubtotal?.toFixed(2) || "0.00"}
-                  isDark={isDark}
+          {/* ---------- RIGHT ---------- */}
+          <div className="space-y-4">
+            {/* Billing */}
+            <Card t={t} icon={IndianRupee} title="Billing">
+              <dl className="space-y-1.5 text-[14px]">
+                <Row t={t} label="Parts" value={money(service.partsSubtotal)} />
+                <Row
+                  t={t}
+                  label="Labour"
+                  value={money(service.laborSubtotal)}
                 />
-                <CostRow
-                  label="Labor Subtotal"
-                  amount={service.laborSubtotal?.toFixed(2) || "0.00"}
-                  isDark={isDark}
-                />
-                <CostRow
-                  label="CGST Total"
-                  amount={service.cgstTotal?.toFixed(2) || "0.00"}
-                  isDark={isDark}
-                />
-                <CostRow
-                  label="SGST Total"
-                  amount={service.sgstTotal?.toFixed(2) || "0.00"}
-                  isDark={isDark}
-                />
-
-                {service.discount > 0 && (
-                  <CostRow
-                    label={`Discount (${service.discountType})`}
-                    amount={service.discount?.toFixed(2) || "0.00"}
-                    isDark={isDark}
-                    isNegative
+                <Row t={t} label="CGST" value={money(service.cgstTotal)} />
+                <Row t={t} label="SGST" value={money(service.sgstTotal)} />
+                {Number(service.discount) > 0 && (
+                  <Row
+                    t={t}
+                    label={`Discount${service.discountType === "Percentage" ? " (%)" : ""}`}
+                    value={`− ${money(service.discount)}`}
+                    accent="text-rose-500"
                   />
                 )}
-
-                {service.advancePaid > 0 && (
-                  <CostRow
-                    label="Advance Paid"
-                    amount={service.advancePaid?.toFixed(2) || "0.00"}
-                    isDark={isDark}
+                {Number(service.advancePaid) > 0 && (
+                  <Row
+                    t={t}
+                    label="Advance paid"
+                    value={`− ${money(service.advancePaid)}`}
+                    accent="text-emerald-600"
                   />
                 )}
-
-                <div className={`border-t-2 pt-3 mt-3 ${isDark ? "border-gray-600" : "border-gray-300"}`}>
-                  <div className="flex items-center justify-between mb-2">
-                    <span className={`text-lg font-bold ${isDark ? "text-white" : "text-gray-900"}`}>
-                      Grand Total
-                    </span>
-                    <span className="text-2xl font-bold text-green-600">
-                      ₹{service.grandTotal?.toFixed(2) || "0.00"}
-                    </span>
-                  </div>
-
-                  <div className="flex items-center justify-between">
-                    <span className={`text-lg font-bold ${isDark ? "text-white" : "text-gray-900"}`}>
-                      Balance Due
-                    </span>
-                    <span
-                      className={`text-2xl font-bold ${
-                        service.balanceDue > 0
-                          ? "text-red-600"
-                          : "text-green-600"
-                      }`}
-                    >
-                      ₹{service.balanceDue?.toFixed(2) || "0.00"}
-                    </span>
-                  </div>
+              </dl>
+              <div className={`mt-3 space-y-1.5 border-t pt-3 ${t.border}`}>
+                <div className="flex items-baseline justify-between">
+                  <span className="text-[14px] font-semibold">Grand total</span>
+                  <span className="text-[16px] font-semibold">
+                    {money(service.grandTotal)}
+                  </span>
+                </div>
+                <div className="flex items-baseline justify-between">
+                  <span className={`text-[14px] ${t.muted}`}>Balance due</span>
+                  <span
+                    className={`text-[16px] font-semibold ${Number(service.balanceDue) > 0 && !isPaid ? "text-rose-500" : "text-emerald-600"}`}
+                  >
+                    {isPaid ? "Paid" : money(service.balanceDue)}
+                  </span>
                 </div>
               </div>
 
-              {/* Invoice Status */}
-              <div
-                className={`mt-6 p-4 rounded-xl ${
-                  (service.invoiceStatus === "sent" || service.invoiceStatus === "paid")
-                    ? isDark
-                      ? "bg-green-500/20"
-                      : "bg-green-50"
-                    : service.invoiceStatus === "generated"
-                      ? isDark
-                        ? "bg-blue-500/20"
-                        : "bg-blue-50"
-                      : isDark
-                        ? "bg-gray-700"
-                        : "bg-gray-100"
-                }`}
-              >
-                <p
-                  className={`text-sm font-semibold ${
-                    (service.invoiceStatus === "sent" || service.invoiceStatus === "paid")
-                      ? "text-green-600"
-                      : service.invoiceStatus === "generated"
-                        ? "text-blue-600"
-                        : isDark
-                          ? "text-gray-400"
-                          : "text-gray-600"
-                  }`}
-                >
-                  Invoice Status:{" "}
-                  {service.invoiceStatus?.toUpperCase() || "DRAFT"}
-                </p>
-                {service.bikeInvoice && (
-                  <p className={`text-xs mt-1 ${isDark ? "text-gray-400" : "text-gray-500"}`}>
-                    Invoice #{service.bikeInvoice.invoiceNumber} •{" "}
-                    <span
-                      className={
-                        service.paymentStatus === "Paid"
-                          ? "text-green-600 font-semibold"
-                          : "text-red-600 font-semibold"
-                      }
-                    >
-                      {service.paymentStatus}
-                    </span>
+              {/* Invoice status */}
+              <div className={`mt-3 rounded-md px-3 py-2 ${t.soft}`}>
+                <div className="flex items-center justify-between gap-2">
+                  <span className={`text-[12px] ${t.muted}`}>Invoice</span>
+                  <span
+                    className={`rounded-full px-2 py-0.5 text-[12px] font-medium uppercase ring-1 ring-inset ${toneCls(
+                      ["sent", "paid"].includes(service.invoiceStatus)
+                        ? "emerald"
+                        : service.invoiceStatus === "generated"
+                          ? "blue"
+                          : "gray",
+                      isDark,
+                    )}`}
+                  >
+                    {service.invoiceStatus || "draft"}
+                  </span>
+                </div>
+                {hasInvoice && (
+                  <p className={`mt-1 text-[12px] ${t.muted}`}>
+                    #{service.bikeInvoice.invoiceNumber}
+                    {service.paymentStatus && (
+                      <span
+                        className={
+                          isPaid ? "text-emerald-600" : "text-rose-500"
+                        }
+                      >
+                        {" "}
+                        · {service.paymentStatus}
+                      </span>
+                    )}
                     {service.bikeInvoice.paymentMode
-                      ? ` • ${service.bikeInvoice.paymentMode}`
+                      ? ` · ${service.bikeInvoice.paymentMode}`
                       : ""}
                   </p>
                 )}
-                {service.invoiceSentAt && (
-                  <p className={`text-xs mt-1 ${isDark ? "text-gray-400" : "text-gray-500"}`}>
-                    Sent on {new Date(service.invoiceSentAt).toLocaleDateString()}
-                  </p>
-                )}
               </div>
-            </div>
 
-            {/* WhatsApp Approval Card */}
-            <div
-              className={`rounded-2xl shadow-xl border-2 p-6 transition-all duration-300 animate-slide-up ${
-                isDark
-                  ? "bg-gray-800 border-gray-700"
-                  : "bg-white border-gray-100"
-              }`}
-              style={{ animationDelay: "150ms" }}
-            >
-              <div className="flex items-center justify-between mb-4">
-                <h3
-                  className={`flex items-center gap-2 text-lg font-bold ${
-                    isDark ? "text-white" : "text-gray-900"
-                  }`}
+              {hasInvoice ? (
+                <button
+                  onClick={() =>
+                    navigate(
+                      `/bill/${service.bikeInvoiceId || service.bikeInvoice.id}`,
+                    )
+                  }
+                  className={`mt-3 inline-flex h-9 w-full items-center justify-center gap-1.5 rounded-md border text-[14px] font-medium print:hidden ${t.btn2}`}
                 >
-                  <FaWhatsapp className="text-green-500" /> WhatsApp Approval
-                </h3>
-
-                {service.approvalStatus ? (
-                  <span
-                    className={`px-3 py-1 rounded-full text-xs font-bold border ${approvalMeta[
-                      service.approvalStatus
-                    ]?.color(isDark)}`}
-                  >
-                    {approvalMeta[service.approvalStatus]?.label}
-                  </span>
-                ) : (
-                  <span
-                    className={`px-3 py-1 rounded-full text-xs font-bold ${
-                      isDark
-                        ? "bg-gray-700 text-gray-400"
-                        : "bg-gray-100 text-gray-700"
-                    }`}
-                  >
-                    Not Sent
-                  </span>
-                )}
-              </div>
-
-              {service.approvalAt && (
-                <div className="mb-4 text-xs text-gray-500">
-                  Last updated: {new Date(service.approvalAt).toLocaleString()}
-                </div>
+                  <Receipt size={14} /> View invoice
+                </button>
+              ) : (
+                <button
+                  onClick={goToInvoice}
+                  className="mt-3 inline-flex h-9 w-full items-center justify-center gap-1.5 rounded-md bg-emerald-600 text-[14px] font-medium text-white hover:bg-emerald-700 print:hidden"
+                >
+                  <Receipt size={14} /> Create invoice
+                </button>
               )}
+            </Card>
 
+            {/* WhatsApp approval */}
+            <Card
+              t={t}
+              icon={FaWhatsapp}
+              iconClass="text-emerald-500"
+              title="Customer approval"
+              className="print:hidden"
+            >
+              <div className="flex items-center justify-between gap-2">
+                <span className={`text-[12px] ${t.muted}`}>Status</span>
+                <span
+                  className={`rounded-full px-2 py-0.5 text-[12px] font-medium ring-1 ring-inset ${toneCls(approval?.tone || "gray", isDark)}`}
+                >
+                  {approval?.label || "Not sent"}
+                </span>
+              </div>
+              {service.approvalAt && (
+                <p className={`mt-1 text-[12px] ${t.muted}`}>
+                  Updated {new Date(service.approvalAt).toLocaleString("en-IN")}
+                </p>
+              )}
+              {service.approvalNote && (
+                <p
+                  className={`mt-2 rounded-md px-3 py-2 text-[12px] ${t.soft}`}
+                >
+                  “{service.approvalNote}”
+                </p>
+              )}
               {waError && (
-                <div className="mb-3 p-2 rounded bg-red-100 dark:bg-red-900/20 text-red-600 text-xs">
-                  {waError}
-                </div>
+                <p className="mt-2 text-[12px] text-rose-500">{waError}</p>
               )}
 
               <button
@@ -635,323 +686,114 @@ const ServiceDetails = () => {
                   ["PENDING", "APPROVED"].includes(service.approvalStatus)
                 }
                 onClick={handleSendWhatsAppApproval}
-                className={`w-full py-3 rounded-lg font-bold flex items-center justify-center gap-2 transition-all
-                  ${
-                    service.approvalStatus === "APPROVED"
-                      ? isDark
-                        ? "bg-green-900/30 text-green-500 cursor-not-allowed"
-                        : "bg-green-100 text-green-700 cursor-not-allowed"
-                      : service.approvalStatus === "PENDING"
-                        ? isDark
-                          ? "bg-yellow-900/30 text-yellow-500 cursor-not-allowed"
-                          : "bg-yellow-100 text-yellow-700 cursor-not-allowed"
-                        : isDark
-                          ? "bg-green-600 hover:bg-green-500 text-white shadow-lg shadow-green-900/20"
-                          : "bg-green-600 hover:bg-green-700 text-white shadow-lg"
-                  }`}
+                className="mt-3 inline-flex h-9 w-full items-center justify-center gap-1.5 rounded-md bg-emerald-600 text-[14px] font-medium text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
               >
-                <FaWhatsapp />
+                {sendingWhatsApp ? (
+                  <Loader2 size={14} className="animate-spin" />
+                ) : (
+                  <FaWhatsapp size={14} />
+                )}
                 {service.approvalStatus === "APPROVED"
-                  ? "Approved via WhatsApp"
+                  ? "Approved"
                   : service.approvalStatus === "PENDING"
-                    ? "Waiting for Customer"
+                    ? "Waiting for reply"
                     : sendingWhatsApp
-                      ? "Sending..."
-                      : "Send WhatsApp Approval"}
+                      ? "Sending…"
+                      : service.approvalStatus
+                        ? "Send again"
+                        : "Ask for approval"}
+              </button>
+              <p className={`mt-1.5 text-[12px] ${t.muted}`}>
+                Sends an approval request to {client.phone || "the customer"} on
+                WhatsApp.
+              </p>
+            </Card>
+          </div>
+        </div>
+      </div>
+
+      {/* Ready confirm */}
+      {confirmReady && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 print:hidden">
+          <div
+            className={`w-full max-w-sm rounded-lg border p-5 shadow-xl ${t.card}`}
+          >
+            <h3 className="text-[16px] font-semibold">Mark bike as ready?</h3>
+            <p
+              className={`mt-1.5 text-[14px] ${isDark ? "text-gray-300" : "text-gray-600"}`}
+            >
+              {client.ownerName || "The customer"} will get a WhatsApp message
+              that the bike is ready, and this service will be marked as{" "}
+              <b>Paid</b>.
+            </p>
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                onClick={() => setConfirmReady(false)}
+                disabled={sendingReady}
+                className={`h-9 rounded-md border px-4 text-[14px] font-medium ${t.btn2}`}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSendReadyAlert}
+                disabled={sendingReady}
+                className="inline-flex h-9 items-center gap-1.5 rounded-md bg-indigo-600 px-4 text-[14px] font-medium text-white hover:bg-indigo-700 disabled:opacity-60"
+              >
+                {sendingReady && <Loader2 size={14} className="animate-spin" />}
+                Notify & mark paid
               </button>
             </div>
           </div>
         </div>
-
-        {/* Service Items */}
-        {service.serviceItems && service.serviceItems.length > 0 && (
-          <div
-            className={`rounded-2xl shadow-xl border-2 p-6 mb-6 transition-all duration-300 animate-slide-up ${
-              isDark
-                ? "bg-gray-800 border-gray-700"
-                : "bg-white border-gray-100"
-            }`}
-            style={{ animationDelay: "200ms" }}
-          >
-            <h3
-              className={`flex items-center gap-2 text-xl font-bold mb-6 ${
-                isDark ? "text-white" : "text-gray-900"
-              }`}
-            >
-              <Package size={24} className="text-blue-500" />
-              Service Items
-            </h3>
-
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead>
-                  <tr className={`border-b-2 ${isDark ? "border-gray-700" : "border-gray-200"}`}>
-                    <th className={`text-left py-3 px-4 ${isDark ? "text-gray-300" : "text-gray-700"}`}>Type</th>
-                    <th className={`text-left py-3 px-4 ${isDark ? "text-gray-300" : "text-gray-700"}`}>Item</th>
-                    <th className={`text-right py-3 px-4 ${isDark ? "text-gray-300" : "text-gray-700"}`}>Qty</th>
-                    <th className={`text-right py-3 px-4 ${isDark ? "text-gray-300" : "text-gray-700"}`}>Unit Price</th>
-                    <th className={`text-right py-3 px-4 ${isDark ? "text-gray-300" : "text-gray-700"}`}>CGST %</th>
-                    <th className={`text-right py-3 px-4 ${isDark ? "text-gray-300" : "text-gray-700"}`}>SGST %</th>
-                    <th className={`text-right py-3 px-4 ${isDark ? "text-gray-300" : "text-gray-700"}`}>Total</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {service.serviceItems.map((item, idx) => (
-                    <tr key={item.id || idx} className={`border-b ${isDark ? "border-gray-700" : "border-gray-100"}`}>
-                      <td className="py-3 px-4">
-                        <span
-                          className={`px-3 py-1 rounded-full text-xs font-semibold ${
-                            item.type === "Part"
-                              ? isDark
-                                ? "bg-blue-500/20 text-blue-400"
-                                : "bg-blue-100 text-blue-700"
-                              : isDark
-                                ? "bg-green-500/20 text-green-400"
-                                : "bg-green-100 text-green-700"
-                          }`}
-                        >
-                          {item.type}
-                        </span>
-                      </td>
-                      <td className={`py-3 px-4 ${isDark ? "text-white" : "text-gray-900"}`}>
-                        {item.name}
-                      </td>
-                      <td className={`py-3 px-4 text-right ${isDark ? "text-gray-300" : "text-gray-700"}`}>
-                        {item.quantity}
-                      </td>
-                      <td className={`py-3 px-4 text-right ${isDark ? "text-gray-300" : "text-gray-700"}`}>
-                        ₹{Number(item.unitPrice).toFixed(2)}
-                      </td>
-                      <td className={`py-3 px-4 text-right ${isDark ? "text-gray-300" : "text-gray-700"}`}>
-                        {item.cgst}%
-                      </td>
-                      <td className={`py-3 px-4 text-right ${isDark ? "text-gray-300" : "text-gray-700"}`}>
-                        {item.sgst}%
-                      </td>
-                      <td className={`py-3 px-4 text-right font-semibold ${isDark ? "text-white" : "text-gray-900"}`}>
-                        ₹{Number(item.total).toFixed(2)}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
-
-        {/* Client Information */}
-        <div
-          className={`rounded-2xl shadow-xl border-2 p-6 mb-6 transition-all duration-300 animate-slide-up ${
-            isDark ? "bg-gray-800 border-gray-700" : "bg-white border-gray-100"
-          }`}
-          style={{ animationDelay: "250ms" }}
-        >
-          <h3
-            className={`flex items-center gap-2 text-xl font-bold mb-6 ${
-              isDark ? "text-white" : "text-gray-900"
-            }`}
-          >
-            <User size={24} className="text-blue-500" />
-            Client Information
-          </h3>
-
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-            <InfoCard
-              icon={<User size={20} className="text-green-500" />}
-              label="Owner Name"
-              value={service.client?.ownerName}
-              isDark={isDark}
-            />
-
-            <InfoCard
-              icon={<Phone size={20} className="text-blue-500" />}
-              label="Phone"
-              value={service.client?.phone}
-              isDark={isDark}
-            />
-
-            <InfoCard
-              icon={<Mail size={20} className="text-blue-600" />}
-              label="Email"
-              value={service.client?.email}
-              isDark={isDark}
-            />
-
-            <InfoCard
-              icon={<Bike size={20} className="text-blue-600" />}
-              label="Vehicle"
-              value={`${service.client?.bikeBrand || ""} ${service.client?.bikeModel || ""}`.trim()}
-              isDark={isDark}
-            />
-
-            <InfoCard
-              icon={<Hash size={20} className="text-indigo-500" />}
-              label="Registration"
-              value={service.client?.regNumber}
-              isDark={isDark}
-            />
-          </div>
-        </div>
-
-        {/* Media Files */}
-        {service.serviceMedia && service.serviceMedia.length > 0 && (
-          <div
-            className={`rounded-2xl shadow-xl border-2 p-6 mb-6 transition-all duration-300 animate-slide-up ${
-              isDark
-                ? "bg-gray-800 border-gray-700"
-                : "bg-white border-gray-100"
-            }`}
-            style={{ animationDelay: "300ms" }}
-          >
-            <h3
-              className={`flex items-center gap-2 text-xl font-bold mb-6 ${
-                isDark ? "text-white" : "text-gray-900"
-              }`}
-            >
-              <ImageIcon size={24} className="text-blue-600" />
-              Service Images
-            </h3>
-
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-              {service.serviceMedia.map((media, idx) => (
-                <div
-                  key={media.id || idx}
-                  className="group relative aspect-square rounded-xl overflow-hidden border-2 border-gray-300 hover:border-green-500 transition-all duration-300 hover:scale-105"
-                >
-                  <img
-                    src={`${import.meta.env.VITE_API_BASE_URL}/api/bike-services/media/${media.id}`}
-                    className="w-full h-full object-cover"
-                    alt="Service media"
-                  />
-
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-end p-3">
-                    <span className="text-white text-sm font-medium">
-                      {media.fileName}
-                    </span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Invoice Actions */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6 animate-slide-up" style={{ animationDelay: "350ms" }}>
-          <button
-            className={`flex items-center justify-center gap-2 px-4 py-3 rounded-xl transition-all duration-300 ${
-              isDark
-                ? "bg-green-600 hover:bg-green-500 text-white"
-                : "bg-green-500 hover:bg-green-600 text-white"
-            }`}
-          >
-            <Send size={16} />
-            Send Invoice
-          </button>
-
-          <button
-            onClick={() =>
-              navigate("/bill/new", {
-                state: {
-                  id: service.id,
-                  bikeId: service.client?.id,
-                  clientName: service.client?.ownerName,
-                  vehicle: `${service.client?.bikeBrand || ""} ${service.client?.bikeModel || ""}`.trim(),
-                  serviceCategory: service.category?.name || service.categoryText,
-                  serviceSubCategory: service.subService?.name || service.subServiceText,
-                  serviceItems: service.serviceItems || [],
-                  discountType: service.discountType,
-                  discount: service.discount,
-                  advancePaid: service.advancePaid,
-                },
-              })
-            }
-            className="group flex items-center justify-center gap-2 px-8 py-4 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-xl shadow-lg hover:scale-105"
-          >
-            <Receipt size={20} />
-            Create Invoice
-          </button>
-        </div>
-      </div>
-
-      {/* Custom Styles */}
-      <style jsx>{`
-        @keyframes fade-in {
-          from { opacity: 0; transform: translateY(10px); }
-          to { opacity: 1; transform: translateY(0); }
-        }
-        @keyframes slide-down {
-          from { opacity: 0; transform: translateY(-20px); }
-          to { opacity: 1; transform: translateY(0); }
-        }
-        @keyframes slide-up {
-          from { opacity: 0; transform: translateY(20px); }
-          to { opacity: 1; transform: translateY(0); }
-        }
-        .animate-fade-in { animation: fade-in 0.5s ease-out; }
-        .animate-slide-down { animation: slide-down 0.5s ease-out; }
-        .animate-slide-up { animation: slide-up 0.5s ease-out; }
-        @media print {
-          .no-print { display: none !important; }
-        }
-      `}</style>
-    </div>
-  );
-};
-
-// Helper Components
-function InfoRow({ icon, label, value, isDark }) {
-  return (
-    <div
-      className={`flex items-center gap-3 p-3 rounded-lg ${
-        isDark ? "bg-gray-700/50" : "bg-gray-50"
-      }`}
-    >
-      {icon}
-      <div className="flex-1">
-        <p className={`text-xs ${isDark ? "text-gray-400" : "text-gray-500"}`}>{label}</p>
-        <p className={`font-semibold ${isDark ? "text-white" : "text-gray-900"}`}>
-          {value || "N/A"}
-        </p>
-      </div>
+      )}
     </div>
   );
 }
 
-function CostRow({ label, amount, isDark, isNegative = false }) {
+/* ---------- building blocks ---------- */
+function Card({
+  t,
+  icon: Icon,
+  iconClass = "text-blue-600",
+  title,
+  right,
+  children,
+  flush,
+  className = "",
+}) {
+  return (
+    <section
+      className={`overflow-hidden rounded-lg border print:break-inside-avoid print:border-gray-300 ${t.card} ${className}`}
+    >
+      <div
+        className={`flex items-center justify-between gap-3 border-b px-4 py-2.5 ${t.border}`}
+      >
+        <h2 className="flex items-center gap-2 text-[14px] font-semibold">
+          <Icon size={15} className={iconClass} /> {title}
+        </h2>
+        {right}
+      </div>
+      <div className={flush ? "" : "p-4"}>{children}</div>
+    </section>
+  );
+}
+
+function Spec({ t, label, icon: Icon, children }) {
+  return (
+    <div className="min-w-0">
+      <p className={`flex items-center gap-1 text-[12px] ${t.muted}`}>
+        {Icon && <Icon size={11} />} {label}
+      </p>
+      <div className="text-[14px] font-medium">{children}</div>
+    </div>
+  );
+}
+
+function Row({ t, label, value, accent }) {
   return (
     <div className="flex items-center justify-between">
-      <span className={isDark ? "text-gray-300" : "text-gray-700"}>{label}</span>
-      <span
-        className={`font-semibold ${
-          isNegative ? "text-red-600" : isDark ? "text-white" : "text-gray-900"
-        }`}
-      >
-        {isNegative ? "-" : ""}₹{amount}
-      </span>
+      <dt className={t.muted}>{label}</dt>
+      <dd className={`tabular-nums ${accent || ""}`}>{value}</dd>
     </div>
   );
 }
-
-function InfoCard({ icon, label, value, isDark }) {
-  return (
-    <div
-      className={`p-4 rounded-xl border-2 transition-all duration-300 hover:scale-105 ${
-        isDark
-          ? "bg-gray-700/50 border-gray-600 hover:border-green-500/50"
-          : "bg-gray-50 border-gray-200 hover:border-green-500/30"
-      }`}
-    >
-      <div className="flex items-center gap-2 mb-2">
-        {icon}
-        <span className={`text-xs font-medium ${isDark ? "text-gray-400" : "text-gray-500"}`}>
-          {label}
-        </span>
-      </div>
-      <p className={`font-semibold ${isDark ? "text-white" : "text-gray-900"}`}>
-        {value || "N/A"}
-      </p>
-    </div>
-  );
-}
-
-export default ServiceDetails;

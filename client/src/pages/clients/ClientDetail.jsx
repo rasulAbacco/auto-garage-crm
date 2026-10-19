@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useMemo } from "react";
+// client/src/pages/clients/ClientDetail.jsx  (Car CRM – client profile)
+import React, { useState, useEffect, useRef } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
 import {
   FiEdit,
@@ -12,139 +13,127 @@ import {
   FiDollarSign,
   FiPlus,
   FiArrowLeft,
-  FiX,
   FiTrash2,
   FiFileText,
   FiCamera,
   FiEye,
   FiUsers,
+  FiUserCheck,
+  FiDroplet,
+  FiAlertCircle,
+  FiLoader,
+  FiUpload,
+  FiGrid,
 } from "react-icons/fi";
 import { BsFuelPumpFill } from "react-icons/bs";
+import { FaWhatsapp, FaCar } from "react-icons/fa";
+import { Toaster, toast } from "react-hot-toast";
 import { useTheme } from "../../contexts/ThemeContext";
-import OCRUploader from "../details/components/OCRUploader";
 import OCRResults from "../details/components/OCRResults";
 import { processImage } from "../details/utils/OCRProcessor.js";
-import { Toaster, toast } from "react-hot-toast";
-import { FaWhatsapp } from "react-icons/fa";
+import {
+  Plate,
+  VehicleImage,
+  Modal,
+  ConfirmDialog,
+  tk,
+  btnBase,
+  fmtDate,
+  fmtMoney,
+  statusClass,
+} from "./components/clientUi";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:5001";
+
+const parseOcr = (r) => {
+  const p = r?.parsedData;
+  if (!p) return {};
+  if (typeof p === "string") {
+    try {
+      return JSON.parse(p) || {};
+    } catch {
+      return {};
+    }
+  }
+  return p;
+};
+
+const readAsDataUrl = (file) =>
+  new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(r.result);
+    r.onerror = reject;
+    r.readAsDataURL(file);
+  });
 
 export default function ClientDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { isDark } = useTheme();
-
-  // Use the same color configuration as Layout.js
-  const colors = useMemo(
-    () => ({
-      // Backgrounds
-      layoutBg: isDark ? "#020617" : "#FFFFFF", // Sidebar/Header BG
-      mainBg: isDark ? "#020617" : "#F8FAFC", // Page Content BG
-      elementBg: isDark ? "#020D36" : "#FFFFFF", // Dropdowns/Modals
-
-      // Text
-      textPrimary: isDark ? "#E5E7EB" : "#0F172A",
-      textSecondary: isDark ? "#94A3B8" : "#475569",
-
-      // Brand & Accents
-      brand: isDark ? "#1E3A8A" : "#0B1D51",
-      primaryButton: isDark ? "#3B82F6" : "#0046FF", // Blue Color for Active Tab
-
-      // Borders & Hover
-      border: isDark ? "#1E293B" : "#E5E7EB",
-      hoverBg: isDark ? "#1E293B" : "#F8FAFC",
-    }),
-    [isDark],
-  );
+  const t = tk(isDark);
 
   const [client, setClient] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [activeTab, setActiveTab] = useState("overview");
-  const [selectedService, setSelectedService] = useState(null);
-  const [selectedInvoice, setSelectedInvoice] = useState(null);
-  const [serviceForm, setServiceForm] = useState({});
-  const [isSavingService, setIsSavingService] = useState(false);
 
-  // OCR states
   const [ocrRecords, setOcrRecords] = useState([]);
   const [isLoadingOCR, setIsLoadingOCR] = useState(false);
-  const [ocrImage, setOcrImage] = useState(null);
   const [ocrParsed, setOcrParsed] = useState(null);
   const [ocrRaw, setOcrRaw] = useState("");
+  const [ocrBusy, setOcrBusy] = useState(false);
   const [selectedOCR, setSelectedOCR] = useState(null);
+  const [ocrToDelete, setOcrToDelete] = useState(null);
 
-  // fetch client by id
+  const [confirmWa, setConfirmWa] = useState(false);
+  const [sendingWa, setSendingWa] = useState(false);
+  const ocrFileRef = useRef(null);
+
+  const authFail = () => {
+    localStorage.removeItem("token");
+    navigate("/login");
+  };
+
+  /* ---------- client ---------- */
   useEffect(() => {
-    const fetchData = async () => {
+    (async () => {
       try {
         setLoading(true);
         const token = localStorage.getItem("token");
-        if (!token) {
-          throw new Error(
-            "Authentication token not found. Please log in again.",
-          );
-        }
-
+        if (!token) return authFail();
         const res = await fetch(`${API_BASE}/api/clients/${id}`, {
           headers: { Authorization: `Bearer ${token}` },
         });
-
-        if (!res.ok) {
-          if (res.status === 401) {
-            localStorage.removeItem("token");
-            navigate("/login");
-            return;
-          }
-          throw new Error("Failed to fetch client data");
-        }
-
-        const data = await res.json();
-        setClient(data);
+        if (res.status === 401) return authFail();
+        if (!res.ok)
+          throw new Error(
+            res.status === 404 ? "Client not found" : "Failed to load client",
+          );
+        setClient(await res.json());
       } catch (err) {
         setError(err.message || "Unknown error");
-        if (
-          err.message.includes("401") ||
-          err.message.includes("Unauthorized")
-        ) {
-          navigate("/login");
-        }
       } finally {
         setLoading(false);
       }
-    };
-    fetchData();
-  }, [id, navigate]);
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id]);
 
-  // fetch OCR records for this client
+  /* ---------- OCR history ---------- */
   const fetchOCR = async () => {
     try {
       setIsLoadingOCR(true);
       const token = localStorage.getItem("token");
-      if (!token) {
-        throw new Error("Authentication token not found. Please log in again.");
-      }
-
+      if (!token) return authFail();
       const res = await fetch(`${API_BASE}/api/ocr/history?clientId=${id}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
-
-      if (!res.ok) {
-        if (res.status === 401) {
-          localStorage.removeItem("token");
-          navigate("/login");
-          return;
-        }
-        throw new Error("Failed to fetch OCR records");
-      }
-
+      if (res.status === 401) return authFail();
+      if (!res.ok) throw new Error("Failed to fetch OCR records");
       const data = await res.json();
-      setOcrRecords(data || []);
+      setOcrRecords(Array.isArray(data) ? data : []);
     } catch (err) {
       console.error("OCR fetch failed:", err);
-      if (err.message.includes("401") || err.message.includes("Unauthorized")) {
-        navigate("/login");
-      }
     } finally {
       setIsLoadingOCR(false);
     }
@@ -152,145 +141,74 @@ export default function ClientDetail() {
 
   useEffect(() => {
     if (id) fetchOCR();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
-  // Delete OCR record
-  const handleDeleteOCR = async (recordId) => {
+  const handleDeleteOCR = async () => {
+    const recordId = ocrToDelete?.id;
+    setOcrToDelete(null);
+    if (!recordId) return;
     try {
       const token = localStorage.getItem("token");
-      if (!token) {
-        throw new Error("Authentication token not found. Please log in again.");
-      }
-
       const res = await fetch(`${API_BASE}/api/ocr/${recordId}`, {
         method: "DELETE",
         headers: { Authorization: `Bearer ${token}` },
       });
-
-      if (!res.ok) {
-        if (res.status === 401) {
-          localStorage.removeItem("token");
-          navigate("/login");
-          return;
-        }
-        throw new Error("Failed to delete OCR record");
-      }
-
+      if (res.status === 401) return authFail();
+      if (!res.ok) throw new Error("Failed to delete OCR record");
       setOcrRecords((prev) => prev.filter((r) => r.id !== recordId));
-      toast.success("OCR record deleted successfully");
+      toast.success("OCR record deleted");
     } catch (err) {
       toast.error(err.message || "Delete failed");
-      if (err.message.includes("401") || err.message.includes("Unauthorized")) {
-        navigate("/login");
-      }
     }
   };
 
-  // Start OCR (camera/upload) directly from client detail
-  const handleStartOCR = async (image) => {
+  /* scan an RC right here (adds to this client's OCR records) */
+  const handleOcrFile = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
     try {
-      setOcrImage(image);
-      const result = await processImage(image, (p) =>
-        console.log("OCR progress:", Math.round(p * 100), "%"),
-      );
-      setOcrParsed(result.parsed);
-      setOcrRaw(result.text);
+      setOcrBusy(true);
+      const image = await readAsDataUrl(file);
+      const result = await processImage(image);
+      setOcrParsed(result?.parsed || {});
+      setOcrRaw(result?.text || "");
       setActiveTab("ocr");
     } catch (err) {
-      toast.error("OCR failed: " + err.message);
+      toast.error("OCR failed: " + (err?.message || "unknown error"));
+    } finally {
+      setOcrBusy(false);
     }
   };
 
-  // Save OCR record to backend
   const handleSaveOCR = async (data) => {
     try {
       const token = localStorage.getItem("token");
-      if (!token) {
-        throw new Error("Authentication token not found. Please log in again.");
-      }
-
-      const body = {
-        clientId: parseInt(id, 10),
-        rawText: ocrRaw,
-        parsedData: JSON.stringify(data),
-        confidence: data.ocrConfidence || 85,
-      };
-
       const res = await fetch(`${API_BASE}/api/ocr/upload`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify(body),
+        body: JSON.stringify({
+          clientId: parseInt(id, 10),
+          rawText: ocrRaw,
+          parsedData: JSON.stringify(data),
+          confidence: data?.ocrConfidence || 85,
+        }),
       });
-
-      if (!res.ok) {
-        if (res.status === 401) {
-          localStorage.removeItem("token");
-          navigate("/login");
-          return;
-        }
-        const txt = await res.text();
-        throw new Error(txt || "Failed to save OCR record");
-      }
-
+      if (res.status === 401) return authFail();
+      if (!res.ok)
+        throw new Error((await res.text()) || "Failed to save OCR record");
       const responseData = await res.json();
-      setOcrRecords((prev) => [...prev, responseData.record]);
+      if (responseData?.record)
+        setOcrRecords((prev) => [responseData.record, ...prev]);
       setOcrParsed(null);
       setOcrRaw("");
-      setOcrImage(null);
-      toast.success("OCR data saved successfully!");
+      toast.success("OCR data saved");
     } catch (err) {
       toast.error(err.message || "Failed to save OCR data");
-      if (err.message.includes("401") || err.message.includes("Unauthorized")) {
-        navigate("/login");
-      }
-    }
-  };
-
-  const saveServiceChanges = async () => {
-    try {
-      setIsSavingService(true);
-      const token = localStorage.getItem("token");
-      if (!token) {
-        throw new Error("Authentication token not found. Please log in again.");
-      }
-
-      const res = await fetch(`${API_BASE}/api/services/${serviceForm.id}`, {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify(serviceForm),
-      });
-
-      if (!res.ok) {
-        if (res.status === 401) {
-          localStorage.removeItem("token");
-          navigate("/login");
-          return;
-        }
-        throw new Error("Failed to update service");
-      }
-
-      const data = await res.json();
-      setClient((prev) => ({
-        ...prev,
-        services: prev.services.map((s) =>
-          s.id === data.service.id ? data.service : s,
-        ),
-      }));
-      setSelectedService(null);
-      toast.success("Service updated successfully");
-    } catch (err) {
-      toast.error(err.message);
-      if (err.message.includes("401") || err.message.includes("Unauthorized")) {
-        navigate("/login");
-      }
-    } finally {
-      setIsSavingService(false);
     }
   };
 
@@ -302,10 +220,9 @@ export default function ClientDetail() {
     navigate(`/details?${q}`);
   };
 
-  const handleManualWhatsApp = async () => {
-    if (!window.confirm("Send 'Vehicle Received' message?")) return;
-
+  const sendWhatsApp = async () => {
     try {
+      setSendingWa(true);
       const token = localStorage.getItem("token");
       const res = await fetch(`${API_BASE}/api/clients/${id}`, {
         method: "PUT",
@@ -313,69 +230,63 @@ export default function ClientDetail() {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        // We pass sendWhatsApp: true to trigger the backend logic we added to updateClient
         body: JSON.stringify({ sendWhatsApp: true }),
       });
-
-      if (res.ok) {
-        toast.success("WhatsApp Receipt Sent!");
-      } else {
-        const errData = await res.json();
+      if (res.ok) toast.success("WhatsApp receipt sent!");
+      else {
+        const errData = await res.json().catch(() => ({}));
         toast.error(errData.message || "Failed to send WhatsApp");
       }
     } catch (err) {
       console.error("WhatsApp error:", err);
       toast.error("Error connecting to server");
+    } finally {
+      setSendingWa(false);
+      setConfirmWa(false);
     }
   };
+
+  /* ---------- states ---------- */
   if (loading)
     return (
-      <div
-        className="min-h-screen flex items-center justify-center"
-        style={{ backgroundColor: colors.mainBg }}
-      >
-        <div className="relative">
-          <div className="w-16 h-16 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin" />
-          <div
-            className="mt-4 text-center font-medium"
-            style={{ color: colors.textSecondary }}
-          >
-            Loading client...
-          </div>
-        </div>
+      <div className="flex min-h-[60vh] flex-col items-center justify-center gap-3 lg:ml-16">
+        <FiLoader className={`animate-spin ${t.heading}`} size={24} />
+        <p className={`text-[14px] font-semibold ${t.muted}`}>
+          Loading client…
+        </p>
       </div>
     );
 
   if (error)
     return (
-      <div
-        className="min-h-screen flex items-center justify-center p-4"
-        style={{ backgroundColor: colors.mainBg }}
-      >
+      <div className="flex min-h-[60vh] items-center justify-center p-4 lg:ml-16">
         <div
-          className="max-w-md w-full p-6 rounded-2xl"
-          style={{
-            backgroundColor: isDark ? "rgba(127, 29, 29, 0.2)" : "#FEF2F2",
-            borderColor: isDark ? "rgba(239, 68, 68, 0.2)" : "#FECACA",
-          }}
+          className={`w-full max-w-md overflow-hidden rounded-2xl border-2 ${t.card}`}
         >
-          <div className="text-center">
-            <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center">
-              <FiX className="w-8 h-8 text-red-600" />
+          <div className="p-6 text-center">
+            <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-red-500/10 text-red-500">
+              <FiAlertCircle size={20} />
             </div>
             <h3
-              className="text-lg font-semibold mb-2"
-              style={{ color: isDark ? "#FCA5A5" : "#DC2626" }}
+              className={`text-[16px] font-black uppercase tracking-tight ${t.heading}`}
             >
-              Error Loading Client
+              Couldn't load client
             </h3>
-            <p style={{ color: colors.textSecondary }}>{error}</p>
-            <button
-              onClick={() => navigate("/login")}
-              className="mt-4 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
-            >
-              Go to Login
-            </button>
+            <p className={`mt-1 text-[14px] ${t.muted}`}>{error}</p>
+            <div className="mt-5 flex justify-center gap-2">
+              <Link
+                to="/clients"
+                className={`${btnBase} h-10 border-2 px-4 ${t.btnGhost}`}
+              >
+                <FiArrowLeft size={14} /> Clients
+              </Link>
+              <button
+                onClick={() => window.location.reload()}
+                className={`${btnBase} h-10 px-4 ${t.btnPrimary}`}
+              >
+                Try again
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -383,487 +294,402 @@ export default function ClientDetail() {
 
   if (!client) return null;
 
-  // derived summary
+  /* ---------- derived ---------- */
   const services = client.services || [];
   const invoices = client.invoices || [];
-  const lastService = services[0]?.date
-    ? new Date(services[0].date).toLocaleDateString()
-    : "N/A";
-  const totalServices = services.length;
+  const lastService = services[0]?.date ? fmtDate(services[0].date) : "—";
   const totalBilled = invoices.reduce(
-    (s, i) => s + (i.grandTotal || i.totalAmount || 0),
+    (s, i) => s + (Number(i.grandTotal || i.totalAmount) || 0),
     0,
   );
+  const vehicle =
+    `${client.vehicleMake || ""} ${client.vehicleModel || ""}`.trim();
+
+  const TABS = [
+    { key: "overview", label: "Overview", icon: FiGrid },
+    {
+      key: "services",
+      label: "Services",
+      icon: FiTool,
+      count: services.length,
+    },
+    {
+      key: "invoices",
+      label: "Invoices",
+      icon: FiDollarSign,
+      count: invoices.length,
+    },
+    {
+      key: "ocr",
+      label: "RC scans",
+      icon: FiFileText,
+      count: ocrRecords.length,
+    },
+  ];
+
+  const sel = selectedOCR ? parseOcr(selectedOCR) : {};
 
   return (
-    <div
-      className="min-h-screen lg:ml-16 transition-colors duration-300"
-      style={{ backgroundColor: colors.mainBg }}
-    >
-      <div className="max-w-7xl mx-auto p-4 sm:p-6 lg:p-8 space-y-6">
-        {/* Toast Notifications */}
-        <Toaster
-          position="top-right"
-          toastOptions={{
-            duration: 4000,
-            style: {
-              background: colors.elementBg,
-              color: colors.textPrimary,
-              border: `1px solid ${colors.border}`,
-              borderRadius: "0.75rem",
-              boxShadow:
-                "0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)",
-            },
-            success: {
-              iconTheme: {
-                primary: "#10b981",
-                secondary: colors.elementBg,
-              },
-            },
-            error: {
-              iconTheme: {
-                primary: "#ef4444",
-                secondary: colors.elementBg,
-              },
-            },
-          }}
-        />
+    <div className="min-h-screen lg:ml-16">
+      <Toaster
+        position="top-right"
+        toastOptions={{ style: { fontSize: 14 } }}
+      />
+      <input
+        ref={ocrFileRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={handleOcrFile}
+      />
 
-        {/* Back Button */}
-        <Link
-          to="/clients"
-          className="inline-flex items-center gap-2 px-4 py-2 rounded-xl transition-all duration-300"
-          style={{
-            backgroundColor: colors.hoverBg,
-            color: colors.textSecondary,
-            border: `1px solid ${colors.border}`,
-          }}
-        >
-          <FiArrowLeft className="w-4 h-4 transition-transform duration-300" />
-          <span className="font-medium">Back to Clients</span>
-        </Link>
-
-        {/* Hero Section Container */}
-        <div
-          className="relative rounded-2xl overflow-hidden shadow-xl transition-all duration-300"
-          style={{
-            backgroundColor: colors.bgCard,
-            border: `1px solid ${colors.border}`,
-          }}
-        >
-          {/* isDark helper for this scope */}
-          {(() => {
-            const isDark = colors.layoutBg === "#020617";
-            const textMain = isDark ? "text-white" : "text-slate-900";
-            const textSub = isDark ? "text-slate-400" : "text-slate-500";
-
-            return (
-              <div className="flex flex-col relative">
-                {/* Background Image */}
-                <div className="relative h-56 sm:h-72 w-full shrink-0 bg-slate-200">
-                  <img
-                    src={
-                      client.carImage ||
-                      `https://images.unsplash.com/photo-1532938911079-1b06ac7ceec7?auto=format&fit=crop&w=2070&q=80`
-                    }
-                    alt="vehicle"
-                    className="w-full h-full object-cover"
-                  />
-                </div>
-
-                {/* Content Area */}
-                <div className="p-5 sm:p-6 flex flex-col gap-6">
-                  {/* Top Actions */}
-                  <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
-                    <Link
-                      to="/clients"
-                      className="flex items-center gap-2 px-4 py-2 rounded-xl transition-all w-full sm:w-auto justify-center"
-                      style={{
-                        backgroundColor: colors.hoverBg,
-                        color: colors.textPrimary,
-                        border: `1px solid ${colors.border}`,
-                      }}
-                    >
-                      <FiArrowLeft className="w-4 h-4" />
-                      <span className="font-bold text-sm">Back</span>
-                    </Link>
-
-                    <div className="flex gap-2 w-full sm:w-auto">
-                      <button
-                        onClick={handleManualWhatsApp}
-                        className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-green-600 text-white hover:bg-green-700 shadow-md active:scale-95 transition-all"
-                      >
-                        <FaWhatsapp className="w-4 h-4" />
-                        <span className="font-bold text-xs uppercase tracking-wide">
-                          Receipt
-                        </span>
-                      </button>
-                      <button
-                        onClick={handleScanNavigate}
-                        className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-blue-600 text-white hover:bg-blue-700 shadow-md active:scale-95 transition-all"
-                      >
-                        <FiCamera className="w-4 h-4" />
-                        <span className="font-bold text-xs uppercase tracking-wide">
-                          Scan RC
-                        </span>
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Identity & Vehicle Details */}
-                  <div className="space-y-6">
-                    <div className="flex items-start gap-4">
-                      <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-blue-600 to-indigo-700 flex items-center justify-center text-white font-black text-2xl shadow-lg shrink-0">
-                        {client.fullName?.charAt(0)?.toUpperCase() || "C"}
-                      </div>
-                      <div className="min-w-0">
-                        <h1
-                          className={`text-2xl sm:text-3xl font-black leading-tight truncate ${textMain}`}
-                        >
-                          {client.fullName}
-                        </h1>
-                        <div className="flex items-center gap-2 mt-1">
-                          <span className="px-2 py-0.5 bg-green-500 text-white text-[10px] font-black rounded uppercase">
-                            Active
-                          </span>
-                          <span
-                            className={`font-mono text-xs font-bold ${textSub}`}
-                          >
-                            {client.regNumber}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-6">
-                      <div>
-                        <h2
-                          className={`text-xl sm:text-2xl font-bold ${textMain}`}
-                        >
-                          {client.vehicleMake} {client.vehicleModel}
-                        </h2>
-                        <div className="mt-2">
-                          <p
-                            className={`text-[10px] uppercase font-black tracking-widest ${textSub}`}
-                          >
-                            Lifetime Value
-                          </p>
-                          <p className="text-3xl font-black text-blue-600">
-                            ₹{totalBilled.toLocaleString("en-IN")}
-                          </p>
-                        </div>
-                      </div>
-
-                      {/* Spec Cards Grid */}
-                      <div className="grid grid-cols-2 gap-3 w-full lg:w-auto">
-                        <SpecCard
-                          icon={<BsFuelPumpFill />}
-                          label="Fuel"
-                          value={client.fuel}
-                          colors={colors}
-                        />
-                        <SpecCard
-                          icon={<FiUsers />}
-                          label="Seats"
-                          value={client.seats}
-                          colors={colors}
-                        />
-                        <SpecCard
-                          icon={<FiHash />}
-                          label="Color"
-                          value={client.color || "N/A"}
-                          colors={colors}
-                        />
-                        <SpecCard
-                          icon={<FiTool />}
-                          label="Body"
-                          value={client.bodyType || "SUV"}
-                          colors={colors}
-                        />
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            );
-          })()}
-        </div>
-
-        {/* Contact Information */}
-        <div
-          className="rounded-2xl p-6 sm:p-8 shadow-xl transition-all duration-300 hover:shadow-2xl"
-          style={{ backgroundColor: colors.elementBg }}
-        >
-          <h2
-            className="text-xl font-bold mb-6"
-            style={{ color: colors.textPrimary }}
+      <div className="mx-auto max-w-7xl space-y-4 sm:space-y-5">
+        {/* ── top actions ── */}
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <Link
+            to="/clients"
+            className={`inline-flex items-center gap-1.5 text-[12px] font-black uppercase tracking-[0.15em] ${t.muted} ${
+              isDark ? "hover:text-white" : "hover:text-[#001F3F]"
+            }`}
           >
-            Contact Information
-          </h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <ContactCard
-              icon={<FiPhone />}
-              label="Phone"
-              value={client.phone}
-              colors={colors}
-            />
-            <ContactCard
-              icon={<FiMail />}
-              label="Email"
-              value={client.email}
-              colors={colors}
-            />
-            <ContactCard
-              icon={<FiMapPin />}
-              label="Address"
-              value={client.address}
-              colors={colors}
-            />
-            <ContactCard
-              icon={<FiCreditCard />}
-              label="Registration No."
-              value={client.regNumber}
-              colors={colors}
-            />
-            <ContactCard
-              icon={<FiHash />}
-              label="VIN / Chassis"
-              value={client.vin}
-              colors={colors}
-            />
-            <ContactCard
-              icon={<FiCalendar />}
-              label="Last Service"
-              value={lastService}
-              colors={colors}
-            />
-            <ContactCard
-              icon={<BsFuelPumpFill />}
-              label="Fuel Type"
-              value={client.fuel}
-              colors={colors}
-            />
-            <ContactCard
-              icon={<FiUsers />}
-              label="Seating Capacity"
-              value={client.seats}
-              colors={colors}
-            />
+            <FiArrowLeft size={14} /> Clients
+          </Link>
+          <div className="grid w-full grid-cols-3 gap-2 sm:flex sm:w-auto">
+            <button
+              onClick={() => setConfirmWa(true)}
+              className={`${btnBase} h-10 bg-green-600 px-4 text-white shadow-lg hover:bg-green-700`}
+            >
+              <FaWhatsapp size={14} /> Receipt
+            </button>
+            <button
+              onClick={handleScanNavigate}
+              className={`${btnBase} h-10 border-2 px-4 ${t.btnGhost}`}
+            >
+              <FiCamera size={14} /> Scan RC
+            </button>
+            <button
+              onClick={() =>
+                navigate(`/clients/${id}/edit`, {
+                  state: { clientData: client },
+                })
+              }
+              className={`${btnBase} h-10 px-4 ${t.btnPrimary} shadow-lg`}
+            >
+              <FiEdit size={14} /> Edit
+            </button>
           </div>
         </div>
 
-        {/* Tabs Section */}
-        <div
-          className="rounded-2xl shadow-xl overflow-hidden transition-all duration-300 hover:shadow-2xl"
-          style={{ backgroundColor: colors.elementBg }}
-        >
-          {/* Tab Header */}
-          <div
-            className="p-4 sm:p-6 border-b"
-            style={{ borderColor: colors.border }}
-          >
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-              {/* Tab Buttons */}
-              <div className="flex gap-2 overflow-x-auto pb-2 sm:pb-0 scrollbar-hide">
-                {["overview", "services", "invoices", "ocr"].map((tab) => (
-                  <button
-                    key={tab}
-                    onClick={() => setActiveTab(tab)}
-                    className={`px-4 py-2 rounded-xl font-medium transition-all duration-300 whitespace-nowrap ${
-                      activeTab === tab
-                        ? "bg-gradient-to-r from-blue-600 to-purple-600 text-white shadow-md transform scale-105"
-                        : isDark
-                          ? "text-gray-300 hover:bg-gray-700"
-                          : "text-gray-700 hover:bg-gray-100"
-                    }`}
+        {/* ── hero ── */}
+        <div className={`overflow-hidden rounded-2xl border-2 ${t.card}`}>
+          <div className="grid grid-cols-1 md:grid-cols-5">
+            <div className="relative md:col-span-2">
+              <VehicleImage
+                src={client.carImage}
+                className="h-52 w-full sm:h-64 md:h-full md:min-h-[280px]"
+                label={vehicle}
+              />
+              <div className="absolute inset-0 bg-gradient-to-t from-[#000814]/60 via-transparent to-transparent md:bg-gradient-to-r" />
+              <div className="absolute bottom-3 left-3">
+                <Plate value={client.regNumber} />
+              </div>
+            </div>
+
+            <div className="space-y-5 p-4 sm:p-6 md:col-span-3">
+              <div className="flex items-start gap-3">
+                <div
+                  className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl text-[16px] font-black shadow-lg ${t.chipNavy}`}
+                >
+                  {client.fullName?.charAt(0)?.toUpperCase() || "C"}
+                </div>
+                <div className="min-w-0">
+                  <h1
+                    className={`truncate text-[16px] font-black uppercase tracking-tight ${t.heading}`}
                   >
-                    {tab === "ocr"
-                      ? "OCR Records"
-                      : tab.charAt(0).toUpperCase() + tab.slice(1)}
-                  </button>
-                ))}
+                    {client.fullName}
+                  </h1>
+                  <p
+                    className={`truncate text-[14px] font-semibold ${t.muted}`}
+                  >
+                    {vehicle || "Vehicle not set"}
+                    {client.vehicleYear ? (
+                      <span className="font-light italic">
+                        {" "}
+                        · {client.vehicleYear}
+                      </span>
+                    ) : null}
+                  </p>
+                  <span className="mt-1 inline-flex items-center gap-1.5 rounded-full border border-green-500/30 bg-green-500/10 px-2 py-px text-[12px] font-bold text-green-600">
+                    <span className="h-1.5 w-1.5 rounded-full bg-green-500" />{" "}
+                    Active
+                  </span>
+                </div>
               </div>
 
-              {/* Action Buttons (contextual) */}
-              {activeTab === "services" && (
-                <Link
-                  to="/services/new"
-                  state={{ customerId: client.id }}
-                  className="flex items-center justify-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-blue-600 to-purple-600 text-white hover:shadow-lg transition-all duration-300 hover:scale-105 whitespace-nowrap"
-                >
-                  <FiPlus className="w-4 h-4" />
-                  <span className="font-medium">Add Service</span>
-                </Link>
-              )}
-              {activeTab === "invoices" && (
-                <Link
-                  to="/billing/new"
-                  state={{ customerId: client.id }}
-                  className="flex items-center justify-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-green-600 to-teal-500 text-white hover:shadow-lg transition-all duration-300 hover:scale-105 whitespace-nowrap"
-                >
-                  <FiPlus className="w-4 h-4" />
-                  <span className="font-medium">Create Invoice</span>
-                </Link>
-              )}
+              <div
+                className={`flex items-end justify-between gap-4 rounded-xl border-2 p-3 ${t.inner}`}
+              >
+                <div>
+                  <p className="text-[12px] font-bold uppercase tracking-[0.2em] text-slate-400">
+                    Lifetime value
+                  </p>
+                  <p className={`text-[16px] font-black ${t.heading}`}>
+                    {fmtMoney(totalBilled)}
+                  </p>
+                </div>
+                <div className="text-right">
+                  <p className="text-[12px] font-bold uppercase tracking-[0.2em] text-slate-400">
+                    Visits
+                  </p>
+                  <p className={`text-[16px] font-black ${t.heading}`}>
+                    {services.length}
+                  </p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                <Spec
+                  isDark={isDark}
+                  icon={BsFuelPumpFill}
+                  label="Fuel"
+                  value={client.fuel}
+                />
+                <Spec
+                  isDark={isDark}
+                  icon={FiUsers}
+                  label="Seats"
+                  value={client.seats}
+                />
+                <Spec
+                  isDark={isDark}
+                  icon={FiDroplet}
+                  label="Colour"
+                  value={client.color}
+                />
+                <Spec
+                  isDark={isDark}
+                  icon={FaCar}
+                  label="Body"
+                  value={client.bodyType}
+                />
+              </div>
             </div>
           </div>
+        </div>
 
-          {/* Tab Content */}
-          <div className="p-6">
-            {/* Overview Tab */}
-            {activeTab === "overview" && (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                <StatCard
-                  title="Last Service"
-                  value={lastService}
-                  icon={<FiCalendar />}
-                  colors={colors}
-                />
-                <StatCard
-                  title="Total Services"
-                  value={totalServices}
-                  icon={<FiTool />}
-                  colors={colors}
-                />
-                <StatCard
-                  title="Total Billed"
-                  value={`₹${totalBilled.toFixed(2)}`}
-                  icon={<FiDollarSign />}
-                  colors={colors}
-                />
-              </div>
-            )}
+        {/* ── contact & vehicle info ── */}
+        <div className={`overflow-hidden rounded-2xl border-2 ${t.card}`}>
+          <div
+            className={`flex items-center gap-3 border-b-2 px-4 py-3 sm:px-5 ${t.cardHead}`}
+          >
+            <FiUserCheck size={14} className={t.heading} />
+            <h2
+              className={`text-[14px] font-black uppercase tracking-tight ${t.heading}`}
+            >
+              Contact & vehicle
+            </h2>
+          </div>
+          <div className="grid grid-cols-1 gap-2 p-3 sm:grid-cols-2 sm:p-4 lg:grid-cols-4">
+            <Info
+              isDark={isDark}
+              icon={FiPhone}
+              label="Phone"
+              value={client.phone}
+              href={client.phone && `tel:${client.phone}`}
+            />
+            <Info
+              isDark={isDark}
+              icon={FiMail}
+              label="Email"
+              value={client.email}
+              href={client.email && `mailto:${client.email}`}
+            />
+            <Info
+              isDark={isDark}
+              icon={FiMapPin}
+              label="Address"
+              value={client.address}
+            />
+            <Info
+              isDark={isDark}
+              icon={FiCalendar}
+              label="Last service"
+              value={lastService}
+            />
+            <Info
+              isDark={isDark}
+              icon={FiCreditCard}
+              label="Registration"
+              value={client.regNumber}
+              mono
+            />
+            <Info
+              isDark={isDark}
+              icon={FiHash}
+              label="VIN / Chassis"
+              value={client.vin}
+              mono
+            />
+            <Info
+              isDark={isDark}
+              icon={FiUserCheck}
+              label="Advisor"
+              value={client.advisorName}
+            />
+            <Info
+              isDark={isDark}
+              icon={FiUsers}
+              label="Received by"
+              value={client.receiverName || client.staffPerson}
+            />
+          </div>
+        </div>
 
-            {/* Services Tab */}
-            {activeTab === "services" && (
-              <div className="space-y-4">
-                {services.length ? (
-                  services.map((s) => (
-                    <div
-                      key={s.id}
-                      onClick={() => {
-                        setSelectedService(s);
-                        setServiceForm(s);
-                      }}
-                      className="p-4 sm:p-5 rounded-xl cursor-pointer transition-all duration-300 hover:shadow-md transform hover:-translate-y-1"
-                      style={{ backgroundColor: colors.hoverBg }}
-                    >
-                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                        <div className="flex-1 min-w-0">
-                          <h3
-                            className="font-bold text-lg truncate"
-                            style={{ color: colors.textPrimary }}
-                          >
-                            {s.type || "Service"}
-                          </h3>
-                          <p
-                            className="text-sm mt-1"
-                            style={{ color: colors.textSecondary }}
-                          >
-                            {new Date(s.date).toLocaleDateString()} • ₹
-                            {(s.cost || 0).toFixed(2)}
-                          </p>
-                          {s.notes && (
-                            <p
-                              className="text-xs mt-2"
-                              style={{ color: colors.textSecondary }}
-                            >
-                              {s.notes}
-                            </p>
-                          )}
-                        </div>
-                        <span
-                          className={`px-3 py-1 text-xs font-medium rounded-full whitespace-nowrap ${
-                            s.status === "Paid"
-                              ? "bg-green-500/20 text-green-400"
-                              : s.status === "In Progress"
-                                ? "bg-yellow-500/20 text-yellow-400"
-                                : "bg-red-500/20 text-red-400"
-                          }`}
-                        >
-                          {s.status}
-                        </span>
-                      </div>
-                    </div>
-                  ))
-                ) : (
-                  <div className="text-center py-12">
-                    <FiTool
-                      className="w-12 h-12 mx-auto mb-3"
-                      style={{ color: colors.textSecondary }}
-                    />
-                    <p style={{ color: colors.textSecondary }}>
-                      No service records yet.
-                    </p>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Invoices Tab */}
-            {activeTab === "invoices" && (
-              <div className="space-y-4">
-                {invoices.length ? (
-                  invoices.map((inv) => (
-                    <div
-                      key={inv.id}
-                      onClick={() => setSelectedInvoice(inv)}
-                      className="p-4 sm:p-5 rounded-xl cursor-pointer transition-all duration-300 hover:shadow-md transform hover:-translate-y-1"
-                      style={{ backgroundColor: colors.hoverBg }}
-                    >
-                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                        <div className="flex-1 min-w-0">
-                          <h3
-                            className="font-bold text-lg"
-                            style={{ color: colors.textPrimary }}
-                          >
-                            Invoice #{inv.id}
-                          </h3>
-                          <p
-                            className="text-sm mt-1"
-                            style={{ color: colors.textSecondary }}
-                          >
-                            {new Date(inv.createdAt).toLocaleDateString()} • ₹
-                            {(inv.grandTotal || inv.totalAmount || 0).toFixed(
-                              2,
-                            )}
-                          </p>
-                        </div>
-                        <span
-                          className={`px-3 py-1 text-xs font-medium rounded-full whitespace-nowrap ${
-                            inv.status === "Paid"
-                              ? "bg-green-500/20 text-green-400"
-                              : "bg-yellow-500/20 text-yellow-400"
-                          }`}
-                        >
-                          {inv.status}
-                        </span>
-                      </div>
-                    </div>
-                  ))
-                ) : (
-                  <div className="text-center py-12">
-                    <FiDollarSign
-                      className="w-12 h-12 mx-auto mb-3"
-                      style={{ color: colors.textSecondary }}
-                    />
-                    <p style={{ color: colors.textSecondary }}>
-                      No invoices found.
-                    </p>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* OCR Tab */}
-            {activeTab === "ocr" && (
-              <div className="space-y-4">
-                {/* If there's a parsed buffer (from local camera/upload), show results + save */}
-                {ocrParsed && (
-                  <div
-                    className="p-4 rounded-xl transition-all duration-300 hover:shadow-md"
-                    style={{ backgroundColor: isDark ? "#1E293B" : "#F3F4F6" }}
+        {/* ── tabs ── */}
+        <div className={`overflow-hidden rounded-2xl border-2 ${t.card}`}>
+          <div
+            className={`flex flex-col gap-3 border-b-2 p-3 sm:flex-row sm:items-center sm:justify-between sm:px-4 ${t.cardHead}`}
+          >
+            <div
+              className={`flex gap-1 overflow-x-auto rounded-xl border-2 p-1 ${isDark ? "border-white/10 bg-[#000814]/40" : "border-[#CBD5E1] bg-white"}`}
+            >
+              {TABS.map((tab) => {
+                const on = activeTab === tab.key;
+                return (
+                  <button
+                    key={tab.key}
+                    onClick={() => setActiveTab(tab.key)}
+                    className={`flex h-9 shrink-0 items-center gap-1.5 rounded-lg px-3 text-[12px] font-black uppercase tracking-wider transition ${
+                      on
+                        ? t.chipNavy
+                        : `${t.muted} ${isDark ? "hover:text-white" : "hover:text-[#001F3F]"}`
+                    }`}
                   >
+                    <tab.icon size={12} />
+                    {tab.label}
+                    {tab.count > 0 && (
+                      <span
+                        className={`rounded-md px-1.5 text-[12px] ${on ? (isDark ? "bg-[#001F3F]/10" : "bg-white/20") : isDark ? "bg-white/10" : "bg-slate-100"}`}
+                      >
+                        {tab.count}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+
+            {activeTab === "services" && (
+              <Link
+                to="/services/new"
+                state={{ customerId: client.id }}
+                className={`${btnBase} h-9 px-4 ${t.btnPrimary}`}
+              >
+                <FiPlus size={14} /> Add service
+              </Link>
+            )}
+            {activeTab === "invoices" && (
+              <Link
+                to="/billing/new"
+                state={{ customerId: client.id }}
+                className={`${btnBase} h-9 bg-green-600 px-4 text-white hover:bg-green-700`}
+              >
+                <FiPlus size={14} /> Create invoice
+              </Link>
+            )}
+            {activeTab === "ocr" && (
+              <button
+                onClick={() => ocrFileRef.current?.click()}
+                disabled={ocrBusy}
+                className={`${btnBase} h-9 px-4 ${t.btnPrimary}`}
+              >
+                {ocrBusy ? (
+                  <FiLoader size={14} className="animate-spin" />
+                ) : (
+                  <FiUpload size={14} />
+                )}
+                {ocrBusy ? "Reading…" : "Upload RC photo"}
+              </button>
+            )}
+          </div>
+
+          <div className="p-3 sm:p-4">
+            {/* overview */}
+            {activeTab === "overview" && (
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                <Stat
+                  isDark={isDark}
+                  title="Last service"
+                  value={lastService}
+                  icon={FiCalendar}
+                />
+                <Stat
+                  isDark={isDark}
+                  title="Total services"
+                  value={services.length}
+                  icon={FiTool}
+                />
+                <Stat
+                  isDark={isDark}
+                  title="Total billed"
+                  value={fmtMoney(totalBilled)}
+                  icon={FiDollarSign}
+                />
+              </div>
+            )}
+
+            {/* services */}
+            {activeTab === "services" &&
+              (services.length ? (
+                <div className="space-y-2">
+                  {services.map((s) => (
+                    <Row
+                      key={s.id}
+                      isDark={isDark}
+                      icon={FiTool}
+                      title={s.type || "Service"}
+                      meta={`${fmtDate(s.date)} · ${fmtMoney(s.cost)}`}
+                      note={s.notes}
+                      status={s.status}
+                    />
+                  ))}
+                </div>
+              ) : (
+                <Empty
+                  isDark={isDark}
+                  icon={FiTool}
+                  text="No service records yet."
+                />
+              ))}
+
+            {/* invoices */}
+            {activeTab === "invoices" &&
+              (invoices.length ? (
+                <div className="space-y-2">
+                  {invoices.map((inv) => (
+                    <Row
+                      key={inv.id}
+                      isDark={isDark}
+                      icon={FiFileText}
+                      title={`Invoice #${inv.invoiceNumber || inv.id}`}
+                      meta={`${fmtDate(inv.createdAt)} · ${fmtMoney(inv.grandTotal || inv.totalAmount)}`}
+                      status={inv.status}
+                    />
+                  ))}
+                </div>
+              ) : (
+                <Empty
+                  isDark={isDark}
+                  icon={FiDollarSign}
+                  text="No invoices yet."
+                />
+              ))}
+
+            {/* OCR */}
+            {activeTab === "ocr" && (
+              <div className="space-y-3">
+                {ocrParsed && (
+                  <div className={`rounded-xl border-2 p-3 ${t.inner}`}>
                     <OCRResults
                       isDark={isDark}
                       parsedData={ocrParsed}
@@ -873,448 +699,374 @@ export default function ClientDetail() {
                   </div>
                 )}
 
-                {/* OCR history list */}
                 {isLoadingOCR ? (
-                  <p
-                    className="text-center"
-                    style={{ color: colors.textSecondary }}
-                  >
-                    Loading OCR records...
-                  </p>
-                ) : ocrRecords.length ? (
-                  ocrRecords.map((r) => (
-                    <div
-                      key={r.id}
-                      className="p-4 rounded-xl flex justify-between items-center border transition-all duration-300 hover:shadow-md transform hover:-translate-y-1"
-                      style={{
-                        borderColor: colors.border,
-                        backgroundColor: colors.hoverBg,
-                      }}
-                    >
-                      <div>
-                        <h4
-                          className="font-semibold"
-                          style={{ color: colors.textPrimary }}
-                        >
-                          {r.parsedData?.ownerName || "Unknown Owner"}
-                        </h4>
-                        <p style={{ color: colors.textSecondary }}>
-                          Reg: {r.parsedData?.regNo || "N/A"}
-                        </p>
-                        <p className="text-xs text-gray-500">
-                          {new Date(r.createdAt).toLocaleString()}
-                        </p>
-                      </div>
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => setSelectedOCR(r)}
-                          className="p-2 rounded-lg bg-blue-100 text-blue-600 hover:bg-blue-200 transition-colors duration-300"
-                          title="View Details"
-                        >
-                          <FiEye />
-                        </button>
-                        <button
-                          onClick={() => handleDeleteOCR(r.id)}
-                          className="p-2 rounded-lg bg-red-100 text-red-600 hover:bg-red-200 transition-colors duration-300"
-                          title="Delete"
-                        >
-                          <FiTrash2 />
-                        </button>
-                      </div>
-                    </div>
-                  ))
-                ) : (
-                  <div
-                    className="text-center py-10"
-                    style={{ color: colors.textSecondary }}
-                  >
-                    <FiFileText className="mx-auto mb-2" size={32} />
-                    <p>No OCR records found for this client.</p>
+                  <div className="flex items-center justify-center gap-2 py-10">
+                    <FiLoader
+                      className={`animate-spin ${t.heading}`}
+                      size={16}
+                    />
+                    <span className={`text-[14px] ${t.muted}`}>
+                      Loading RC scans…
+                    </span>
                   </div>
+                ) : ocrRecords.length ? (
+                  <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
+                    {ocrRecords.map((r) => {
+                      const p = parseOcr(r);
+                      return (
+                        <div
+                          key={r.id}
+                          className={`flex items-center gap-3 rounded-xl border-2 p-3 ${t.inner}`}
+                        >
+                          <div
+                            className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${t.chipNavy}`}
+                          >
+                            <FiFileText size={14} />
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <p
+                              className={`truncate text-[14px] font-bold ${t.heading}`}
+                            >
+                              {p.ownerName || "Unknown owner"}
+                            </p>
+                            <div className="mt-0.5 flex flex-wrap items-center gap-2">
+                              {p.regNo && <Plate value={p.regNo} size="sm" />}
+                              <span className={`text-[12px] ${t.muted}`}>
+                                {new Date(r.createdAt).toLocaleString("en-IN")}
+                              </span>
+                            </div>
+                          </div>
+                          <button
+                            onClick={() => setSelectedOCR(r)}
+                            title="View"
+                            className={`flex h-8 w-8 items-center justify-center rounded-lg border-2 ${t.btnGhost}`}
+                          >
+                            <FiEye size={14} />
+                          </button>
+                          <button
+                            onClick={() => setOcrToDelete(r)}
+                            title="Delete"
+                            className="flex h-8 w-8 items-center justify-center rounded-lg border-2 border-red-500/30 text-red-500 hover:bg-red-500/10"
+                          >
+                            <FiTrash2 size={14} />
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  !ocrParsed && (
+                    <Empty
+                      isDark={isDark}
+                      icon={FiFileText}
+                      text="No RC scans saved for this client."
+                    />
+                  )
                 )}
               </div>
             )}
           </div>
         </div>
+      </div>
 
-        {/* OCR Detail Modal – redesigned and grouped */}
+      {/* ── OCR record modal ── */}
+      <Modal
+        isDark={isDark}
+        open={!!selectedOCR}
+        onClose={() => setSelectedOCR(null)}
+        icon={FiFileText}
+        title="RC scan details"
+        subtitle={
+          selectedOCR
+            ? `Scanned ${new Date(selectedOCR.createdAt).toLocaleString("en-IN")}`
+            : ""
+        }
+        maxW="max-w-5xl"
+      >
         {selectedOCR && (
-          <div className="fixed inset-0 bg-black/60 flex items-start justify-center z-50 p-6 overflow-y-auto backdrop-blur-sm">
-            <div
-              className="w-full max-w-6xl rounded-2xl overflow-hidden shadow-2xl"
-              style={{ backgroundColor: colors.elementBg }}
-            >
-              <div
-                className="flex items-center justify-between p-4"
-                style={{
-                  background: isDark
-                    ? "linear-gradient(to right, rgba(30, 58, 138, 0.6), rgba(124, 58, 237, 0.6))"
-                    : "linear-gradient(to right, #2563eb, #9333ea)",
-                  color: "white",
-                }}
-              >
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-lg bg-white/20 flex items-center justify-center text-white">
-                    <FiFileText />
-                  </div>
-                  <h3 className="text-lg font-semibold">OCR Record Details</h3>
-                </div>
-                <div className="flex items-center gap-3">
-                  <div className="text-sm text-white/80 mr-4">
-                    Created: {new Date(selectedOCR.createdAt).toLocaleString()}
-                  </div>
-                  <button
-                    onClick={() => setSelectedOCR(null)}
-                    className="text-white hover:opacity-90 transition-opacity duration-300"
-                  >
-                    <FiX size={20} />
-                  </button>
-                </div>
+          <div className="space-y-5 p-4 sm:p-5">
+            <OcrGroup isDark={isDark} title="Vehicle identification">
+              <KV
+                isDark={isDark}
+                label="Registration number"
+                value={sel.regNo}
+                mono
+              />
+              <KV
+                isDark={isDark}
+                label="Registration date"
+                value={sel.regDate}
+              />
+              <KV
+                isDark={isDark}
+                label="Chassis number"
+                value={sel.chassisNo}
+                mono
+              />
+              <KV
+                isDark={isDark}
+                label="Engine number"
+                value={sel.engineNo}
+                mono
+              />
+              <KV isDark={isDark} label="Maker" value={sel.maker || sel.mfr} />
+              <KV
+                isDark={isDark}
+                label="Model / variant"
+                value={[sel.model, sel.variant].filter(Boolean).join(" / ")}
+              />
+            </OcrGroup>
+            <OcrGroup isDark={isDark} title="Specifications">
+              <KV
+                isDark={isDark}
+                label="Vehicle class"
+                value={sel.vehicleClass}
+              />
+              <KV
+                isDark={isDark}
+                label="Body type"
+                value={sel.body || sel.bodyType}
+              />
+              <KV
+                isDark={isDark}
+                label="Colour"
+                value={sel.colour || sel.color}
+              />
+              <KV
+                isDark={isDark}
+                label="Fuel"
+                value={sel.fuel || sel.fuelType}
+              />
+              <KV isDark={isDark} label="Wheel base" value={sel.wheelBase} />
+              <KV isDark={isDark} label="MFG date" value={sel.mfgDate} />
+              <KV
+                isDark={isDark}
+                label="Seating"
+                value={sel.seating || sel.seatingCapacity}
+              />
+              <KV isDark={isDark} label="Cylinders" value={sel.noOfCyl} />
+              <KV
+                isDark={isDark}
+                label="Unladen weight"
+                value={sel.unladenWt}
+              />
+              <KV isDark={isDark} label="CC" value={sel.cc} />
+            </OcrGroup>
+            <OcrGroup isDark={isDark} title="Validity">
+              <KV
+                isDark={isDark}
+                label="Reg / FC valid upto"
+                value={sel.regFcUpto}
+              />
+              <KV
+                isDark={isDark}
+                label="Fitness upto"
+                value={sel.fitUpto || sel.fitnessUpto}
+              />
+              <KV
+                isDark={isDark}
+                label="Insurance upto"
+                value={sel.insuranceUpto}
+              />
+              <KV isDark={isDark} label="Tax upto" value={sel.taxUpto} />
+            </OcrGroup>
+            <OcrGroup isDark={isDark} title="Ownership">
+              <KV isDark={isDark} label="Owner name" value={sel.ownerName} />
+              <KV isDark={isDark} label="S/W/D of" value={sel.swdOf} />
+              <KV isDark={isDark} label="Address" value={sel.address} wide />
+            </OcrGroup>
+            {selectedOCR.rawText && (
+              <div>
+                <p className="mb-2 text-[12px] font-bold uppercase tracking-[0.2em] text-slate-400">
+                  Raw OCR text
+                </p>
+                <pre
+                  className={`max-h-60 overflow-auto whitespace-pre-wrap rounded-xl border-2 p-3 text-[12px] ${t.inner} ${t.body}`}
+                >
+                  {selectedOCR.rawText}
+                </pre>
               </div>
-
-              <div className="p-6 space-y-6">
-                {/* Group: Vehicle Identification */}
-                <Section title="🚗 Vehicle Identification" colors={colors}>
-                  <TwoCol
-                    label="Registration Number"
-                    value={selectedOCR.parsedData?.regNo}
-                    colors={colors}
-                  />
-                  <TwoCol
-                    label="Registration Date"
-                    value={selectedOCR.parsedData?.regDate}
-                    colors={colors}
-                  />
-                  <TwoCol
-                    label="Chassis Number"
-                    value={selectedOCR.parsedData?.chassisNo}
-                    colors={colors}
-                  />
-                  <TwoCol
-                    label="Engine Number"
-                    value={selectedOCR.parsedData?.engineNo}
-                    colors={colors}
-                  />
-                  <TwoCol
-                    label="Maker (Manufacturer)"
-                    value={
-                      selectedOCR.parsedData?.maker ||
-                      selectedOCR.parsedData?.mfr
-                    }
-                    colors={colors}
-                  />
-                  <TwoCol
-                    label="Model / Variant"
-                    value={
-                      (selectedOCR.parsedData?.model || "") +
-                      (selectedOCR.parsedData?.variant
-                        ? ` / ${selectedOCR.parsedData.variant}`
-                        : "")
-                    }
-                    colors={colors}
-                  />
-                </Section>
-
-                {/* Group: Vehicle Specifications */}
-                <Section title="⚙️ Vehicle Specifications" colors={colors}>
-                  <TwoCol
-                    label="Vehicle Class"
-                    value={selectedOCR.parsedData?.vehicleClass}
-                    colors={colors}
-                  />
-                  <TwoCol
-                    label="Body Type"
-                    value={
-                      selectedOCR.parsedData?.body ||
-                      selectedOCR.parsedData?.bodyType
-                    }
-                    colors={colors}
-                  />
-                  <TwoCol
-                    label="Colour"
-                    value={
-                      selectedOCR.parsedData?.colour ||
-                      selectedOCR.parsedData?.color
-                    }
-                    colors={colors}
-                  />
-                  <TwoCol
-                    label="Fuel Type"
-                    value={
-                      selectedOCR.parsedData?.fuel ||
-                      selectedOCR.parsedData?.fuelType
-                    }
-                    colors={colors}
-                  />
-                  <TwoCol
-                    label="Wheel Base"
-                    value={selectedOCR.parsedData?.wheelBase}
-                    colors={colors}
-                  />
-                  <TwoCol
-                    label="MFG Date"
-                    value={selectedOCR.parsedData?.mfgDate}
-                    colors={colors}
-                  />
-                  <TwoCol
-                    label="Seating Capacity"
-                    value={
-                      selectedOCR.parsedData?.seating ||
-                      selectedOCR.parsedData?.seatingCapacity
-                    }
-                    colors={colors}
-                  />
-                  <TwoCol
-                    label="No. of Cylinders"
-                    value={selectedOCR.parsedData?.noOfCyl}
-                    colors={colors}
-                  />
-                  <TwoCol
-                    label="Unladen Weight"
-                    value={selectedOCR.parsedData?.unladenWt}
-                    colors={colors}
-                  />
-                  <TwoCol
-                    label="CC"
-                    value={selectedOCR.parsedData?.cc}
-                    colors={colors}
-                  />
-                </Section>
-
-                {/* Group: Registration / Validity */}
-                <Section title="🧾 Registration / Validity" colors={colors}>
-                  <TwoCol
-                    label="Reg/FC Valid Upto"
-                    value={selectedOCR.parsedData?.regFcUpto}
-                    colors={colors}
-                  />
-                  <TwoCol
-                    label="Fitness Valid Upto"
-                    value={
-                      selectedOCR.parsedData?.fitUpto ||
-                      selectedOCR.parsedData?.fitnessUpto
-                    }
-                    colors={colors}
-                  />
-                  <TwoCol
-                    label="Insurance Valid Upto"
-                    value={selectedOCR.parsedData?.insuranceUpto}
-                    colors={colors}
-                  />
-                  <TwoCol
-                    label="Tax Valid Upto"
-                    value={selectedOCR.parsedData?.taxUpto}
-                    colors={colors}
-                  />
-                </Section>
-
-                {/* Group: Ownership */}
-                <Section title="👤 Ownership" colors={colors}>
-                  <TwoCol
-                    label="Owner Name"
-                    value={selectedOCR.parsedData?.ownerName}
-                    colors={colors}
-                  />
-                  <TwoCol
-                    label="S/W/D Of"
-                    value={selectedOCR.parsedData?.swdOf}
-                    colors={colors}
-                  />
-                  <div className="col-span-full">
-                    <div className="text-xs font-semibold text-gray-400 mb-2">
-                      Address
-                    </div>
-                    <div
-                      className={`p-4 rounded-xl border transition-all duration-300 hover:shadow-md ${
-                        isDark
-                          ? "bg-gray-700/40 border-gray-600 text-white"
-                          : "bg-gray-50 border-gray-200 text-gray-900"
-                      }`}
-                    >
-                      {selectedOCR.parsedData?.address || "—"}
-                    </div>
-                  </div>
-                </Section>
-
-                {/* Raw OCR text (collapsed style) */}
-                {selectedOCR.rawText && (
-                  <div>
-                    <h4 className="text-sm font-semibold text-gray-500 mb-2">
-                      Raw OCR Text
-                    </h4>
-                    <pre
-                      className={`p-4 rounded-xl text-sm transition-all duration-300 hover:shadow-md ${
-                        isDark
-                          ? "bg-gray-700/40 text-white"
-                          : "bg-gray-50 text-gray-800"
-                      }`}
-                    >
-                      {selectedOCR.rawText}
-                    </pre>
-                  </div>
-                )}
-              </div>
-            </div>
+            )}
           </div>
         )}
+      </Modal>
 
-        <style jsx>{`
-          .scrollbar-hide::-webkit-scrollbar {
-            display: none;
-          }
-          .scrollbar-hide {
-            -ms-overflow-style: none;
-            scrollbar-width: none;
-          }
-
-          @keyframes scaleIn {
-            from {
-              transform: scale(0.95);
-              opacity: 0;
-            }
-            to {
-              transform: scale(1);
-              opacity: 1;
-            }
-          }
-
-          .animate-scaleIn {
-            animation: scaleIn 0.3s ease-out forwards;
-          }
-        `}</style>
-      </div>
+      <ConfirmDialog
+        isDark={isDark}
+        open={confirmWa}
+        tone="success"
+        title="Send receipt?"
+        message={`Send the "Vehicle received" WhatsApp message to ${client.fullName || "this client"}${client.phone ? ` (${client.phone})` : ""}.`}
+        confirmText="Send"
+        busy={sendingWa}
+        onCancel={() => setConfirmWa(false)}
+        onConfirm={sendWhatsApp}
+      />
+      <ConfirmDialog
+        isDark={isDark}
+        open={!!ocrToDelete}
+        title="Delete RC scan?"
+        message="This saved scan will be removed permanently."
+        confirmText="Delete"
+        onCancel={() => setOcrToDelete(null)}
+        onConfirm={handleDeleteOCR}
+      />
     </div>
   );
 }
 
-/* ----------------------
-  Small helper components
-   - ContactCard
-   - StatCard
-   - Section, TwoCol (used in modal)
-   - SpecCard (new component for vehicle specs)
----------------------- */
+/* ───────────── small pieces ───────────── */
 
-function ContactCard({ icon, label, value, colors }) {
-  const isDark = colors.layoutBg === "#020617";
-
+function Spec({ isDark, icon: Icon, label, value }) {
+  const t = tk(isDark);
   return (
-    <div
-      className="p-4 rounded-xl flex items-center gap-3 transition-all duration-300 hover:shadow-md"
-      style={{ backgroundColor: colors.hoverBg }}
-    >
-      <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white flex-shrink-0 transition-transform duration-300 hover:scale-110">
-        {icon}
+    <div className={`rounded-xl border-2 p-2.5 ${t.inner}`}>
+      <div className="flex items-center gap-1.5 text-slate-400">
+        <Icon size={12} />
+        <span className="text-[12px] font-bold uppercase tracking-wider">
+          {label}
+        </span>
+      </div>
+      <p className={`mt-1 truncate text-[14px] font-black ${t.heading}`}>
+        {value || "—"}
+      </p>
+    </div>
+  );
+}
+
+function Info({ isDark, icon: Icon, label, value, href, mono }) {
+  const t = tk(isDark);
+  const inner = (
+    <>
+      <div
+        className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${t.chipNavy}`}
+      >
+        <Icon size={12} />
       </div>
       <div className="min-w-0 flex-1">
-        <p
-          className="text-xs font-medium uppercase mb-1"
-          style={{ color: colors.textSecondary }}
-        >
+        <p className="text-[12px] font-bold uppercase tracking-wider text-slate-400">
           {label}
         </p>
         <p
-          className="font-semibold truncate"
-          style={{ color: colors.textPrimary }}
+          className={`truncate text-[14px] font-bold ${t.heading} ${mono ? "font-mono" : ""}`}
+          title={value || ""}
         >
           {value || "—"}
         </p>
       </div>
-    </div>
+    </>
+  );
+  const cls = `flex items-center gap-3 rounded-xl border-2 p-3 ${t.inner}`;
+  return href ? (
+    <a href={href} className={`${cls} hover:underline`}>
+      {inner}
+    </a>
+  ) : (
+    <div className={cls}>{inner}</div>
   );
 }
 
-function StatCard({ title, value, icon, colors }) {
+function Stat({ isDark, title, value, icon: Icon }) {
+  const t = tk(isDark);
   return (
     <div
-      className="p-5 rounded-xl flex items-center justify-between transition-all duration-300 hover:shadow-md"
-      style={{ backgroundColor: colors.hoverBg }}
+      className={`flex items-center justify-between gap-3 rounded-xl border-2 p-4 ${t.inner}`}
     >
-      <div>
-        <p
-          className="text-sm font-medium mb-1"
-          style={{ color: colors.textSecondary }}
-        >
+      <div className="min-w-0">
+        <p className="text-[12px] font-bold uppercase tracking-wider text-slate-400">
           {title}
         </p>
-        <p className="text-2xl font-bold" style={{ color: colors.textPrimary }}>
+        <p className={`truncate text-[16px] font-black ${t.heading}`}>
           {value}
         </p>
       </div>
-      <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white transition-transform duration-300 hover:scale-110">
-        {icon}
+      <div
+        className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${t.chipNavy}`}
+      >
+        <Icon size={16} />
       </div>
     </div>
   );
 }
 
-function SpecCard({ icon, label, value, colors }) {
-  const isDark = colors.layoutBg === "#020617";
-
+function Row({ isDark, icon: Icon, title, meta, note, status }) {
+  const t = tk(isDark);
   return (
     <div
-      className={`rounded-xl p-3 border transition-all duration-300 shadow-sm ${
-        isDark ? "bg-white/5 border-white/10" : "bg-white border-slate-200"
-      }`}
-      style={{
-        backgroundColor: !isDark ? colors.bgCard : undefined,
-      }}
+      className={`flex items-start gap-3 rounded-xl border-2 p-3 transition ${t.inner} ${t.hoverRow}`}
     >
-      <div className="flex flex-col gap-2">
-        <div
-          className={`w-8 h-8 rounded-lg flex items-center justify-center ${
-            isDark ? "bg-white/10 text-blue-400" : "bg-blue-50 text-blue-600"
-          }`}
-        >
-          {icon}
-        </div>
-        <div>
-          <p
-            className={`text-[10px] font-bold uppercase tracking-wider ${
-              isDark ? "text-slate-400" : "text-slate-500"
-            }`}
-          >
-            {label}
-          </p>
-          <p
-            className={`text-sm font-bold leading-tight ${
-              isDark ? "text-white" : "text-slate-900"
-            }`}
-          >
-            {value}
-          </p>
-        </div>
+      <div
+        className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${t.chipNavy}`}
+      >
+        <Icon size={14} />
       </div>
+      <div className="min-w-0 flex-1">
+        <p className={`truncate text-[14px] font-bold ${t.heading}`}>{title}</p>
+        <p className={`text-[12px] font-medium ${t.muted}`}>{meta}</p>
+        {note && (
+          <p className={`mt-1 line-clamp-2 text-[12px] ${t.body}`}>{note}</p>
+        )}
+      </div>
+      {status && (
+        <span
+          className={`shrink-0 rounded-full border px-2 py-px text-[12px] font-bold ${statusClass(status)}`}
+        >
+          {status}
+        </span>
+      )}
     </div>
   );
 }
 
-/* Section wrapper for modal groups */
-function Section({ title, children, colors }) {
+function Empty({ isDark, icon: Icon, text }) {
+  const t = tk(isDark);
   return (
-    <div className="mb-4">
-      <div className="flex items-center gap-2 mb-3">
-        <div className="w-2 h-2 rounded-full bg-gradient-to-r from-blue-500 to-purple-600"></div>
-        <h4 className="font-semibold" style={{ color: colors.textPrimary }}>
+    <div className="py-10 text-center">
+      <div
+        className={`mx-auto mb-3 flex h-11 w-11 items-center justify-center rounded-2xl ${isDark ? "bg-white/5 text-slate-500" : "bg-[#F8FAFC] text-slate-400"}`}
+      >
+        <Icon size={16} />
+      </div>
+      <p className={`text-[14px] font-semibold ${t.muted}`}>{text}</p>
+    </div>
+  );
+}
+
+function OcrGroup({ isDark, title, children }) {
+  const t = tk(isDark);
+  return (
+    <div>
+      <div className="mb-2 flex items-center gap-3">
+        <h4
+          className={`text-[12px] font-black uppercase tracking-[0.2em] ${t.heading}`}
+        >
           {title}
         </h4>
+        <div
+          className={`h-px flex-1 ${isDark ? "bg-white/10" : "bg-[#CBD5E1]"}`}
+        />
       </div>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">{children}</div>
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+        {children}
+      </div>
     </div>
   );
 }
 
-/* Two-column label/value box used inside modal */
-function TwoCol({ label, value, colors }) {
+function KV({ isDark, label, value, mono, wide }) {
+  const t = tk(isDark);
   return (
     <div
-      className="p-4 rounded-xl border transition-all duration-300 hover:shadow-md"
-      style={{ borderColor: colors.border, backgroundColor: colors.hoverBg }}
+      className={`rounded-xl border-2 p-3 ${t.inner} ${wide ? "sm:col-span-2 lg:col-span-3" : ""}`}
     >
-      <div className="text-xs text-gray-400 mb-2">{label}</div>
-      <div className="font-semibold" style={{ color: colors.textPrimary }}>
+      <p className="text-[12px] font-bold uppercase tracking-wider text-slate-400">
+        {label}
+      </p>
+      <p
+        className={`mt-0.5 break-words text-[14px] font-bold ${t.heading} ${mono ? "font-mono" : ""}`}
+      >
         {value || "—"}
-      </div>
+      </p>
     </div>
   );
 }

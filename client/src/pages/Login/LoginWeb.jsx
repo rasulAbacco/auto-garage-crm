@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from "react";
+// client/src/pages/Login/Login.jsx
+import React, { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import {
   FiUser,
-  FiMail,
   FiLock,
   FiEye,
   FiEyeOff,
@@ -10,29 +10,107 @@ import {
   FiActivity,
   FiShield,
   FiCpu,
-  FiLayout,
   FiTruck,
   FiBox,
   FiChevronLeft,
+  FiLoader,
+  FiAlertCircle,
+  FiCheck,
+  FiSun,
+  FiMoon,
 } from "react-icons/fi";
 import { useTheme } from "../../contexts/ThemeContext";
+import {
+  API_URL,
+  isNativeApp,
+  getDashboardPath,
+} from "../../utils/authStorage";
+
+const API = API_URL;
+const LOGO_SRC = "/Logos/transLogo.png"; // client/public/Logos/transLogo.png
+
+const CRM_CONFIG = {
+  car: {
+    label: "Car Garage",
+    short: "Car",
+    icon: FiTruck,
+    register: "/car-register",
+  },
+  bike: {
+    label: "Bike Workshop",
+    short: "Bike",
+    icon: FiActivity,
+    register: "/bike-register",
+  },
+  wash: {
+    label: "Wash Center",
+    short: "Wash",
+    icon: FiBox,
+    register: "/washing-register",
+  },
+  puncher: {
+    label: "Puncher Shop",
+    short: "Puncher",
+    icon: FiCpu,
+    register: "/puncher-register",
+  },
+};
+
+const FEATURES = [
+  "Job cards, billing & GST invoices",
+  "Inventory, staff and salary in one place",
+  "WhatsApp approvals & service reminders",
+];
+
+/* ---------- logo on a white tile (readable on navy and in dark mode) ---------- */
+function BrandLogo({ compact = false }) {
+  const [failed, setFailed] = useState(false);
+  return (
+    <span
+      className={`inline-flex items-center justify-center rounded-xl bg-white shadow-lg shadow-black/20 ${compact ? "h-10 px-2.5" : "h-14 px-3.5"}`}
+    >
+      {failed ? (
+        <span className="text-[16px] font-black uppercase tracking-tight text-[#001F3F]">
+          Motor<span className="font-light lowercase italic">desk</span>
+        </span>
+      ) : (
+        <img
+          src={LOGO_SRC}
+          alt="MotorDesk"
+          draggable="false"
+          onError={() => setFailed(true)}
+          className={`w-auto object-contain ${compact ? "h-7 max-w-[130px]" : "h-10 max-w-[180px]"}`}
+        />
+      )}
+    </span>
+  );
+}
 
 export default function ModernLogin() {
-  const { isDark } = useTheme();
+  const { isDark, toggleTheme } = useTheme();
   const navigate = useNavigate();
+
   const [formData, setFormData] = useState({ identifier: "", password: "" });
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
   const [showPassword, setShowPassword] = useState(false);
-  const [crmType, setCrmType] = useState("car");
+  const [capsLock, setCapsLock] = useState(false);
+  const [crmType, setCrmType] = useState(() => {
+    try {
+      const saved = localStorage.getItem("lastCrmType");
+      return CRM_CONFIG[saved] ? saved : "car";
+    } catch {
+      return "car";
+    }
+  });
   const [loginMode, setLoginMode] = useState("owner");
 
-  const CRM_CONFIG = {
-    car: { label: "Car Garage", icon: FiTruck },
-    bike: { label: "Bike Workshop", icon: FiActivity },
-    wash: { label: "Wash Center", icon: FiBox },
-    puncher: { label: "Puncher Shop", icon: FiCpu },
-  };
+  const staffAllowed = crmType !== "puncher"; // Puncher Shop: owner login only
+  const isStaff = loginMode === "staff" && staffAllowed;
+
+  useEffect(() => {
+    if (!staffAllowed && loginMode === "staff") setLoginMode("owner");
+  }, [staffAllowed, loginMode]);
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -40,74 +118,52 @@ export default function ModernLogin() {
     if (error) setError("");
   };
 
+  const pickCrm = (key) => {
+    setCrmType(key);
+    setError("");
+    try {
+      localStorage.setItem("lastCrmType", key);
+    } catch {
+      /* ignore */
+    }
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setIsLoading(true);
     setError("");
 
-    if (!formData.identifier || !formData.password) {
-      setError("Please fill in all fields");
-      setIsLoading(false);
+    if (!formData.identifier.trim() || !formData.password) {
+      setError("Please enter your login details and password.");
+      return;
+    }
+    if (isStaff && !formData.identifier.includes("@")) {
+      setError("Staff accounts sign in with their email address.");
       return;
     }
 
-    // 🛞 Puncher Shops are owner-only accounts for now
-    if (loginMode === "staff" && crmType === "puncher") {
-      setError("Puncher Shop has owner login only. Please use Owner Node.");
-      setIsLoading(false);
-      return;
-    }
-
-    // Staff must login with email
-    if (loginMode === "staff" && !formData.identifier.includes("@")) {
-      setError("Staff must login using email address");
-      setIsLoading(false);
-      return;
-    }
-
+    setIsLoading(true);
     try {
       let loginUrl = "";
       let payload = {};
 
-      // =========================
-      // 👷 STAFF LOGIN
-      // =========================
-      if (loginMode === "staff") {
-        // 🚿 WASH STAFF
+      if (isStaff) {
+        const email = formData.identifier.trim().toLowerCase();
         if (crmType === "wash") {
-          loginUrl = `${import.meta.env.VITE_API_BASE_URL}/api/teams/wash-staff/login`;
+          loginUrl = `${API}/api/teams/wash-staff/login`;
+          payload = { email, password: formData.password };
+        } else if (crmType === "car") {
+          loginUrl = `${API}/api/staff-auth/login`;
+          payload = { email, password: formData.password, crmType: "CAR" };
+        } else {
+          loginUrl = `${API}/api/bikes-team/login`;
           payload = {
-            email: formData.identifier.trim().toLowerCase(),
-            password: formData.password,
-          };
-        }
-
-        // 🚗 CAR STAFF
-        else if (crmType === "car") {
-          loginUrl = `${import.meta.env.VITE_API_BASE_URL}/api/staff-auth/login`;
-          payload = {
-            email: formData.identifier.trim().toLowerCase(),
-            password: formData.password,
-            crmType: "CAR",
-          };
-        }
-
-        // 🏍 BIKE STAFF
-        else {
-          loginUrl = `${import.meta.env.VITE_API_BASE_URL}/api/bikes-team/login`;
-          payload = {
-            email: formData.identifier.trim().toLowerCase(),
+            email,
             password: formData.password,
             crmType: crmType.toUpperCase(),
           };
         }
-      }
-
-      // =========================
-      // 👤 OWNER LOGIN
-      // =========================
-      else {
-        loginUrl = `${import.meta.env.VITE_API_BASE_URL}/api/auth/login`;
+      } else {
+        loginUrl = `${API}/api/auth/login`;
         payload = {
           identifier: formData.identifier.trim(),
           password: formData.password,
@@ -117,256 +173,364 @@ export default function ModernLogin() {
 
       const response = await fetch(loginUrl, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+          "ngrok-skip-browser-warning": "true",
+          "X-Client": isNativeApp() ? "mobile" : "web",
+        },
         body: JSON.stringify(payload),
       });
-
-      const data = await response.json();
+      const data = await response.json().catch(() => ({}));
 
       if (!response.ok) {
-        setError(data.message || "Invalid login");
-        setIsLoading(false);
+        setError(data.message || "Incorrect login details. Please try again.");
         return;
       }
 
-      // Save auth
       localStorage.setItem("token", data.token);
       localStorage.setItem("user", JSON.stringify(data.user));
       localStorage.setItem("crmType", crmType);
-      // ✅ ADD THIS LINE (VERY IMPORTANT)
-      localStorage.setItem("userId", data.user.id);
-      
-      // Redirect
-      navigate(`/${crmType}-dashboard`);
+      if (data.user?.id != null) localStorage.setItem("userId", data.user.id);
+
+      navigate(getDashboardPath(), { replace: true });
     } catch (err) {
       console.error("Login error:", err);
-      setError("Server error. Try again later.");
+      setError("Can't reach the server. Check your internet and try again.");
     } finally {
       setIsLoading(false);
     }
   };
 
+  /* ---------- theme ---------- */
+  const t = isDark
+    ? {
+        page: "bg-[#000814] text-white",
+        card: "bg-[#001F3F] border-white/5 shadow-2xl shadow-black/30",
+        heading: "text-white",
+        muted: "text-slate-400",
+        seg: "bg-white/5 border-white/10",
+        segIdle: "text-slate-400 hover:text-white hover:bg-white/5",
+        segOn: "bg-white text-[#001F3F] shadow-sm",
+        input:
+          "bg-white/5 border-white/10 text-white placeholder:text-slate-500 focus:border-white/40 focus:bg-white/10",
+        divider: "border-white/10",
+        ghost: "border-white/10 text-slate-200 hover:bg-white/5",
+        primary: "bg-white text-[#001F3F] hover:bg-blue-50",
+        link: "text-white underline-offset-4 hover:underline",
+      }
+    : {
+        page: "bg-[#F8FAFC] text-[#001F3F]",
+        card: "bg-white border-[#CBD5E1] shadow-sm",
+        heading: "text-[#001F3F]",
+        muted: "text-slate-500",
+        seg: "bg-[#F8FAFC] border-[#CBD5E1]",
+        segIdle: "text-slate-500 hover:text-[#001F3F] hover:bg-white",
+        segOn: "bg-[#001F3F] text-white shadow-sm",
+        input:
+          "bg-[#F8FAFC] border-[#CBD5E1] text-[#001F3F] placeholder:text-slate-400 focus:border-[#001F3F] focus:bg-white",
+        divider: "border-[#CBD5E1]",
+        ghost: "border-[#CBD5E1] text-[#001F3F] hover:bg-white",
+        primary: "bg-[#001F3F] text-white hover:bg-black",
+        link: "text-[#001F3F] underline-offset-4 hover:underline",
+      };
+
+  const selected = CRM_CONFIG[crmType];
+  const SelIcon = selected.icon;
+
   return (
-    <div
-      className={`min-h-screen transition-colors duration-500 flex flex-col ${
-        isDark ? "bg-[#000814] text-white" : "bg-white text-black"
-      }`}
-    >
-      {/* --- Terminal Navigation Bar --- */}
-      <div
-        className={`w-full py-4 px-6 border-b flex justify-between items-center ${
-          isDark
-            ? "border-white/5 bg-[#001F3F]/30"
-            : "border-slate-100 bg-[#F8FAFC]"
-        }`}
-      >
-        <button
-          onClick={() => navigate("/")}
-          className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.25em] text-slate-400 hover:text-black dark:hover:text-white transition-all"
-        >
-          <FiChevronLeft size={16} /> Back to System Home
-        </button>
-        <div className="flex items-center gap-2">
-          <FiActivity className="text-green-500" size={14} />
-          <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">
-            Auth_Gateway: Active
+    <div className={`flex min-h-screen ${t.page}`}>
+      {/* ---------- left: navy brand panel (desktop) ---------- */}
+      <aside className="relative hidden w-[44%] max-w-[620px] flex-col justify-between overflow-hidden bg-gradient-to-br from-[#001F3F] to-[#000814] p-10 text-white lg:flex">
+        <div className="pointer-events-none absolute -right-24 top-24 h-72 w-72 rotate-12 rounded-[48px] border-2 border-white/5" />
+        <div className="pointer-events-none absolute -bottom-20 left-16 h-56 w-56 rotate-45 rounded-[40px] border-2 border-white/5" />
+
+        <div className="relative">
+          <BrandLogo />
+        </div>
+
+        <div className="relative space-y-6">
+          <span className="inline-flex items-center gap-2 rounded-lg border border-white/10 bg-white/5 px-2.5 py-1 text-[12px] font-black uppercase tracking-[0.2em]">
+            <FiShield size={12} /> Garage management CRM
           </span>
-        </div>
-      </div>
-
-      <div className="flex-1 flex flex-col justify-center items-center p-6">
-        {/* --- System Header --- */}
-        <div className="text-center mb-12">
-          <div
-            className={`inline-flex items-center gap-3 px-4 py-1.5 rounded-lg border mb-6 ${
-              isDark
-                ? "bg-white/5 border-white/10"
-                : "bg-slate-50 border-slate-200"
-            }`}
-          >
-            <span className="text-[9px] font-black uppercase tracking-[0.3em] text-[#001F3F]">
-              V1.0 Terminal Entry Protocol
+          <h1 className="text-[16px] font-black uppercase leading-snug tracking-tight">
+            Run your whole workshop{" "}
+            <span className="block font-light lowercase italic">
+              from one desk.
             </span>
-          </div>
-          <h1
-            className={`text-4xl lg:text-6xl font-black tracking-tighter mb-4 uppercase ${
-              isDark ? "text-white" : "text-[#001F3F]"
-            }`}
-          >
-            System{" "}
-            <span className="font-light italic lowercase">Authentication.</span>
           </h1>
+          <p className="max-w-sm text-[14px] text-white/60">
+            Sign in to manage customers, services, billing and stock for your
+            garage.
+          </p>
+          <ul className="space-y-2.5">
+            {FEATURES.map((f) => (
+              <li
+                key={f}
+                className="flex items-center gap-3 text-[14px] font-semibold"
+              >
+                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-white text-[#001F3F]">
+                  <FiCheck size={14} strokeWidth={3} />
+                </span>
+                {f}
+              </li>
+            ))}
+          </ul>
         </div>
 
-        {/* --- Authentication Console (Browser Style) --- */}
-        <div
-          className={`relative w-full max-w-lg rounded-[2rem] border-2 transition-all duration-500 overflow-hidden ${
-            isDark
-              ? "bg-[#001F3F] border-white/5 shadow-2xl"
-              : "bg-white border-[#CBD5E1] shadow-xl"
-          }`}
+        <p className="relative text-[12px] font-bold uppercase tracking-[0.2em] text-white/40">
+          © {new Date().getFullYear()} MotorDesk
+        </p>
+      </aside>
+
+      {/* ---------- right: form ---------- */}
+      <div className="flex min-w-0 flex-1 flex-col">
+        <header
+          className={`flex h-14 items-center justify-between gap-3 border-b-2 px-4 sm:px-6 ${t.divider}`}
         >
-          {/* Browser Navigation Controls */}
-          <div
-            className={`px-6 py-3 border-b flex gap-2 ${isDark ? "bg-white/5" : "bg-[#F8FAFC]"}`}
+          <button
+            type="button"
+            onClick={() => navigate("/")}
+            className={`inline-flex h-9 items-center gap-1.5 rounded-xl border-2 px-3 text-[12px] font-black uppercase tracking-[0.15em] transition ${t.ghost}`}
           >
-            <div className="w-2 h-2 rounded-full bg-red-500/80"></div>
-            <div className="w-2 h-2 rounded-full bg-yellow-500/80"></div>
-            <div className="w-2 h-2 rounded-full bg-green-500/80"></div>
-          </div>
+            <FiChevronLeft size={14} /> Home
+          </button>
+          <span className="lg:hidden">
+            <BrandLogo compact />
+          </span>
+          <button
+            type="button"
+            onClick={toggleTheme}
+            className={`inline-flex h-9 w-9 items-center justify-center rounded-xl border-2 transition ${t.ghost}`}
+            aria-label="Toggle theme"
+          >
+            {isDark ? (
+              <FiSun size={14} className="text-amber-400" />
+            ) : (
+              <FiMoon size={14} />
+            )}
+          </button>
+        </header>
 
-          <div className="p-10">
-            {/* Infrastructure Selector HUB */}
-            <div className="bg-[#F8FAFC] border border-[#CBD5E1] rounded-2xl p-1.5 grid grid-cols-2 sm:grid-cols-4 gap-1.5 mb-10 shadow-inner">
-              {Object.entries(CRM_CONFIG).map(([key, config]) => (
-                <button
-                  key={key}
-                  onClick={() => setCrmType(key)}
-                  className={`py-3 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all ${
-                    crmType === key
-                      ? "bg-[#001F3F] text-white shadow-lg"
-                      : "text-slate-400 hover:text-[#001F3F]"
-                  }`}
-                >
-                  {config.label}
-                </button>
-              ))}
+        <main className="flex flex-1 items-center justify-center px-4 py-6 sm:px-6 sm:py-10">
+          <section
+            className={`w-full max-w-md rounded-2xl border-2 p-5 sm:p-7 ${t.card}`}
+          >
+            <div className="mb-5">
+              <h2
+                className={`text-[16px] font-black uppercase tracking-tight ${t.heading}`}
+              >
+                Welcome{" "}
+                <span className="font-light lowercase italic">back.</span>
+              </h2>
+              <p className={`text-[14px] ${t.muted}`}>
+                Sign in to your MotorDesk account.
+              </p>
             </div>
 
-            {/* Login Mode Toggle Protocol */}
-            <div className="relative flex w-full p-1 bg-[#F8FAFC] border border-[#CBD5E1] rounded-xl mb-10">
+            {/* business type */}
+            <p
+              className={`mb-1.5 text-[12px] font-bold uppercase tracking-wider ${t.muted}`}
+            >
+              Business type
+            </p>
+            <div
+              className={`mb-4 grid grid-cols-4 gap-1 rounded-xl border-2 p-1 ${t.seg}`}
+              role="radiogroup"
+              aria-label="Business type"
+            >
+              {Object.entries(CRM_CONFIG).map(([key, cfg]) => {
+                const Icon = cfg.icon;
+                const active = crmType === key;
+                return (
+                  <button
+                    key={key}
+                    type="button"
+                    role="radio"
+                    aria-checked={active}
+                    onClick={() => pickCrm(key)}
+                    title={cfg.label}
+                    className={`flex flex-col items-center justify-center gap-1 rounded-lg px-1 py-2 text-[12px] font-black uppercase tracking-wider transition ${
+                      active ? t.segOn : t.segIdle
+                    }`}
+                  >
+                    <Icon size={16} />
+                    <span className="truncate">{cfg.short}</span>
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* owner / staff */}
+            {staffAllowed ? (
               <div
-                className={`absolute top-1 bottom-1 left-1 w-[calc(50%-4px)] rounded-lg shadow-lg transition-all duration-500 ease-[cubic-bezier(0.34,1.56,0.64,1)] ${
-                  loginMode === "staff" ? "translate-x-full" : "translate-x-0"
-                } bg-[#001F3F]`}
-              />
+                className={`mb-5 grid grid-cols-2 gap-1 rounded-xl border-2 p-1 ${t.seg}`}
+                role="radiogroup"
+                aria-label="Account type"
+              >
+                {["owner", "staff"].map((mode) => (
+                  <button
+                    key={mode}
+                    type="button"
+                    role="radio"
+                    aria-checked={loginMode === mode}
+                    onClick={() => {
+                      setLoginMode(mode);
+                      setError("");
+                    }}
+                    className={`h-9 rounded-lg text-[12px] font-black uppercase tracking-[0.15em] transition ${loginMode === mode ? t.segOn : t.segIdle}`}
+                  >
+                    {mode === "owner" ? "Owner" : "Staff"}
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <p
+                className={`mb-5 rounded-xl border-2 px-3 py-2 text-[12px] font-semibold ${t.seg} ${t.muted}`}
+              >
+                {selected.label} accounts sign in as owner.
+              </p>
+            )}
 
-              <button
-                onClick={() => setLoginMode("owner")}
-                className={`relative z-10 flex-1 py-3 text-[10px] font-black uppercase tracking-widest transition-all ${
-                  loginMode === "owner" ? "text-white" : "text-slate-400"
-                }`}
-              >
-                Owner Node
-              </button>
-              <button
-                onClick={() => setLoginMode("staff")}
-                className={`relative z-10 flex-1 py-3 text-[10px] font-black uppercase tracking-widest transition-all ${
-                  loginMode === "staff" ? "text-white" : "text-slate-400"
-                }`}
-              >
-                Staff Node
-              </button>
-            </div>
             {error && (
-              <div className="p-3 bg-red-500/10 border border-red-500 text-red-500 text-sm rounded-lg mb-4">
-                {error}
+              <div
+                role="alert"
+                className="mb-4 flex items-start gap-2 rounded-xl border-2 border-red-500/30 bg-red-500/10 px-3 py-2.5 text-[14px] font-semibold text-red-500"
+              >
+                <FiAlertCircle className="mt-0.5 shrink-0" size={14} /> {error}
               </div>
             )}
 
-            <form onSubmit={handleSubmit} className="space-y-6">
-              <InputField
-                label="Identity Name"
-                icon={<FiUser />}
-                name="identifier"
-                value={formData.identifier}
-                onChange={handleInputChange}
-                placeholder="Email or Username"
-                isDark={isDark}
-              />
-
-              <div className="space-y-3 relative">
+            <form onSubmit={handleSubmit} className="space-y-4" noValidate>
+              <div>
                 <label
-                  className={`text-[10px] font-black uppercase tracking-widest ml-1 flex items-center gap-2 ${isDark ? "text-slate-400" : "text-[#001F3F]"}`}
+                  htmlFor="identifier"
+                  className={`mb-1.5 block text-[12px] font-bold uppercase tracking-wider ${t.heading}`}
                 >
-                  <FiLock className="text-blue-500" /> Access Protocol
+                  {isStaff ? "Staff email" : "Email or username"}
                 </label>
                 <div className="relative">
-                  <input
-                    type={showPassword ? "text" : "password"}
-                    name="password"
-                    value={formData.password}
-                    onChange={handleInputChange}
-                    required
-                    className={`w-full px-5 py-4 rounded-xl border-2 outline-none transition-all text-[12px] font-bold ${
-                      isDark
-                        ? "bg-white/5 border-white/10 focus:border-white text-white"
-                        : "bg-[#F8FAFC] border-[#CBD5E1] focus:border-[#001F3F] text-[#001F3F]"
-                    }`}
-                    placeholder="Security Token"
+                  <FiUser
+                    className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400"
+                    size={14}
                   />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-[#001F3F]"
-                  >
-                    {showPassword ? <FiEyeOff /> : <FiEye />}
-                  </button>
+                  <input
+                    id="identifier"
+                    name="identifier"
+                    type={isStaff ? "email" : "text"}
+                    inputMode={isStaff ? "email" : "text"}
+                    autoComplete="username"
+                    autoCapitalize="none"
+                    spellCheck={false}
+                    value={formData.identifier}
+                    onChange={handleInputChange}
+                    placeholder={
+                      isStaff ? "staff@yourgarage.com" : "you@example.com"
+                    }
+                    className={`h-11 w-full rounded-xl border-2 pl-10 pr-3 text-[14px] font-semibold outline-none transition ${t.input}`}
+                  />
                 </div>
               </div>
 
-              {/* Initialize Command Button */}
+              <div>
+                <label
+                  htmlFor="password"
+                  className={`mb-1.5 block text-[12px] font-bold uppercase tracking-wider ${t.heading}`}
+                >
+                  Password
+                </label>
+                <div className="relative">
+                  <FiLock
+                    className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400"
+                    size={14}
+                  />
+                  <input
+                    id="password"
+                    name="password"
+                    type={showPassword ? "text" : "password"}
+                    autoComplete="current-password"
+                    value={formData.password}
+                    onChange={handleInputChange}
+                    onKeyUp={(e) =>
+                      setCapsLock(e.getModifierState?.("CapsLock"))
+                    }
+                    placeholder="Your password"
+                    className={`h-11 w-full rounded-xl border-2 pl-10 pr-11 text-[14px] font-semibold outline-none transition ${t.input}`}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword((s) => !s)}
+                    className="absolute right-1.5 top-1/2 inline-flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-lg text-slate-400 transition hover:text-slate-200"
+                    aria-label={
+                      showPassword ? "Hide password" : "Show password"
+                    }
+                  >
+                    {showPassword ? (
+                      <FiEyeOff size={14} />
+                    ) : (
+                      <FiEye size={14} />
+                    )}
+                  </button>
+                </div>
+                {capsLock && (
+                  <p className="mt-1 text-[12px] font-bold text-amber-500">
+                    Caps Lock is on
+                  </p>
+                )}
+              </div>
+
               <button
                 type="submit"
                 disabled={isLoading}
-                className="w-full py-5 rounded-xl bg-[#001F3F] text-white font-black text-[11px] uppercase tracking-[0.3em] shadow-xl hover:bg-black border border-white/10 transition-all active:scale-95 disabled:opacity-50 flex items-center justify-center gap-3"
+                className={`inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl text-[12px] font-black uppercase tracking-[0.15em] shadow-lg transition active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-60 ${t.primary}`}
               >
                 {isLoading ? (
-                  <FiActivity className="animate-spin" />
+                  <>
+                    <FiLoader className="animate-spin" size={14} /> Signing in…
+                  </>
                 ) : (
                   <>
-                    Initialize Session <FiLogIn />
+                    <SelIcon size={14} /> Sign in to {selected.label}{" "}
+                    <FiLogIn size={14} />
                   </>
                 )}
               </button>
             </form>
 
-            <div className="mt-8 pt-8 border-t border-slate-100 text-center">
-              <div className="flex items-center justify-center gap-2 text-[9px] font-black uppercase tracking-widest text-slate-400">
-                <FiShield className="text-green-500" />
-                <span>Secure Transmission Active: 256-bit AES</span>
-              </div>
+            <div
+              className={`mt-5 space-y-2 border-t-2 pt-4 text-center ${t.divider}`}
+            >
+              {isStaff ? (
+                <p className={`text-[12px] ${t.muted}`}>
+                  Staff logins are created by the garage owner.
+                </p>
+              ) : (
+                <p className={`text-[14px] ${t.muted}`}>
+                  New to MotorDesk?{" "}
+                  <Link
+                    to={selected.register}
+                    className={`font-black ${t.link}`}
+                  >
+                    Create a {selected.label.toLowerCase()} account
+                  </Link>
+                </p>
+              )}
+              <p
+                className={`flex items-center justify-center gap-1.5 text-[12px] ${t.muted}`}
+              >
+                <FiShield className="text-green-500" size={12} /> Secure,
+                encrypted sign-in
+              </p>
             </div>
-          </div>
-        </div>
+          </section>
+        </main>
 
-        {/* --- Micro Registry Footer --- */}
-        <p className="mt-12 text-[9px] font-black text-slate-500 uppercase tracking-[0.4em]">
-          © {new Date().getFullYear()} MotorDesk Platform • Node Entry
-          Restricted
-        </p>
+        <footer
+          className={`px-4 pb-5 text-center text-[12px] lg:hidden ${t.muted}`}
+        >
+          © {new Date().getFullYear()} MotorDesk
+        </footer>
       </div>
     </div>
   );
 }
-
-const InputField = ({
-  label,
-  icon,
-  name,
-  value,
-  onChange,
-  placeholder,
-  isDark,
-}) => (
-  <div className="space-y-3">
-    <label
-      className={`text-[10px] font-black uppercase tracking-widest ml-1 flex items-center gap-2 ${isDark ? "text-slate-400" : "text-[#001F3F]"}`}
-    >
-      {React.cloneElement(icon, { className: "text-blue-500" })} {label}
-    </label>
-    <input
-      type="text"
-      name={name}
-      value={value}
-      onChange={onChange}
-      required
-      className={`w-full px-5 py-4 rounded-xl border-2 outline-none transition-all text-[12px] font-bold ${
-        isDark
-          ? "bg-white/5 border-white/10 focus:border-white text-white"
-          : "bg-[#F8FAFC] border-[#CBD5E1] focus:border-[#001F3F] text-[#001F3F]"
-      }`}
-      placeholder={placeholder}
-    />
-  </div>
-);

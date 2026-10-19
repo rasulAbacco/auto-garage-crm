@@ -1933,7 +1933,7 @@ model AppNotification {
 model Inventory {
   id Int @id @default(autoincrement())
 
-  itemCode   String  @unique
+  itemCode   String // unique per garage (see @@unique below), not globally
   itemName   String
   category   String
   brand      String?
@@ -1960,6 +1960,8 @@ model Inventory {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  // Same code can exist in different garages, but not twice in one garage
+  @@unique([userId, itemCode])
   @@index([userId])
   @@index([category])
 }

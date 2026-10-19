@@ -1,5 +1,19 @@
-import { useEffect, useState } from "react";
-import { useTheme } from "../../contexts/ThemeContext"; // ✅ Import Theme Context
+import { useEffect, useMemo, useState } from "react";
+import {
+  Database,
+  Plus,
+  PencilLine,
+  Trash2,
+  Search,
+  X,
+  Table2,
+  Columns3,
+  Check,
+  Minus,
+  Rows3,
+  ArrowLeft,
+} from "lucide-react";
+import { useTheme } from "../../contexts/ThemeContext";
 import ExcelUpload from "../../components/DynamicData/ExcelUpload.jsx";
 import {
   getDynamicTables,
@@ -19,9 +33,68 @@ import EditRowModal from "../../components/DynamicData/EditRowModal.jsx";
 import TableManager from "../../components/DynamicData/TableManager.jsx";
 import ColumnManager from "../../components/DynamicData/ColumnManager.jsx";
 import ToastStack from "../../components/DynamicData/Toast.jsx";
+import {
+  tk,
+  btnBase,
+  ConfirmDialog,
+  PageHeading,
+} from "../../components/DynamicData/DynamicUi.jsx";
+
+/* ---------- cell display by column type ---------- */
+const fmtDate = (v) => {
+  const s = String(v);
+  const m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  const d = m
+    ? new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]))
+    : new Date(v);
+  return Number.isNaN(d.getTime())
+    ? s
+    : d.toLocaleDateString("en-IN", {
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+      });
+};
+
+const isEmptyVal = (v) => v === null || v === undefined || v === "";
+
+const displayText = (col, v) => {
+  if (isEmptyVal(v)) return "";
+  if (col.type === "BOOLEAN") return v === true || v === "true" ? "Yes" : "No";
+  if (col.type === "DATE") return fmtDate(v);
+  if (col.type === "NUMBER" && !Number.isNaN(Number(v)))
+    return Number(v).toLocaleString("en-IN");
+  return String(v);
+};
+
+function Cell({ col, value, isDark }) {
+  const t = tk(isDark);
+  if (isEmptyVal(value))
+    return <span className={`text-[12px] italic ${t.muted}`}>—</span>;
+  if (col.type === "BOOLEAN") {
+    const yes = value === true || value === "true";
+    return (
+      <span
+        className={`inline-flex items-center gap-1 rounded-lg border px-2 py-0.5 text-[12px] font-black uppercase tracking-wider ${
+          yes
+            ? "border-green-500/30 bg-green-500/10 text-green-600"
+            : "border-slate-500/30 bg-slate-500/10 text-slate-500"
+        }`}
+      >
+        {yes ? <Check size={12} /> : <Minus size={12} />} {yes ? "Yes" : "No"}
+      </span>
+    );
+  }
+  return (
+    <span className={col.type === "NUMBER" ? "font-mono" : ""}>
+      {displayText(col, value)}
+    </span>
+  );
+}
 
 const DynamicData = () => {
-  const { isDark } = useTheme(); // ✅ Get Theme State
+  const { isDark } = useTheme();
+  const t = tk(isDark);
 
   const [tables, setTables] = useState([]);
   const [selectedTableId, setSelectedTableId] = useState("");
@@ -32,26 +105,23 @@ const DynamicData = () => {
   const [loadingTable, setLoadingTable] = useState(false);
   const [importProgress, setImportProgress] = useState(null); // { current, total } | null
   const [toasts, setToasts] = useState([]);
+  const [search, setSearch] = useState("");
+  const [deleteRowTarget, setDeleteRowTarget] = useState(null);
+  const [deletingRow, setDeletingRow] = useState(false);
 
-  /**
-   * TOASTS (replaces blocking window.alert())
-   */
+  /* ---------- toasts ---------- */
   const showToast = (message, type = "info") => {
     const id = Date.now() + Math.random();
     setToasts((prev) => [...prev, { id, message, type }]);
   };
+  const dismissToast = (id) =>
+    setToasts((prev) => prev.filter((x) => x.id !== id));
 
-  const dismissToast = (id) => {
-    setToasts((prev) => prev.filter((t) => t.id !== id));
-  };
-
-  /**
-   * LOADERS
-   */
+  /* ---------- loaders ---------- */
   const loadTables = async () => {
     try {
       const res = await getDynamicTables();
-      setTables(res.data);
+      setTables(Array.isArray(res.data) ? res.data : res.data?.data || []);
     } catch (error) {
       showToast(
         error?.response?.data?.message || "Failed to load tables",
@@ -64,8 +134,8 @@ const DynamicData = () => {
     try {
       setLoadingTable(true);
       const res = await getDynamicTableDetails(tableId);
-      setColumns(res.data.columns);
-      setRows(res.data.rows);
+      setColumns(res.data?.columns || []);
+      setRows(res.data?.rows || []);
     } catch (error) {
       showToast(
         error?.response?.data?.message || "Failed to load table details",
@@ -81,43 +151,22 @@ const DynamicData = () => {
   }, []);
 
   useEffect(() => {
-    if (selectedTableId) {
-      loadTableDetails(selectedTableId);
-    } else {
+    setSearch("");
+    if (selectedTableId) loadTableDetails(selectedTableId);
+    else {
       setColumns([]);
       setRows([]);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedTableId]);
 
-  /**
-   * ACTIONS
-   */
+  /* ---------- table actions ---------- */
   const handleCreateTable = async (name) => {
     try {
       const res = await createDynamicTable(name);
-
-      // 🆕 FIXED: this used to only do an optimistic
-      // `setTables(prev => [...prev, res.data])`, which silently failed to
-      // show the new table unless `res.data` happened to be EXACTLY the
-      // shape TableManager expects. If the backend returns a wrapped
-      // response (e.g. `{ success, data: {...} }` — the pattern used
-      // throughout the rest of this API), the appended item is malformed
-      // and only a full page refresh (which properly calls
-      // getDynamicTables() again) ever showed it correctly.
-      //
-      // Fix: just refetch from the server, exactly like handleRenameTable
-      // and handleDeleteTable already do below — guaranteed correct
-      // regardless of the exact response shape, and still shows up
-      // immediately (no page reload needed).
-      await loadTables();
-
-      // Handle both a raw table object and a { success, data } wrapper
-      // when picking which table to auto-select.
+      await loadTables(); // refetch so the new table always shows, whatever the response shape
       const newTable = res?.data?.data ?? res?.data ?? null;
-      if (newTable?.id) {
-        setSelectedTableId(newTable.id);
-      }
-
+      if (newTable?.id) setSelectedTableId(newTable.id);
       showToast(`Table "${name}" created`, "success");
     } catch (error) {
       showToast(
@@ -140,11 +189,11 @@ const DynamicData = () => {
     }
   };
 
+  // TableManager already asks "Delete table?" before calling this
   const handleDeleteTable = async (id) => {
-    if (!window.confirm("Delete table permanently?")) return;
     try {
       await deleteDynamicTable(id);
-      setSelectedTableId("");
+      if (selectedTableId === id) setSelectedTableId("");
       loadTables();
       showToast("Table deleted", "success");
     } catch (error) {
@@ -155,6 +204,7 @@ const DynamicData = () => {
     }
   };
 
+  /* ---------- column actions ---------- */
   const handleAddColumn = async (column) => {
     try {
       await createDynamicColumn({
@@ -170,7 +220,7 @@ const DynamicData = () => {
         error?.response?.data?.message || "Failed to add column",
         "error",
       );
-      throw error; // let the modal know so it doesn't close/reset optimistically
+      throw error; // keeps the modal open
     }
   };
 
@@ -191,9 +241,8 @@ const DynamicData = () => {
     }
   };
 
+  // ColumnManager already asks "Delete column?" before calling this
   const handleDeleteColumn = async (columnId) => {
-    if (!window.confirm("Deleting a column will remove its data. Continue?"))
-      return;
     try {
       await deleteDynamicColumn(columnId);
       await loadTableDetails(selectedTableId);
@@ -206,38 +255,36 @@ const DynamicData = () => {
     }
   };
 
-  const handleDeleteRow = async (rowId) => {
-    if (!window.confirm("Are you sure you want to delete this row?")) return;
+  /* ---------- row actions ---------- */
+  const confirmDeleteRow = async () => {
+    if (!deleteRowTarget) return;
+    setDeletingRow(true);
     try {
-      await deleteDynamicRow(rowId);
+      await deleteDynamicRow(deleteRowTarget.id);
       await loadTableDetails(selectedTableId);
-      showToast("Row deleted", "success");
+      showToast("Record deleted", "success");
+      setDeleteRowTarget(null);
     } catch (error) {
       showToast(
-        error?.response?.data?.message || "Failed to delete row",
+        error?.response?.data?.message || "Failed to delete record",
         "error",
       );
+    } finally {
+      setDeletingRow(false);
     }
   };
 
-  /**
-   * EXCEL IMPORT
-   * Hardened version: never throws uncaught, dedupes column names within the
-   * same batch (case-insensitively), reports progress, and gives a clear
-   * success/failure summary instead of silently dying partway through.
-   */
+  /* ---------- excel import ---------- */
   const handleExcelImport = async (excelRows) => {
     if (!selectedTableId || excelRows.length === 0 || importProgress) return;
 
     try {
       const firstRow = excelRows[0];
 
-      // 1️⃣ Work out which columns are genuinely new, case-insensitively,
-      //    and don't try to create the same "new" column twice in one batch.
+      // 1. new columns only (case-insensitive, no duplicates in one batch)
       const existingNames = new Set(columns.map((c) => c.name.toLowerCase()));
       const plannedNames = new Set();
       const columnsToCreate = [];
-
       for (const key of Object.keys(firstRow)) {
         const lower = key.toLowerCase();
         if (!existingNames.has(lower) && !plannedNames.has(lower)) {
@@ -251,11 +298,10 @@ const DynamicData = () => {
           await createDynamicColumn({
             tableId: selectedTableId,
             name: key,
-            type: "TEXT", // ✅ ALWAYS TEXT
+            type: "TEXT",
             required: false,
           });
         } catch (err) {
-          // A 409 (name already exists) is safe to ignore and continue with import.
           if (err?.response?.status !== 409) {
             throw new Error(
               err?.response?.data?.message ||
@@ -265,12 +311,16 @@ const DynamicData = () => {
         }
       }
 
-      // Reload columns to get IDs (including any just created)
       const updated = await getDynamicTableDetails(selectedTableId);
       const updatedColumns = updated.data.columns;
 
-      // 2️⃣ Insert rows one at a time, tracking progress + collecting failures
-      //    so one bad row doesn't silently kill the whole import.
+      // match Excel headers to columns case-insensitively
+      const headerFor = {};
+      Object.keys(firstRow).forEach((k) => {
+        headerFor[k.toLowerCase()] = k;
+      });
+
+      // 2. insert rows one by one, counting failures
       let successCount = 0;
       let failCount = 0;
       setImportProgress({ current: 0, total: excelRows.length });
@@ -278,40 +328,30 @@ const DynamicData = () => {
       for (let i = 0; i < excelRows.length; i++) {
         const row = excelRows[i];
         const data = {};
-
         updatedColumns.forEach((col) => {
-          data[col.id] =
-            row[col.name] !== undefined && row[col.name] !== ""
-              ? String(row[col.name])
-              : null;
+          const key = headerFor[String(col.name).toLowerCase()] ?? col.name;
+          const v = row[key];
+          data[col.id] = v !== undefined && v !== "" ? String(v) : null;
         });
 
         try {
-          await createDynamicRow({
-            tableId: selectedTableId,
-            data,
-          });
+          await createDynamicRow({ tableId: selectedTableId, data });
           successCount++;
-        } catch (err) {
+        } catch {
           failCount++;
         }
-
         setImportProgress({ current: i + 1, total: excelRows.length });
       }
 
       await loadTableDetails(selectedTableId);
 
-      if (failCount === 0) {
-        showToast(
-          `Imported ${successCount} row${successCount !== 1 ? "s" : ""} successfully`,
-          "success",
-        );
-      } else {
-        showToast(
-          `Imported ${successCount} row${successCount !== 1 ? "s" : ""}, ${failCount} failed`,
-          "warning",
-        );
-      }
+      const done = `Imported ${successCount} row${successCount !== 1 ? "s" : ""}`;
+      showToast(
+        failCount === 0
+          ? `${done} successfully`
+          : `${done}, ${failCount} failed`,
+        failCount === 0 ? "success" : "warning",
+      );
     } catch (error) {
       showToast(
         error?.message ||
@@ -323,251 +363,403 @@ const DynamicData = () => {
     }
   };
 
+  /* ---------- derived ---------- */
+  const selectedTable = tables.find((x) => x.id === selectedTableId);
+
+  const visibleRows = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return rows;
+    return rows.filter((r) =>
+      columns.some((c) =>
+        displayText(c, r.values?.[c.id]).toLowerCase().includes(q),
+      ),
+    );
+  }, [rows, columns, search]);
+
+  const firstCol = columns[0];
+  const restCols = columns.slice(1);
+  const th =
+    "whitespace-nowrap px-4 py-3 text-[12px] font-black uppercase tracking-wider text-slate-400";
+  const iconBtn = (danger) =>
+    `flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border-2 transition ${
+      danger
+        ? isDark
+          ? "border-white/10 text-slate-300 hover:border-red-500/40 hover:bg-red-500/10 hover:text-red-400"
+          : "border-[#CBD5E1] text-slate-500 hover:border-red-300 hover:bg-red-50 hover:text-red-600"
+        : t.btnGhost
+    }`;
+
   return (
-    <div
-      className={`min-h-screen lg:ml-16 transition-colors duration-300 p-4 md:p-8 ${
-        isDark ? "bg-gray-900 text-gray-100" : "bg-white text-slate-800"
-      }`}
-    >
+    <div className="min-h-screen min-w-0 overflow-x-clip lg:ml-20">
       <ToastStack toasts={toasts} onDismiss={dismissToast} isDark={isDark} />
 
-      {/* Header Section */}
-      <header className="mb-8 md:mb-10">
-        <h1
-          className={`text-3xl md:text-4xl font-black tracking-tight ${
-            isDark ? "text-white" : "text-slate-900"
-          }`}
-        >
-          Dynamic Data <span className="text-blue-500">Tables</span>
-        </h1>
-        <p
-          className={`font-medium mt-2 text-sm md:text-base ${
-            isDark ? "text-gray-400" : "text-slate-500"
-          }`}
-        >
-          Manage your database structures with a clean, flexible interface.
-        </p>
-      </header>
+      <div className="mx-auto w-full min-w-0 max-w-[1600px] space-y-4 sm:space-y-5">
+        <PageHeading
+          isDark={isDark}
+          title="Custom"
+          accent="tables."
+          subtitle="Keep any list you need — tyre stock, insurance renewals, suppliers — with your own columns."
+        />
 
-      <div className="flex flex-col gap-6 md:gap-10">
-        {/* TABLE MANAGER SECTION */}
-        <section
-          className={`p-1 rounded-xl border-b-2 transition-all ${
-            isDark ? "bg-gray-800 border-gray-700" : "bg-white border-slate-100"
-          }`}
-        >
-          <TableManager
-            tables={tables}
-            selectedTableId={selectedTableId}
-            onSelect={setSelectedTableId}
-            onCreate={handleCreateTable}
-            onRename={handleRenameTable}
-            onDelete={handleDeleteTable}
-            isDark={isDark}
-          />
-        </section>
-
-        {/* Passing isDark to child components if needed */}
-        {selectedTableId && (
-          <ExcelUpload
-            isDark={isDark}
-            onProceed={handleExcelImport}
-            importProgress={importProgress}
-          />
-        )}
-
-        {/* COLUMN MANAGER SECTION */}
-        {selectedTableId && (
-          <section className="animate-in fade-in slide-in-from-bottom-2 duration-500">
-            <div
-              className={`p-4 md:p-6 rounded-2xl border shadow-sm ${
-                isDark
-                  ? "bg-gray-800 border-gray-700"
-                  : "bg-white border-slate-200"
-              }`}
-            >
-              <ColumnManager
-                columns={columns}
-                onAdd={handleAddColumn}
-                onEdit={handleEditColumn}
-                onDelete={handleDeleteColumn}
-                isDark={isDark}
-              />
-            </div>
-          </section>
-        )}
-
-        {/* EMPTY STATE: table selected but no columns yet */}
-        {selectedTableId && !loadingTable && columns.length === 0 && (
+        <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] items-start gap-4 lg:grid-cols-[320px_minmax(0,1fr)] xl:grid-cols-[360px_minmax(0,1fr)]">
+          {/* left: tables */}
           <div
-            className={`rounded-3xl border-2 border-dashed p-10 md:p-14 text-center ${
-              isDark
-                ? "border-gray-700 text-gray-500"
-                : "border-slate-200 text-slate-400"
-            }`}
+            className={`min-w-0 lg:sticky lg:top-4 ${selectedTableId ? "hidden lg:block" : ""}`}
           >
-            <p className="font-bold text-lg mb-1">No columns yet</p>
-            <p className="text-sm font-medium">
-              Add at least one column above, or import an Excel file, before
-              adding records.
-            </p>
+            <TableManager
+              tables={tables}
+              selectedTableId={selectedTableId}
+              onSelect={setSelectedTableId}
+              onCreate={handleCreateTable}
+              onRename={handleRenameTable}
+              onDelete={handleDeleteTable}
+              isDark={isDark}
+            />
           </div>
-        )}
 
-        {/* DATA GRID SECTION */}
-        {selectedTableId && columns.length > 0 && (
-          <div
-            className={`mt-2 rounded-3xl border overflow-hidden ${
-              isDark
-                ? "bg-gray-800 border-gray-700"
-                : "bg-white border-slate-200 shadow-2xl shadow-slate-200/50"
-            }`}
-          >
-            <div
-              className={`p-4 md:p-6 border-b flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 sm:gap-4 ${
-                isDark
-                  ? "border-gray-700 bg-gray-800"
-                  : "border-slate-100 bg-slate-50/30"
-              }`}
-            >
-              <div>
-                <h2
-                  className={`font-bold text-xl md:text-2xl ${
-                    isDark ? "text-white" : "text-slate-900"
-                  }`}
+          {/* right: selected table */}
+          <div className="min-w-0 space-y-3 sm:space-y-4">
+            {!selectedTableId ? (
+              <div
+                className={`hidden flex-col items-center justify-center rounded-2xl border-2 px-4 py-16 text-center lg:flex ${t.card}`}
+              >
+                <div
+                  className={`mb-3 flex h-12 w-12 items-center justify-center rounded-2xl ${t.chipNavy}`}
                 >
-                  Table Records
-                </h2>
-                <p
-                  className={`text-sm ${isDark ? "text-gray-500" : "text-slate-400"}`}
+                  <Database size={20} />
+                </div>
+                <h3
+                  className={`text-[14px] font-black uppercase tracking-tight ${t.heading}`}
                 >
-                  {rows.length} row{rows.length !== 1 ? "s" : ""} · viewing all
-                  active records
+                  Pick a{" "}
+                  <span className="font-light lowercase italic">table</span>
+                </h3>
+                <p className={`mt-1 max-w-sm text-[14px] ${t.muted}`}>
+                  Choose a table, or create a new one, to add columns and
+                  records.
                 </p>
               </div>
-              <button
-                className="w-full sm:w-auto flex items-center justify-center gap-2 px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl transition-all shadow-lg shadow-blue-500/30 active:scale-95 font-bold text-sm"
-                onClick={() => setShowAddModal(true)}
-              >
-                + Add New Entry
-              </button>
-            </div>
-
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm text-left">
-                <thead
-                  className={`text-xs uppercase border-b font-bold ${
-                    isDark
-                      ? "bg-gray-800 border-gray-700 text-gray-400"
-                      : "bg-white border-slate-100 text-slate-400"
-                  }`}
+            ) : (
+              <>
+                {/* selected table title bar */}
+                <div
+                  className={`flex min-w-0 items-center gap-2 rounded-2xl border-2 px-2.5 py-2.5 sm:gap-3 sm:px-4 sm:py-3 ${t.card}`}
                 >
-                  <tr>
-                    {columns.map((col) => (
-                      <th
-                        key={col.id}
-                        className="px-8 py-5 tracking-widest whitespace-nowrap"
-                      >
-                        {col.name}
-                      </th>
-                    ))}
-                    <th className="px-8 py-5 tracking-widest text-right whitespace-nowrap">
-                      Actions
-                    </th>
-                  </tr>
-                </thead>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedTableId("")}
+                    aria-label="Back to all tables"
+                    className={`lg:hidden ${iconBtn(false)}`}
+                  >
+                    <ArrowLeft size={14} />
+                  </button>
+                  <span
+                    className={`hidden h-9 w-9 shrink-0 items-center justify-center rounded-xl sm:flex ${t.chipNavy}`}
+                  >
+                    <Table2 size={16} />
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-[12px] font-bold uppercase tracking-wider text-slate-400">
+                      Open table
+                      <span className="normal-case tracking-normal sm:hidden">
+                        {" "}
+                        · {columns.length} col · {rows.length} rec
+                      </span>
+                    </p>
+                    <h2
+                      className={`truncate text-[16px] font-black uppercase tracking-tight ${t.heading}`}
+                    >
+                      {selectedTable?.name || "Table"}
+                    </h2>
+                  </div>
+                  <div className="hidden gap-2 sm:flex">
+                    <span
+                      className={`inline-flex items-center gap-1 rounded-lg border px-2 py-0.5 text-[12px] font-black uppercase tracking-wider ${t.inner} ${t.body}`}
+                    >
+                      <Columns3 size={12} /> {columns.length}
+                    </span>
+                    <span
+                      className={`inline-flex items-center gap-1 rounded-lg border px-2 py-0.5 text-[12px] font-black uppercase tracking-wider ${t.inner} ${t.body}`}
+                    >
+                      <Rows3 size={12} /> {rows.length}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedTableId("")}
+                    aria-label="Close table"
+                    className={`hidden lg:flex ${iconBtn(false)}`}
+                  >
+                    <X size={14} />
+                  </button>
+                </div>
 
-                <tbody
-                  className={`divide-y ${
-                    isDark ? "divide-gray-700" : "divide-slate-50"
-                  }`}
-                >
-                  {loadingTable ? (
-                    <tr>
-                      <td
-                        colSpan={columns.length + 1}
-                        className={`px-8 py-24 text-center font-bold text-lg ${
-                          isDark ? "text-gray-600" : "text-slate-300"
-                        }`}
-                      >
-                        Loading...
-                      </td>
-                    </tr>
-                  ) : rows.length > 0 ? (
-                    rows.map((row) => (
-                      <tr
-                        key={row.id}
-                        className={`transition-colors group ${
-                          isDark
-                            ? "hover:bg-gray-700/50"
-                            : "hover:bg-slate-50/50"
-                        }`}
-                      >
-                        {columns.map((col) => (
-                          <td
-                            key={col.id}
-                            className={`px-8 py-5 whitespace-nowrap font-semibold ${
-                              isDark ? "text-gray-300" : "text-slate-700"
-                            }`}
-                          >
-                            {row.values[col.id] ?? (
-                              <span
-                                className={`italic font-normal ${
-                                  isDark ? "text-gray-600" : "text-slate-300"
-                                }`}
-                              >
-                                empty
-                              </span>
-                            )}
-                          </td>
+                <ExcelUpload
+                  isDark={isDark}
+                  onProceed={handleExcelImport}
+                  importProgress={importProgress}
+                />
+
+                <ColumnManager
+                  columns={columns}
+                  onAdd={handleAddColumn}
+                  onEdit={handleEditColumn}
+                  onDelete={handleDeleteColumn}
+                  isDark={isDark}
+                />
+
+                {/* records */}
+                {!loadingTable && columns.length === 0 ? (
+                  <div
+                    className={`rounded-2xl border-2 border-dashed px-4 py-10 text-center ${t.line}`}
+                  >
+                    <p
+                      className={`text-[14px] font-black uppercase tracking-tight ${t.heading}`}
+                    >
+                      No columns yet
+                    </p>
+                    <p className={`mt-1 text-[14px] ${t.muted}`}>
+                      Add at least one column above, or import an Excel file,
+                      before adding records.
+                    </p>
+                  </div>
+                ) : (
+                  <section
+                    className={`min-w-0 overflow-hidden rounded-2xl border-2 ${t.card}`}
+                  >
+                    <div
+                      className={`flex min-w-0 flex-col gap-3 border-b-2 px-3 py-3 sm:flex-row sm:items-center sm:px-4 ${t.cardHead}`}
+                    >
+                      <div className="min-w-0 flex-1">
+                        <h2
+                          className={`text-[14px] font-black uppercase tracking-tight ${t.heading}`}
+                        >
+                          Table{" "}
+                          <span className="font-light lowercase italic">
+                            records
+                          </span>
+                        </h2>
+                        <p className={`text-[12px] font-medium ${t.muted}`}>
+                          {search
+                            ? `${visibleRows.length} of ${rows.length}`
+                            : rows.length}{" "}
+                          record{rows.length !== 1 ? "s" : ""}
+                        </p>
+                      </div>
+                      <div className="flex min-w-0 gap-2">
+                        <div className="relative min-w-0 flex-1 sm:w-56">
+                          <Search
+                            size={14}
+                            className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
+                          />
+                          <input
+                            value={search}
+                            onChange={(e) => setSearch(e.target.value)}
+                            placeholder="Search records…"
+                            className={`h-10 w-full rounded-xl border-2 pl-9 pr-8 text-[14px] font-semibold outline-none transition ${t.input}`}
+                          />
+                          {search && (
+                            <button
+                              type="button"
+                              onClick={() => setSearch("")}
+                              aria-label="Clear search"
+                              className="absolute right-1.5 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-lg text-slate-400 hover:text-red-500"
+                            >
+                              <X size={12} />
+                            </button>
+                          )}
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setShowAddModal(true)}
+                          disabled={loadingTable || columns.length === 0}
+                          className={`${btnBase} h-10 shrink-0 px-4 shadow-lg ${t.btnPrimary}`}
+                        >
+                          <Plus size={14} />{" "}
+                          <span className="hidden sm:inline">Add record</span>
+                          <span className="sm:hidden">Add</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    {loadingTable ? (
+                      <div className="space-y-2 p-3 sm:p-4">
+                        {[0, 1, 2].map((i) => (
+                          <div
+                            key={i}
+                            className={`h-12 animate-pulse rounded-xl ${isDark ? "bg-white/5" : "bg-[#F8FAFC]"}`}
+                          />
                         ))}
+                      </div>
+                    ) : visibleRows.length === 0 ? (
+                      <div className="px-4 py-12 text-center">
+                        <p
+                          className={`text-[14px] font-black uppercase tracking-tight ${t.heading}`}
+                        >
+                          {rows.length ? "No records match" : "No records yet"}
+                        </p>
+                        <p className={`mt-1 text-[14px] ${t.muted}`}>
+                          {rows.length
+                            ? "Try a different search."
+                            : "Add a record or import an Excel file."}
+                        </p>
+                      </div>
+                    ) : (
+                      <>
+                        {/* desktop / tablet grid */}
+                        <div className="hidden overflow-x-auto md:block">
+                          <table className="w-full border-collapse text-left">
+                            <thead className={`border-b-2 ${t.cardHead}`}>
+                              <tr>
+                                {columns.map((col) => (
+                                  <th
+                                    key={col.id}
+                                    className={`${th} ${col.type === "NUMBER" ? "text-right" : ""}`}
+                                  >
+                                    {col.name}
+                                  </th>
+                                ))}
+                                <th
+                                  className={`${th} sticky right-0 text-right ${isDark ? "bg-[#001F3F]" : "bg-[#F8FAFC]"}`}
+                                >
+                                  Actions
+                                </th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {visibleRows.map((row) => (
+                                <tr
+                                  key={row.id}
+                                  className={`group border-b last:border-0 ${t.line} ${isDark ? "hover:bg-white/5" : "hover:bg-[#F8FAFC]"}`}
+                                >
+                                  {columns.map((col) => (
+                                    <td
+                                      key={col.id}
+                                      className={`max-w-[260px] truncate whitespace-nowrap px-4 py-3 text-[14px] font-semibold ${t.heading} ${
+                                        col.type === "NUMBER"
+                                          ? "text-right"
+                                          : ""
+                                      }`}
+                                      title={displayText(
+                                        col,
+                                        row.values?.[col.id],
+                                      )}
+                                    >
+                                      <Cell
+                                        col={col}
+                                        value={row.values?.[col.id]}
+                                        isDark={isDark}
+                                      />
+                                    </td>
+                                  ))}
+                                  <td
+                                    className={`sticky right-0 px-4 py-2 ${isDark ? "bg-[#001F3F]" : "bg-white"}`}
+                                  >
+                                    <div className="flex justify-end gap-1.5">
+                                      <button
+                                        type="button"
+                                        onClick={() => setEditRow(row)}
+                                        className={iconBtn(false)}
+                                        aria-label="Edit record"
+                                        title="Edit"
+                                      >
+                                        <PencilLine size={14} />
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => setDeleteRowTarget(row)}
+                                        className={iconBtn(true)}
+                                        aria-label="Delete record"
+                                        title="Delete"
+                                      >
+                                        <Trash2 size={14} />
+                                      </button>
+                                    </div>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
 
-                        <td className="px-8 py-5 text-right">
-                          <div className="flex justify-end gap-6 opacity-1 group-hover:opacity-100 transition-opacity">
-                            <button
-                              className={`font-bold ${
-                                isDark
-                                  ? "text-blue-400 hover:text-blue-300"
-                                  : "text-blue-500 hover:text-blue-700"
-                              }`}
-                              onClick={() => setEditRow(row)}
+                        {/* phone cards */}
+                        <div className="space-y-2 p-3 md:hidden">
+                          {visibleRows.map((row) => (
+                            <div
+                              key={row.id}
+                              className={`min-w-0 rounded-xl border-2 p-3 ${t.inner}`}
                             >
-                              Edit
-                            </button>
-                            <button
-                              className={`font-bold ${
-                                isDark
-                                  ? "text-rose-400 hover:text-rose-300"
-                                  : "text-rose-400 hover:text-rose-600"
-                              }`}
-                              onClick={() => handleDeleteRow(row.id)}
-                            >
-                              Delete
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))
-                  ) : (
-                    <tr>
-                      <td
-                        colSpan={columns.length + 1}
-                        className={`px-8 py-24 text-center font-bold text-lg ${
-                          isDark ? "text-gray-600" : "text-slate-300"
-                        }`}
-                      >
-                        No records found.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
+                              <div className="flex min-w-0 items-start gap-2">
+                                <div className="min-w-0 flex-1">
+                                  {firstCol && (
+                                    <>
+                                      <p className="text-[12px] font-bold uppercase tracking-wider text-slate-400">
+                                        {firstCol.name}
+                                      </p>
+                                      <p
+                                        className={`truncate text-[14px] font-black ${t.heading}`}
+                                      >
+                                        <Cell
+                                          col={firstCol}
+                                          value={row.values?.[firstCol.id]}
+                                          isDark={isDark}
+                                        />
+                                      </p>
+                                    </>
+                                  )}
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => setEditRow(row)}
+                                  className={iconBtn(false)}
+                                  aria-label="Edit record"
+                                >
+                                  <PencilLine size={14} />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setDeleteRowTarget(row)}
+                                  className={iconBtn(true)}
+                                  aria-label="Delete record"
+                                >
+                                  <Trash2 size={14} />
+                                </button>
+                              </div>
+                              {restCols.length > 0 && (
+                                <dl
+                                  className={`mt-2 grid grid-cols-1 gap-x-3 gap-y-2 border-t-2 pt-2 min-[360px]:grid-cols-2 ${t.line}`}
+                                >
+                                  {restCols.map((col) => (
+                                    <div key={col.id} className="min-w-0">
+                                      <dt className="truncate text-[12px] font-bold uppercase tracking-wider text-slate-400">
+                                        {col.name}
+                                      </dt>
+                                      <dd
+                                        className={`truncate text-[14px] font-semibold ${t.heading}`}
+                                      >
+                                        <Cell
+                                          col={col}
+                                          value={row.values?.[col.id]}
+                                          isDark={isDark}
+                                        />
+                                      </dd>
+                                    </div>
+                                  ))}
+                                </dl>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </>
+                    )}
+                  </section>
+                )}
+              </>
+            )}
           </div>
-        )}
+        </div>
       </div>
 
-      {/* MODALS */}
       {showAddModal && (
         <AddRowModal
           tableId={selectedTableId}
@@ -595,6 +787,21 @@ const DynamicData = () => {
           }}
         />
       )}
+
+      <ConfirmDialog
+        isDark={isDark}
+        open={Boolean(deleteRowTarget)}
+        title="Delete record?"
+        message={
+          deleteRowTarget && firstCol
+            ? `"${displayText(firstCol, deleteRowTarget.values?.[firstCol.id]) || "This record"}" will be removed. This can't be undone.`
+            : "This record will be removed. This can't be undone."
+        }
+        confirmText="Delete"
+        busy={deletingRow}
+        onConfirm={confirmDeleteRow}
+        onCancel={() => !deletingRow && setDeleteRowTarget(null)}
+      />
     </div>
   );
 };

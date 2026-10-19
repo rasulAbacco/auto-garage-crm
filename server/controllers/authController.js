@@ -2,7 +2,7 @@
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import prisma from "../models/prismaClient.js";
-import { generateToken } from "../utils/generateToken.js";
+import { generateToken, isMobileRequest } from "../utils/generateToken.js";
 
 /**
  * =============================================
@@ -33,11 +33,15 @@ export const registerUser = async (req, res) => {
     }
 
     const isPuncher = String(crmType).toUpperCase() === "PUNCHER";
-    const vehicleSupport = String(puncherVehicleSupport || "BOTH").toUpperCase();
+    const vehicleSupport = String(
+      puncherVehicleSupport || "BOTH",
+    ).toUpperCase();
     if (isPuncher && !["CAR", "BIKE", "BOTH"].includes(vehicleSupport)) {
       return res
         .status(400)
-        .json({ message: "Select Car, Bike, or Car & Bike for your Puncher Shop" });
+        .json({
+          message: "Select Car, Bike, or Car & Bike for your Puncher Shop",
+        });
     }
 
     const emailLower = email.toLowerCase().trim();
@@ -192,13 +196,16 @@ export const registerUser = async (req, res) => {
     }
 
     // 🔧 FIXED: Restructured object schema configuration layout signature passed downstream
-    const token = generateToken({
-      id: user.id,
-      type: "owner",
-      role: "user",
-      plan: user.plan,
-      crmType: upperCrmType,
-    });
+    const token = generateToken(
+      {
+        id: user.id,
+        type: "owner",
+        role: "user",
+        plan: user.plan,
+        crmType: upperCrmType,
+      },
+      { mobile: isMobileRequest(req) },
+    );
 
     return res.status(201).json({
       message: "Registration successful",
@@ -289,13 +296,16 @@ export const loginUser = async (req, res) => {
      * 🔐 GENERATE JWT WITH ACTIVE CRM TYPE IN PAYLOAD
      * ==============================================================
      */
-    const token = generateToken({
-      id: user.id,
-      type: "owner",
-      role: "user",
-      plan: user.plan,
-      crmType: upperCrmType, // 🔥 Injected active workspace
-    });
+    const token = generateToken(
+      {
+        id: user.id,
+        type: "owner",
+        role: "user",
+        plan: user.plan,
+        crmType: upperCrmType, // 🔥 Injected active workspace
+      },
+      { mobile: isMobileRequest(req) },
+    ); // 📱 long-lived session for the app
 
     return res.status(200).json({
       message: "Login successful",
@@ -361,7 +371,10 @@ export const getProfile = async (req, res) => {
 
 /**
  * =============================================
- * VERIFY TOKEN (OWNER + STAFF)
+ * VERIFY TOKEN (OWNER + ALL STAFF TYPES)
+ * Also renews the token for the mobile app (sliding session):
+ * every app open pushes expiry forward, so the user stays signed in
+ * until they log out themselves.
  * =============================================
  */
 export const verifyToken = async (req, res) => {
@@ -374,18 +387,18 @@ export const verifyToken = async (req, res) => {
 
     const token = authHeader.split(" ")[1];
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const crmType = decoded.crmType ? decoded.crmType.toUpperCase() : null;
 
-    /**
-     * ===============================
-     * STAFF TOKEN
-     * ===============================
-     */
+    // 📱 Fresh long-lived token for the app (web keeps its fixed 7 days)
+    const renewed = isMobileRequest(req)
+      ? generateToken(decoded, { mobile: true })
+      : undefined;
+
+    /* ---------- CAR STAFF ---------- */
     if (decoded.type === "staff") {
       const login = await prisma.carStaffLogin.findUnique({
         where: { id: decoded.id },
-        include: {
-          staff: true,
-        },
+        include: { staff: true },
       });
 
       if (!login || !login.isActive || !login.staff) {
@@ -394,6 +407,7 @@ export const verifyToken = async (req, res) => {
 
       return res.status(200).json({
         valid: true,
+        token: renewed,
         user: {
           id: login.id,
           loginId: login.id,
@@ -401,16 +415,53 @@ export const verifyToken = async (req, res) => {
           role: "staff",
           ownerId: login.ownerId,
           name: login.staff.name,
-          crmType: decoded.crmType ? decoded.crmType.toUpperCase() : "CAR",
+          crmType: crmType || "CAR",
         },
       });
     }
 
-    /**
-     * ===============================
-     * OWNER TOKEN
-     * ===============================
-     */
+    /* ---------- BIKE TEAM ---------- */
+    // (Previously fell through to the owner lookup with a team id → wrong user / 401)
+    if (decoded.type === "bike_team") {
+      return res.status(200).json({
+        valid: true,
+        token: renewed,
+        user: {
+          id: decoded.id,
+          type: "bike_team",
+          role: "bike_team",
+          ownerId: decoded.ownerId,
+          teamId: decoded.teamId,
+          crmType: crmType || "BIKE",
+        },
+      });
+    }
+
+    /* ---------- WASH STAFF ---------- */
+    if (decoded.type === "wash-staff") {
+      const staff = await prisma.washStaff.findUnique({
+        where: { id: decoded.id },
+      });
+
+      if (!staff || !staff.isActive) {
+        return res.status(401).json({ valid: false });
+      }
+
+      return res.status(200).json({
+        valid: true,
+        token: renewed,
+        user: {
+          id: staff.id,
+          type: "wash-staff",
+          role: "wash-staff",
+          email: staff.email,
+          teamId: staff.washTeamId,
+          crmType: crmType || "WASH",
+        },
+      });
+    }
+
+    /* ---------- OWNER ---------- */
     const user = await prisma.user.findUnique({
       where: { id: decoded.id },
       select: {
@@ -419,23 +470,27 @@ export const verifyToken = async (req, res) => {
         email: true,
         role: true,
         plan: true,
+        allowedCrms: true,
+        isSuspended: true,
       },
     });
 
-    if (!user) {
+    if (!user || user.isSuspended) {
       return res.status(401).json({ valid: false });
     }
 
     return res.status(200).json({
       valid: true,
+      token: renewed,
       user: {
         id: user.id,
         type: "owner",
         role: user.role,
         plan: user.plan,
         email: user.email,
-        // 🔧 FIXED: Preserves the workspace domain token value across browser refreshes
-        crmType: decoded.crmType ? decoded.crmType.toUpperCase() : "CAR",
+        username: user.username,
+        allowedCrms: user.allowedCrms,
+        crmType: crmType || "CAR",
       },
     });
   } catch (error) {

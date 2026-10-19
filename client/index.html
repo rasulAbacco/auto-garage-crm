@@ -3,7 +3,12 @@
 
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <!-- maximum-scale=1 stops iOS zooming in when an input is tapped (that zoom made the app look wider on iPhone) -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover" />
+  <meta name="format-detection" content="telephone=no" />
+  <meta name="theme-color" content="#001F3F" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
 
   <!-- Primary Title (Kept Same As Requested) -->
   <title>The Motor Desk</title>
@@ -38,6 +43,7 @@
 
   <!-- Favicon -->
   <link rel="icon" type="image/png" href="/Logos/logo3.png" />
+  <link rel="apple-touch-icon" href="/Logos/logo3.png" />
 
   <!-- Structured Data (Very Important for Brand Recognition) -->
   <script type="application/ld+json">

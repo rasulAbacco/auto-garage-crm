@@ -1,4 +1,6 @@
-import React, { useEffect, useState, useMemo } from "react";
+// client/src/pages/carStaff/CarStaffManagement.jsx
+import React, { useCallback, useEffect, useMemo, useState } from "react";
+import toast, { Toaster } from "react-hot-toast";
 import {
   Plus,
   Search,
@@ -12,502 +14,582 @@ import {
   UserPlus,
   Shield,
   ShieldAlert,
-  ArrowUpRight,
-  Filter,
   XCircle,
-  Calendar, // Imported Calendar icon
+  Calendar,
+  Phone,
+  RefreshCw,
+  X,
+  Loader2,
 } from "lucide-react";
 import { useTheme } from "../../contexts/ThemeContext";
 
-// Import your existing modals
 import StaffEditModal from "../../components/Car/StaffEditModal";
 import StaffViewModal from "../../components/Car/StaffViewModal";
 import StaffCreateModal from "../../components/Car/StaffCreateModal";
 import StaffLoginCreateModal from "../../components/Car/StaffLoginCreateModal";
+import {
+  tk,
+  btnBase,
+  PageHeading,
+  ConfirmDialog,
+  fmtDate,
+  Avatar,
+  StatTile,
+  EmptyState,
+  ErrorBar,
+  SkeletonRows,
+  inr,
+  n,
+  staffCode,
+} from "../../components/Car/staffUi";
 
 const API = import.meta.env.VITE_API_BASE_URL;
+const authHeaders = () => ({
+  Authorization: `Bearer ${localStorage.getItem("token")}`,
+});
+
+const estSalary = (s) =>
+  n(s.baseSalary) + n(s.bonusDefault) - n(s.extraDeductionsDefault);
+
+const FILTERS = [
+  { key: "all", label: "All" },
+  { key: "active", label: "Login on" },
+  { key: "inactive", label: "Login off" },
+  { key: "none", label: "No login" },
+];
+
+const matchFilter = (s, f) => {
+  if (f === "active") return Boolean(s.login?.isActive);
+  if (f === "inactive") return Boolean(s.login) && !s.login.isActive;
+  if (f === "none") return !s.login;
+  return true;
+};
 
 export default function StaffManagement() {
   const { isDark } = useTheme();
+  const t = tk(isDark);
+
   const [staff, setStaff] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
+  const [filter, setFilter] = useState("all");
 
   const [editStaff, setEditStaff] = useState(null);
   const [viewStaff, setViewStaff] = useState(null);
   const [loginStaff, setLoginStaff] = useState(null);
   const [showCreate, setShowCreate] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [deleting, setDeleting] = useState(false);
+  const [togglingId, setTogglingId] = useState(null);
 
-  /* ===============================
-      FETCH STAFF
-  =============================== */
-  const fetchStaff = async () => {
-    setLoading(true);
+  /* ---------- fetch ---------- */
+  const fetchStaff = useCallback(async (quiet = false) => {
+    quiet ? setRefreshing(true) : setLoading(true);
+    setError("");
     try {
       const res = await fetch(`${API}/api/car-staff`, {
-        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+        headers: authHeaders(),
       });
-      const data = await res.json();
-      setStaff(data);
+      const data = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(data?.message || "Could not load staff");
+      setStaff(Array.isArray(data) ? data : []);
     } catch (err) {
       console.error(err);
+      setError(err.message || "Could not load staff");
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     fetchStaff();
-  }, []);
+  }, [fetchStaff]);
 
-  /* ===============================
-      ACTIONS
-  =============================== */
-  const deleteStaff = async (id) => {
-    if (!window.confirm("Are you sure you want to delete this staff member?"))
-      return;
-    const res = await fetch(`${API}/api/car-staff/${id}`, {
-      method: "DELETE",
-      headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
-    });
-    if (res.ok) fetchStaff();
-    else alert("Failed to delete staff");
+  const refreshQuietly = () => fetchStaff(true);
+
+  /* ---------- actions ---------- */
+  const confirmDelete = async () => {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    try {
+      const res = await fetch(`${API}/api/car-staff/${deleteTarget.id}`, {
+        method: "DELETE",
+        headers: authHeaders(),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => null);
+        throw new Error(data?.message || "Failed to delete staff");
+      }
+      toast.success(`${deleteTarget.name} removed`);
+      setDeleteTarget(null);
+      refreshQuietly();
+    } catch (err) {
+      toast.error(err.message || "Failed to delete staff");
+    } finally {
+      setDeleting(false);
+    }
   };
 
-  const toggleLogin = async (id) => {
-    const res = await fetch(`${API}/api/car-staff/${id}/toggle`, {
-      method: "PATCH",
-      headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
-    });
-    const data = await res.json();
-    if (!res.ok) alert(data.message);
-    else fetchStaff();
+  const toggleLogin = async (s) => {
+    setTogglingId(s.id);
+    try {
+      const res = await fetch(`${API}/api/car-staff/${s.id}/toggle`, {
+        method: "PATCH",
+        headers: authHeaders(),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(data?.message || "Could not change login");
+      toast.success(s.login?.isActive ? "Login turned off" : "Login turned on");
+      await fetchStaff(true);
+    } catch (err) {
+      toast.error(err.message || "Could not change login");
+    } finally {
+      setTogglingId(null);
+    }
   };
 
-  /* ===============================
-      HELPERS
-  =============================== */
-  const calculateEstimatedSalary = (s) => {
-    return (
-      (s.baseSalary || 0) +
-      (s.bonusDefault || 0) -
-      (s.extraDeductionsDefault || 0)
-    );
-  };
-
-  const getInitials = (name) =>
-    name
-      ?.split(" ")
-      .map((n) => n[0])
-      .slice(0, 2)
-      .join("")
-      .toUpperCase();
-
-  const getRandomColor = (name) => {
-    const colors = [
-      "bg-blue-500",
-      "bg-indigo-500",
-      "bg-purple-500",
-      "bg-pink-500",
-      "bg-emerald-500",
-      "bg-orange-500",
-      "bg-teal-500",
-      "bg-cyan-500",
-    ];
-    let hash = 0;
-    for (let i = 0; i < name.length; i++)
-      hash = name.charCodeAt(i) + ((hash << 5) - hash);
-    return colors[Math.abs(hash) % colors.length];
-  };
-
-  // Format date helper
-  const formatDate = (dateString) => {
-    if (!dateString) return "N/A";
-    return new Date(dateString).toLocaleDateString("en-US", {
-      year: "numeric",
-      month: "short",
-      day: "numeric",
-    });
-  };
-
-  /* ===============================
-      MEMOS
-  =============================== */
+  /* ---------- derived ---------- */
   const filteredStaff = useMemo(() => {
+    const q = searchTerm.trim().toLowerCase();
     return staff.filter(
       (s) =>
-        s.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        s.role?.toLowerCase().includes(searchTerm.toLowerCase())
+        matchFilter(s, filter) &&
+        (!q ||
+          s.name?.toLowerCase().includes(q) ||
+          s.role?.toLowerCase().includes(q) ||
+          String(s.phone || "").includes(q)),
     );
-  }, [staff, searchTerm]);
+  }, [staff, searchTerm, filter]);
 
-  const stats = useMemo(() => {
-    const totalStaff = staff.length;
-    const activeLogins = staff.filter(
-      (s) => s.login && s.login.isActive
-    ).length;
-    const estimatedPayroll = staff.reduce(
-      (acc, curr) => acc + calculateEstimatedSalary(curr),
-      0
-    );
-    return { totalStaff, activeLogins, estimatedPayroll };
-  }, [staff]);
+  const counts = useMemo(
+    () =>
+      Object.fromEntries(
+        FILTERS.map((f) => [
+          f.key,
+          staff.filter((s) => matchFilter(s, f.key)).length,
+        ]),
+      ),
+    [staff],
+  );
 
-  if (loading) {
+  const stats = useMemo(
+    () => ({
+      total: staff.length,
+      active: staff.filter((s) => s.login?.isActive).length,
+      payroll: staff.reduce((acc, s) => acc + estSalary(s), 0),
+    }),
+    [staff],
+  );
+
+  const clearAll = () => {
+    setSearchTerm("");
+    setFilter("all");
+  };
+
+  /* ---------- ui bits ---------- */
+  const ActionBtn = ({ icon: Icon, onClick, danger, label }) => (
+    <button
+      type="button"
+      onClick={onClick}
+      title={label}
+      aria-label={label}
+      className={`flex h-8 w-8 items-center justify-center rounded-xl border-2 transition ${
+        danger
+          ? isDark
+            ? "border-white/10 text-slate-300 hover:border-red-500/40 hover:bg-red-500/10 hover:text-red-400"
+            : "border-[#CBD5E1] text-slate-500 hover:border-red-300 hover:bg-red-50 hover:text-red-600"
+          : t.btnGhost
+      }`}
+    >
+      <Icon size={14} />
+    </button>
+  );
+
+  const Access = ({ s }) => {
+    if (!s.login) {
+      return (
+        <button
+          type="button"
+          onClick={() => setLoginStaff(s)}
+          className={`inline-flex h-8 items-center gap-1.5 rounded-lg border-2 border-dashed px-3 text-[12px] font-black uppercase tracking-wider transition ${
+            isDark
+              ? "border-white/20 text-slate-300 hover:border-white/50 hover:text-white"
+              : "border-[#CBD5E1] text-slate-500 hover:border-[#001F3F] hover:text-[#001F3F]"
+          }`}
+        >
+          <UserPlus size={14} /> Create login
+        </button>
+      );
+    }
+    const on = s.login.isActive;
+    const busy = togglingId === s.id;
     return (
-      <div
-        className={`flex items-center justify-center h-screen ${
-          isDark ? "bg-slate-900" : "bg-slate-50"
-        }`}
-      >
-        <div className="flex flex-col items-center gap-4">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
-          <p className={isDark ? "text-slate-400" : "text-slate-500"}>
-            Loading staff data...
-          </p>
-        </div>
+      <div className="flex flex-wrap items-center gap-2">
+        <span
+          className={`inline-flex items-center gap-1 rounded-lg border px-2 py-0.5 text-[12px] font-black uppercase tracking-wider ${
+            on
+              ? "border-green-500/30 bg-green-500/10 text-green-600"
+              : "border-red-500/30 bg-red-500/10 text-red-500"
+          }`}
+        >
+          {on ? <CheckCircle2 size={12} /> : <ShieldAlert size={12} />}
+          {on ? "Active" : "Off"}
+        </span>
+        <button
+          type="button"
+          disabled={busy}
+          onClick={() => toggleLogin(s)}
+          className={`inline-flex h-8 items-center gap-1 rounded-lg border-2 px-2.5 text-[12px] font-black uppercase tracking-wider transition disabled:opacity-50 ${
+            on
+              ? isDark
+                ? "border-red-500/30 text-red-400 hover:bg-red-500/10"
+                : "border-red-200 text-red-600 hover:bg-red-50"
+              : isDark
+                ? "border-green-500/30 text-green-400 hover:bg-green-500/10"
+                : "border-green-200 text-green-700 hover:bg-green-50"
+          }`}
+        >
+          {busy ? (
+            <Loader2 size={12} className="animate-spin" />
+          ) : on ? (
+            <XCircle size={12} />
+          ) : (
+            <CheckCircle2 size={12} />
+          )}
+          {on ? "Revoke" : "Enable"}
+        </button>
       </div>
     );
-  }
+  };
+
+  const Actions = ({ s }) => (
+    <div className="flex items-center justify-end gap-1.5">
+      <ActionBtn
+        icon={Eye}
+        label="View details"
+        onClick={() => setViewStaff(s)}
+      />
+      <ActionBtn
+        icon={Edit3}
+        label="Edit staff"
+        onClick={() => setEditStaff(s)}
+      />
+      <ActionBtn
+        icon={Trash2}
+        label="Delete"
+        danger
+        onClick={() => setDeleteTarget(s)}
+      />
+    </div>
+  );
+
+  const rowHover = isDark ? "hover:bg-white/5" : "hover:bg-[#F8FAFC]";
+  const th =
+    "px-4 py-3 text-[12px] font-black uppercase tracking-wider text-slate-400";
 
   return (
-    <div
-      className={`lg:p-10 min-h-screen font-sans transition-colors duration-300 ${
-        isDark ? "bg-slate-950 text-slate-100" : "bg-slate-50 text-slate-900"
-      } lg:ml-[5rem]`}
-    >
-      {/* ================= HEADER SECTION ================= */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-10">
-        <div>
-          <h1
-            className={`text-3xl font-bold tracking-tight ${
-              isDark ? "text-white" : "text-slate-900"
-            }`}
-          >
-            Staff Management
-          </h1>
-          <p className={`mt-2 ${isDark ? "text-slate-400" : "text-slate-500"}`}>
-            Overview of your team, roles, and access permissions.
-          </p>
-        </div>
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => setShowCreate(true)}
-            className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-xl shadow-lg shadow-indigo-600/20 transition-all hover:scale-[1.02] active:scale-95 font-medium"
-          >
-            <Plus size={18} strokeWidth={2.5} />
-            <span>Add Staff</span>
-          </button>
-        </div>
-      </div>
+    <div className="min-h-screen lg:ml-20">
+      <Toaster
+        position="top-right"
+        toastOptions={{ style: { fontSize: 14 } }}
+      />
 
-      {/* ================= STATS CARDS ================= */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
-        <StatCard
-          title="Total Employees"
-          value={stats.totalStaff}
-          icon={Users}
-          trend="+2 this month"
-          color="blue"
+      <div className="mx-auto max-w-[1600px] space-y-4 sm:space-y-5">
+        <PageHeading
           isDark={isDark}
+          title="Staff"
+          accent="management."
+          subtitle="Your team, their roles, logins and default monthly pay."
+          right={
+            <>
+              <button
+                type="button"
+                onClick={refreshQuietly}
+                aria-label="Refresh"
+                title="Refresh"
+                className={`${btnBase} h-10 w-10 border-2 ${t.btnGhost}`}
+              >
+                <RefreshCw
+                  size={14}
+                  className={refreshing ? "animate-spin" : ""}
+                />
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowCreate(true)}
+                className={`${btnBase} h-10 px-4 shadow-lg ${t.btnPrimary}`}
+              >
+                <Plus size={14} strokeWidth={3} /> Add staff
+              </button>
+            </>
+          }
         />
-        <StatCard
-          title="Active System Users"
-          value={stats.activeLogins}
-          icon={Shield}
-          trend="Secure Access"
-          color="emerald"
-          isDark={isDark}
-        />
-        <StatCard
-          title="Est. Monthly Payroll"
-          value={`₹${stats.estimatedPayroll.toLocaleString()}`}
-          icon={Wallet}
-          trend="Based on defaults"
-          color="violet"
-          isDark={isDark}
-        />
-      </div>
 
-      {/* ================= MAIN CONTENT ================= */}
-      <div
-        className={`rounded-2xl shadow-sm border overflow-hidden ${
-          isDark ? "bg-slate-900 border-slate-800" : "bg-white border-slate-200"
-        }`}
-      >
-        {/* Toolbar */}
-        <div className="p-5 border-b border-inherit flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div className={`relative w-full max-w-md group`}>
-            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+        {/* stats */}
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
+          <StatTile
+            isDark={isDark}
+            title="Total staff"
+            value={stats.total}
+            icon={Users}
+          />
+          <StatTile
+            isDark={isDark}
+            title="Logins active"
+            value={`${stats.active} / ${stats.total}`}
+            icon={Shield}
+            chip="bg-green-500/10 text-green-600"
+          />
+          <StatTile
+            isDark={isDark}
+            className="col-span-2 lg:col-span-1"
+            title="Est. monthly payroll"
+            value={inr(stats.payroll)}
+            sub="Base + bonus − deductions (defaults)"
+            icon={Wallet}
+            chip="bg-blue-500/10 text-blue-500"
+          />
+        </div>
+
+        <ErrorBar message={error} onRetry={() => fetchStaff()} />
+
+        {/* list card */}
+        <div className={`overflow-hidden rounded-2xl border-2 ${t.card}`}>
+          {/* toolbar */}
+          <div className={`space-y-3 border-b-2 p-3 sm:p-4 ${t.line}`}>
+            <div className="relative">
               <Search
-                size={18}
-                className={isDark ? "text-slate-500" : "text-slate-400"}
+                size={16}
+                className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400"
               />
+              <input
+                type="text"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                placeholder="Search by name, role or phone…"
+                className={`h-11 w-full rounded-xl border-2 pl-10 pr-10 text-[14px] font-semibold outline-none transition ${t.input}`}
+              />
+              {searchTerm && (
+                <button
+                  type="button"
+                  onClick={() => setSearchTerm("")}
+                  aria-label="Clear search"
+                  className="absolute right-2 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-lg text-slate-400 hover:text-red-500"
+                >
+                  <X size={14} />
+                </button>
+              )}
             </div>
-            <input
-              type="text"
-              placeholder="Search employees..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className={`block w-full pl-10 pr-3 py-2.5 rounded-xl text-sm transition-all outline-none border ${
-                isDark
-                  ? "bg-slate-800 border-slate-700 text-slate-100 placeholder-slate-500 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
-                  : "bg-gray-50 border-gray-200 text-slate-900 placeholder-gray-400 focus:bg-white focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
-              }`}
-            />
+            <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-0.5">
+              {FILTERS.map((f) => {
+                const on = filter === f.key;
+                return (
+                  <button
+                    key={f.key}
+                    type="button"
+                    onClick={() => setFilter(f.key)}
+                    className={`flex h-8 shrink-0 items-center gap-1.5 rounded-lg border-2 px-3 text-[12px] font-black uppercase tracking-wider transition ${
+                      on
+                        ? isDark
+                          ? "border-white bg-white text-[#001F3F]"
+                          : "border-[#001F3F] bg-[#001F3F] text-white"
+                        : t.btnGhost
+                    }`}
+                  >
+                    {f.label}
+                    <span
+                      className={`rounded px-1 ${on ? (isDark ? "bg-[#001F3F]/10" : "bg-white/20") : isDark ? "bg-white/10" : "bg-slate-100"}`}
+                    >
+                      {counts[f.key] ?? 0}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
           </div>
 
-          <button
-            className={`p-2.5 rounded-xl border transition-colors ${
-              isDark
-                ? "border-slate-700 text-slate-400 hover:bg-slate-800 hover:text-white"
-                : "border-gray-200 text-slate-500 hover:bg-gray-50 hover:text-slate-900"
-            }`}
-          >
-            <Filter size={18} />
-          </button>
-        </div>
-
-        {/* Table */}
-        <div className="overflow-x-auto">
-          <table className="w-full border-collapse">
-            <thead>
-              <tr
-                className={`text-xs uppercase tracking-wider font-semibold ${
-                  isDark
-                    ? "bg-slate-800/50 text-slate-400 border-b border-slate-800"
-                    : "bg-gray-50/80 text-gray-500 border-b border-gray-100"
-                }`}
-              >
-                <th className="px-6 py-4 text-left">Employee Details</th>
-                <th className="px-6 py-4 text-left">Role</th>
-                {/* NEW COLUMN HEADER */}
-                <th className="px-6 py-4 text-left">Joined Date</th>
-                <th className="px-6 py-4 text-left">System Access</th>
-                <th className="px-6 py-4 text-right">Base Salary (Est.)</th>
-                <th className="px-6 py-4 text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody
-              className={`divide-y ${
-                isDark ? "divide-slate-800" : "divide-slate-100"
-              }`}
-            >
-              {filteredStaff.map((s) => (
-                <tr
-                  key={s.id}
-                  className={`group transition-colors duration-200 ${
-                    isDark ? "hover:bg-slate-800/60" : "hover:bg-slate-50"
-                  }`}
-                >
-                  {/* Name */}
-                  <td className="px-6 py-4 align-middle text-left">
-                    <div className="flex items-center gap-4">
-                      <div
-                        className={`w-10 h-10 rounded-full flex items-center justify-center text-white text-xs font-bold shadow-md ring-2 ring-offset-2 ${
-                          isDark ? "ring-offset-slate-900" : "ring-offset-white"
-                        } ${getRandomColor(s.name)}`}
+          {loading ? (
+            <SkeletonRows isDark={isDark} rows={5} />
+          ) : error && !staff.length ? (
+            <EmptyState
+              isDark={isDark}
+              icon={Users}
+              title="Staff list unavailable"
+              text="Check your connection and tap Retry above."
+            />
+          ) : filteredStaff.length === 0 ? (
+            <EmptyState
+              isDark={isDark}
+              icon={Users}
+              title={staff.length ? "No staff match" : "No staff yet"}
+              text={
+                staff.length
+                  ? "Try a different search or filter."
+                  : "Add your first team member to start tracking pay and logins."
+              }
+              action={
+                staff.length ? (
+                  <button
+                    type="button"
+                    onClick={clearAll}
+                    className={`${btnBase} h-9 border-2 px-4 ${t.btnGhost}`}
+                  >
+                    Clear filters
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setShowCreate(true)}
+                    className={`${btnBase} h-9 px-4 ${t.btnPrimary}`}
+                  >
+                    <Plus size={14} /> Add staff
+                  </button>
+                )
+              }
+            />
+          ) : (
+            <>
+              {/* desktop table */}
+              <div className="hidden overflow-x-auto lg:block">
+                <table className="w-full border-collapse text-left">
+                  <thead className={`border-b-2 ${t.cardHead}`}>
+                    <tr>
+                      <th className={th}>Employee</th>
+                      <th className={th}>Role</th>
+                      <th className={th}>Joined</th>
+                      <th className={th}>System access</th>
+                      <th className={`${th} text-right`}>Est. salary</th>
+                      <th className={`${th} text-right`}>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredStaff.map((s) => (
+                      <tr
+                        key={s.id}
+                        className={`border-b transition last:border-0 ${t.line} ${rowHover}`}
                       >
-                        {getInitials(s.name)}
-                      </div>
-                      <div>
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-3">
+                            <Avatar name={s.name} isDark={isDark} />
+                            <div className="min-w-0">
+                              <p
+                                className={`truncate text-[14px] font-black ${t.heading}`}
+                              >
+                                {s.name}
+                              </p>
+                              <p
+                                className={`text-[12px] font-medium ${t.muted}`}
+                              >
+                                {staffCode(s.id)}
+                                {s.phone ? ` · ${s.phone}` : ""}
+                              </p>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-4 py-3">
+                          <span
+                            className={`inline-flex items-center gap-1.5 rounded-lg border px-2 py-0.5 text-[12px] font-bold ${t.inner} ${t.body}`}
+                          >
+                            <Briefcase size={12} className="opacity-70" />
+                            {s.role || "Staff member"}
+                          </span>
+                        </td>
+                        <td className={`px-4 py-3 text-[14px] ${t.body}`}>
+                          <span className="inline-flex items-center gap-1.5">
+                            <Calendar size={14} className="opacity-60" />
+                            {fmtDate(s.createdAt || s.joinDate)}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3">
+                          <Access s={s} />
+                        </td>
+                        <td className="px-4 py-3 text-right">
+                          <span
+                            className={`font-mono text-[14px] font-black ${isDark ? "text-green-400" : "text-green-700"}`}
+                          >
+                            {inr(estSalary(s))}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3">
+                          <Actions s={s} />
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* phone / tablet cards */}
+              <div className="grid gap-3 p-3 sm:grid-cols-2 sm:p-4 lg:hidden">
+                {filteredStaff.map((s) => (
+                  <div
+                    key={s.id}
+                    className={`rounded-2xl border-2 p-3 ${t.inner}`}
+                  >
+                    <div className="flex items-start gap-3">
+                      <Avatar name={s.name} isDark={isDark} />
+                      <div className="min-w-0 flex-1">
                         <p
-                          className={`font-semibold text-sm ${
-                            isDark ? "text-slate-100" : "text-slate-900"
-                          }`}
+                          className={`truncate text-[14px] font-black ${t.heading}`}
                         >
                           {s.name}
                         </p>
                         <p
-                          className={`text-xs ${
-                            isDark ? "text-slate-500" : "text-slate-500"
-                          }`}
+                          className={`truncate text-[12px] font-medium ${t.muted}`}
                         >
-                          ID: #{s.id.toString().padStart(4, "0")}
+                          {s.role || "Staff member"} · {staffCode(s.id)}
                         </p>
                       </div>
+                      <span
+                        className={`shrink-0 font-mono text-[14px] font-black ${isDark ? "text-green-400" : "text-green-700"}`}
+                      >
+                        {inr(estSalary(s))}
+                      </span>
                     </div>
-                  </td>
 
-                  {/* Role */}
-                  <td className="px-6 py-4 align-middle text-left">
-                    <span
-                      className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium border ${
-                        isDark
-                          ? "bg-slate-800 text-slate-300 border-slate-700"
-                          : "bg-white text-slate-600 border-slate-200 shadow-sm"
-                      }`}
-                    >
-                      <Briefcase size={12} className="opacity-70" />
-                      {s.role || "Staff Member"}
-                    </span>
-                  </td>
-
-                  {/* NEW COLUMN BODY: JOINED DATE */}
-                  <td className="px-6 py-4 align-middle text-left">
                     <div
-                      className={`flex items-center gap-2 text-sm ${
-                        isDark ? "text-slate-400" : "text-slate-600"
-                      }`}
+                      className={`mt-3 grid grid-cols-2 gap-2 text-[12px] ${t.muted}`}
                     >
-                      <Calendar size={14} className="opacity-70" />
-                      <span>{formatDate(s.createdAt || s.joinDate)}</span>
-                    </div>
-                  </td>
-
-                  {/* Access Status & Revoke Button */}
-                  <td className="px-6 py-4 align-middle text-left">
-                    {!s.login ? (
-                      <button
-                        onClick={() => setLoginStaff(s)}
-                        className={`text-xs font-medium px-3 py-1.5 rounded-lg border border-dashed transition-all flex items-center gap-2 ${
-                          isDark
-                            ? "border-slate-700 text-slate-400 hover:text-indigo-400 hover:border-indigo-500 hover:bg-indigo-500/10"
-                            : "border-gray-300 text-gray-500 hover:text-indigo-600 hover:border-indigo-600 hover:bg-indigo-50"
-                        }`}
-                      >
-                        <UserPlus size={14} /> Create Login
-                      </button>
-                    ) : (
-                      <div className="flex items-center gap-3">
-                        {/* Status Badge */}
-                        <div
-                          className={`px-2.5 py-1 rounded-full text-xs font-bold flex items-center gap-1.5 border ${
-                            s.login.isActive
-                              ? isDark
-                                ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
-                                : "bg-emerald-50 text-emerald-700 border-emerald-200"
-                              : isDark
-                              ? "bg-rose-500/10 text-rose-400 border-rose-500/20"
-                              : "bg-rose-50 text-rose-700 border-rose-200"
-                          }`}
+                      <span className="flex items-center gap-1.5 truncate">
+                        <Calendar size={12} />{" "}
+                        {fmtDate(s.createdAt || s.joinDate)}
+                      </span>
+                      {s.phone ? (
+                        <a
+                          href={`tel:${s.phone}`}
+                          className={`flex items-center gap-1.5 truncate font-bold ${t.heading}`}
                         >
-                          {s.login.isActive ? (
-                            <CheckCircle2 size={12} />
-                          ) : (
-                            <ShieldAlert size={12} />
-                          )}
-                          {s.login.isActive ? "Active" : "Inactive"}
-                        </div>
-
-                        {/* Revoke/Enable Button */}
-                        <button
-                          onClick={() => toggleLogin(s.id)}
-                          className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all shadow-sm ${
-                            s.login.isActive
-                              ? isDark
-                                ? "border-red-500/30 bg-red-500/10 text-red-400 hover:bg-red-500/20 hover:border-red-500/50"
-                                : "border-red-200 bg-red-50 text-red-600 hover:bg-red-100 hover:border-red-300"
-                              : isDark
-                              ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20"
-                              : "border-emerald-200 bg-emerald-50 text-emerald-600 hover:bg-emerald-100"
-                          }`}
-                        >
-                          {s.login.isActive ? (
-                            <>
-                              <XCircle size={14} /> Revoke
-                            </>
-                          ) : (
-                            <>
-                              <CheckCircle2 size={14} /> Enable
-                            </>
-                          )}
-                        </button>
-                      </div>
-                    )}
-                  </td>
-
-                  {/* Salary - Green Color */}
-                  <td className="px-6 py-4 align-middle text-right">
-                    <p
-                      className={`font-mono font-bold ${
-                        isDark ? "text-emerald-400" : "text-emerald-600"
-                      }`}
-                    >
-                      ₹{calculateEstimatedSalary(s).toLocaleString()}
-                    </p>
-                  </td>
-
-                  {/* Actions - Always Visible */}
-                  <td className="px-6 py-4 align-middle text-right">
-                    <div className="flex items-center justify-end gap-1">
-                      <ActionBtn
-                        icon={Eye}
-                        onClick={() => setViewStaff(s)}
-                        isDark={isDark}
-                        tooltip="View Details"
-                      />
-                      <ActionBtn
-                        icon={Edit3}
-                        onClick={() => setEditStaff(s)}
-                        isDark={isDark}
-                        tooltip="Edit Staff"
-                      />
-                      <ActionBtn
-                        icon={Trash2}
-                        onClick={() => deleteStaff(s.id)}
-                        isDark={isDark}
-                        danger
-                        tooltip="Delete"
-                      />
+                          <Phone size={12} /> {s.phone}
+                        </a>
+                      ) : (
+                        <span className="flex items-center gap-1.5">
+                          <Phone size={12} /> —
+                        </span>
+                      )}
                     </div>
-                  </td>
-                </tr>
-              ))}
 
-              {filteredStaff.length === 0 && (
-                <tr>
-                  <td colSpan="6" className="px-6 py-12 text-center">
                     <div
-                      className={`flex flex-col items-center justify-center rounded-2xl border border-dashed p-8 ${
-                        isDark
-                          ? "border-slate-800 bg-slate-800/30"
-                          : "border-slate-200 bg-slate-50"
-                      }`}
+                      className={`mt-3 flex flex-wrap items-center justify-between gap-2 border-t-2 pt-3 ${t.line}`}
                     >
-                      <div
-                        className={`p-4 rounded-full mb-3 ${
-                          isDark
-                            ? "bg-slate-800 text-slate-600"
-                            : "bg-white text-slate-300 shadow-sm"
-                        }`}
-                      >
-                        <Users size={32} />
-                      </div>
-                      <h3
-                        className={`text-lg font-medium mb-1 ${
-                          isDark ? "text-slate-200" : "text-slate-900"
-                        }`}
-                      >
-                        No staff found
-                      </h3>
-                      <p
-                        className={`text-sm ${
-                          isDark ? "text-slate-500" : "text-slate-500"
-                        }`}
-                      >
-                        Try adjusting your search or add a new staff member.
-                      </p>
-                      <button
-                        onClick={() => setSearchTerm("")}
-                        className="mt-4 text-indigo-500 text-sm font-medium hover:underline"
-                      >
-                        Clear search
-                      </button>
+                      <Access s={s} />
+                      <Actions s={s} />
                     </div>
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
         </div>
       </div>
 
-      {/* ================= MODALS ================= */}
+      {/* modals */}
       {showCreate && (
         <StaffCreateModal
           onClose={() => setShowCreate(false)}
-          onSaved={fetchStaff}
+          onSaved={refreshQuietly}
           isDark={isDark}
         />
       )}
@@ -515,7 +597,7 @@ export default function StaffManagement() {
         <StaffEditModal
           staff={editStaff}
           onClose={() => setEditStaff(null)}
-          onSaved={fetchStaff}
+          onSaved={refreshQuietly}
           isDark={isDark}
         />
       )}
@@ -523,6 +605,10 @@ export default function StaffManagement() {
         <StaffViewModal
           staff={viewStaff}
           onClose={() => setViewStaff(null)}
+          onEdit={() => {
+            setEditStaff(viewStaff);
+            setViewStaff(null);
+          }}
           isDark={isDark}
         />
       )}
@@ -530,86 +616,24 @@ export default function StaffManagement() {
         <StaffLoginCreateModal
           staff={loginStaff}
           onClose={() => setLoginStaff(null)}
-          onSaved={fetchStaff}
+          onSaved={refreshQuietly}
         />
       )}
+
+      <ConfirmDialog
+        isDark={isDark}
+        open={Boolean(deleteTarget)}
+        title="Delete staff?"
+        message={
+          deleteTarget
+            ? `${deleteTarget.name} will be removed from your staff list. This can't be undone.`
+            : ""
+        }
+        confirmText="Delete"
+        busy={deleting}
+        onConfirm={confirmDelete}
+        onCancel={() => !deleting && setDeleteTarget(null)}
+      />
     </div>
-  );
-}
-
-/* ===============================
-   SUB COMPONENTS
-=============================== */
-
-function StatCard({ title, value, icon: Icon, trend, color, isDark }) {
-  const colors = {
-    blue: isDark ? "bg-blue-500/10 text-blue-400" : "bg-blue-50 text-blue-600",
-    emerald: isDark
-      ? "bg-emerald-500/10 text-emerald-400"
-      : "bg-emerald-50 text-emerald-600",
-    violet: isDark
-      ? "bg-violet-500/10 text-violet-400"
-      : "bg-violet-50 text-violet-600",
-  };
-
-  return (
-    <div
-      className={`p-6 rounded-2xl border transition-all duration-200 ${
-        isDark
-          ? "bg-slate-900 border-slate-800 hover:border-slate-700"
-          : "bg-white border-slate-200 shadow-sm hover:shadow-md"
-      }`}
-    >
-      <div className="flex justify-between items-start mb-4">
-        <div className={`p-3 rounded-xl ${colors[color]}`}>
-          <Icon size={22} />
-        </div>
-        {trend && (
-          <span
-            className={`text-xs font-medium flex items-center gap-1 ${
-              isDark ? "text-slate-500" : "text-slate-400"
-            }`}
-          >
-            {trend} <ArrowUpRight size={12} />
-          </span>
-        )}
-      </div>
-      <div>
-        <p
-          className={`text-sm font-medium mb-1 ${
-            isDark ? "text-slate-400" : "text-slate-500"
-          }`}
-        >
-          {title}
-        </p>
-        <h3
-          className={`text-2xl font-bold ${
-            isDark ? "text-slate-100" : "text-slate-900"
-          }`}
-        >
-          {value}
-        </h3>
-      </div>
-    </div>
-  );
-}
-
-function ActionBtn({ icon: Icon, onClick, danger, isDark, tooltip }) {
-  return (
-    <button
-      onClick={onClick}
-      title={tooltip}
-      className={`p-2 rounded-lg transition-all duration-200 ${
-        danger
-          ? isDark
-            ? "text-slate-500 hover:bg-rose-500/10 hover:text-rose-400"
-            : "text-slate-400 hover:bg-rose-50 hover:text-rose-600"
-          : isDark
-          ? "text-slate-500 hover:bg-slate-800 hover:text-indigo-400"
-          : "text-slate-400 hover:bg-indigo-50 hover:text-indigo-600"
-      }`}
-    >
-      <Icon size={18} />
-    </button>
   );
 }

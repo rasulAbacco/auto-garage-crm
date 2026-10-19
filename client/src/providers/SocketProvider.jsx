@@ -1,109 +1,92 @@
-import { createContext, useContext, useEffect, useState } from "react";
+// client/src/providers/SocketProvider.jsx
+import { createContext, useContext, useEffect, useRef, useState } from "react";
 import { io } from "socket.io-client";
 
 const SocketContext = createContext(null);
-
 export const useSocket = () => useContext(SocketContext);
 
-const SOCKET_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:5001";
+const SOCKET_URL =
+  import.meta.env.VITE_API_BASE_URL?.trim() || "http://localhost:5001";
+
+/** Only garage owners receive marketplace bookings */
+function readGarageId(propId) {
+  try {
+    const user = JSON.parse(localStorage.getItem("user") || "{}");
+    if (user?.type && user.type !== "owner") return null; // staff → no booking room
+    return propId || localStorage.getItem("userId") || user?.id || null;
+  } catch {
+    return propId || localStorage.getItem("userId") || null;
+  }
+}
 
 export default function SocketProvider({ children, garageId }) {
   const [socket, setSocket] = useState(null);
+  const joinedRef = useRef(null);
 
   useEffect(() => {
-    // 🔥 Create socket connection
     const s = io(SOCKET_URL, {
-      transports: ["websocket", "polling"], // ✅ fallback for Render
+      transports: ["websocket", "polling"],
       withCredentials: true,
       reconnection: true,
-      reconnectionAttempts: 5,
+      reconnectionAttempts: Infinity, // keep trying (phone sleeps, network changes)
       reconnectionDelay: 1000,
+      reconnectionDelayMax: 10000,
     });
 
-    // 🔁 Helper to join garage room
+    // Reads the id at call time → works right after login without an app reload
     const joinGarageRoom = () => {
-      if (garageId) {
-        s.emit("join_garage", String(garageId)); // ✅ ensure string
-        console.log("🏠 Joined garage:", garageId);
-      }
+      const id = readGarageId(garageId);
+      if (!id || !s.connected) return;
+      s.emit("join_garage", String(id));
+      joinedRef.current = String(id);
+      console.log("🏠 Joined garage:", id);
     };
 
-    // ✅ Initial connection
+    // "connect" fires on first connect AND every reconnect
     s.on("connect", () => {
       console.log("✅ Socket connected:", s.id);
       joinGarageRoom();
     });
 
-    // 🔄 Reconnect handling (CRITICAL)
-    s.on("reconnect", () => {
-      console.log("🔄 Socket reconnected");
-      joinGarageRoom();
-    });
-
-    // ❌ Error debugging (very useful in production)
     s.on("connect_error", (err) => {
       console.error("❌ Socket connect error:", err.message);
     });
 
     s.on("disconnect", (reason) => {
       console.log("⚠️ Socket disconnected:", reason);
+      // Server kicked us → reconnect manually (auto-reconnect doesn't cover this)
+      if (reason === "io server disconnect") s.connect();
     });
+
+    // App comes back to foreground → make sure we're connected and in the room
+    const onVisibility = () => {
+      if (document.hidden) return;
+      if (!s.connected) s.connect();
+      else joinGarageRoom();
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+
+    // Login / logout happened → join the new garage room
+    const onLoginChange = () => {
+      const id = readGarageId(garageId);
+      if (id && String(id) !== joinedRef.current) joinGarageRoom();
+    };
+    window.addEventListener("storage", onLoginChange);
+    const poll = setInterval(onLoginChange, 3000); // same-tab login (no storage event)
 
     setSocket(s);
 
-    // 🧹 Cleanup
     return () => {
       console.log("🧹 Disconnecting socket");
+      document.removeEventListener("visibilitychange", onVisibility);
+      window.removeEventListener("storage", onLoginChange);
+      clearInterval(poll);
       s.disconnect();
     };
   }, [garageId]);
 
-  // 🔥 Prevent rendering children until socket ready
-  if (!socket) return null;
-
+  // Render children immediately; consumers already handle socket === null
   return (
     <SocketContext.Provider value={socket}>{children}</SocketContext.Provider>
   );
 }
-
-// import { createContext, useContext, useEffect, useState } from "react";
-// import { io } from "socket.io-client";
-
-// const SocketContext = createContext(null);
-
-// export const useSocket = () => useContext(SocketContext);
-// const SOCKET_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:5001";
-
-// export default function SocketProvider({ children, garageId }) {
-//   const [socket, setSocket] = useState(null);
-
-//   useEffect(() => {
-//     // const s = io("http://localhost:5001", {
-//     //   transports: ["websocket"],
-//     // });
-
-//     const s = io(SOCKET_URL, {
-//       transports: ["websocket", "polling"],
-//     });
-
-//     s.on("connect", () => {
-//       console.log("✅ Socket connected:", s.id);
-
-//       if (garageId) {
-//         s.emit("join_garage", garageId);
-//         console.log("🏠 Joined garage:", garageId);
-//       }
-//     });
-
-//     setSocket(s);
-
-//     return () => s.disconnect();
-//   }, [garageId]);
-
-//   // 🔥 IMPORTANT: wait until socket ready
-//   if (!socket) return null;
-
-//   return (
-//     <SocketContext.Provider value={socket}>{children}</SocketContext.Provider>
-//   );
-// }

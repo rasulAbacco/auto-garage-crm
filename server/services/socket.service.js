@@ -2,6 +2,9 @@
 
 let io = null;
 
+// Must match RESPONSE_WINDOW_MS in booking.service.js / marketplace.controller.js
+const RESPONSE_WINDOW_MS = 30 * 1000;
+
 // Helper: normalize a phone number into a stable room name.
 // Strips spaces/dashes so "+91 98765 43210" and "919876543210" map to the same room.
 const clientRoom = (phone) => `client_${String(phone).replace(/[\s-]/g, "")}`;
@@ -97,12 +100,21 @@ export const notifyGarage = async (garageId, booking) => {
     // ==============================
     // EMIT EVENT
     // ==============================
+    // createdAt / expiresAt let the app ignore stale events
+    // (e.g. delivered late after the app was in the background)
+    const createdAt = booking.createdAt
+      ? new Date(booking.createdAt)
+      : new Date();
     io.to(room).emit("new_booking", {
       id: booking.id,
       serviceId: booking.serviceId,
       serviceName: booking.serviceName, // 🆕 for the popup UI
       carType: booking.carType,
       finalPrice: booking.finalPrice,
+      createdAt: createdAt.toISOString(),
+      expiresAt: new Date(
+        createdAt.getTime() + RESPONSE_WINDOW_MS,
+      ).toISOString(),
     });
 
     console.log("✅ new_booking emitted to room:", room);

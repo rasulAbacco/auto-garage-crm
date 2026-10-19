@@ -3,26 +3,18 @@ import React, { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams, useLocation } from "react-router-dom";
 import {
   Save,
-  X,
   Camera,
   User,
-  Phone,
-  Mail,
-  MapPin,
-  Users,
-  Calendar,
-  Hash,
   Upload,
   Trash2,
   Image as ImageIcon,
   Bike,
   FileText,
-  Droplet,
-  Palette,
   RotateCw,
-  Move,
   Scan,
   ArrowLeft,
+  Check,
+  X,
 } from "lucide-react";
 import { Toaster, toast } from "react-hot-toast";
 import { useTheme } from "../../contexts/ThemeContext";
@@ -48,35 +40,59 @@ const EMPTY_FORM = {
   damageImages: [],
 };
 
-const fallbackImage = "https://via.placeholder.com/300x200?text=No+Image";
+/** Reg. / chassis numbers: CAPITAL letters + digits only (spaces, dashes removed) */
+const toCode = (value = "") =>
+  String(value)
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, "");
+
+/* ---------- text helpers for brand / model matching ---------- */
+const normalizeBrand = (str = "") =>
+  str
+    .toLowerCase()
+    .replace(/ltd|limited|company|co|motor|motors|corp|corporation/g, "")
+    .replace(/[^a-z0-9 ]/g, "")
+    .trim();
+
+const isBrandMatch = (input, brand) => {
+  const inputNorm = normalizeBrand(input);
+  const brandNorm = normalizeBrand(brand);
+  if (!inputNorm) return false;
+  return inputNorm === brandNorm || brandNorm.startsWith(inputNorm);
+};
+
+const normalizeModel = (str = "") =>
+  str
+    .toLowerCase()
+    .replace(/[^a-z0-9 ]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+
+const findBestModelMatch = (typed, models) => {
+  if (!typed || !models.length) return null;
+  const t = normalizeModel(typed);
+  const exact = models.find((m) => normalizeModel(m.name) === t);
+  if (exact) return exact;
+  const partial = models.find((m) => normalizeModel(m.name).includes(t));
+  if (partial) return partial;
+  const words = t.split(" ");
+  return models.find((m) =>
+    words.every((w) => normalizeModel(m.name).includes(w)),
+  );
+};
 
 export default function AddClients() {
   const { id } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
   const { isDark } = useTheme();
+  const isEdit = Boolean(id && id !== "new");
 
   const [form, setForm] = useState({ ...EMPTY_FORM });
   const [loading, setLoading] = useState(false);
   const [loadingClient, setLoadingClient] = useState(false);
   const [isProcessingRC, setIsProcessingRC] = useState(false);
-  const [isImageUploaded, setIsImageUploaded] = useState(false);
-  const [showCameraOptions, setShowCameraOptions] = useState(false);
   const [dragOver, setDragOver] = useState(false);
-
-  // 3D Viewer State
-  const [rotation, setRotation] = useState({ x: -20, y: 0 });
-  const [scale, setScale] = useState(1);
-  const [isDragging, setIsDragging] = useState(false);
-  const [currentView, setCurrentView] = useState("Front");
-  const [activeImage, setActiveImage] = useState("");
- 
-  const fileInputRef = useRef(null);
-  const cameraInputRef = useRef(null);
-  const mainFileRef = useRef(null);
-  const damageFileRef = useRef(null);
-  const startPos = useRef({ x: 0, y: 0 });
-  const startRot = useRef({ x: 0, y: 0 });
   const [bikeImageLoading, setBikeImageLoading] = useState(false);
 
   const [bikeMakes, setBikeMakes] = useState([]);
@@ -85,12 +101,19 @@ export default function AddClients() {
   const [showBrandList, setShowBrandList] = useState(false);
   const [brandSelected, setBrandSelected] = useState(false);
 
-  // ========== LOAD EXISTING CLIENT (EDIT MODE) ==========
+  const fileInputRef = useRef(null);
+  const cameraInputRef = useRef(null);
+  const mainFileRef = useRef(null);
+  const damageFileRef = useRef(null);
 
+  const set = (field) => (e) =>
+    setForm((prev) => ({ ...prev, [field]: e.target.value }));
+  const setCode = (field) => (e) =>
+    setForm((prev) => ({ ...prev, [field]: toCode(e.target.value) }));
 
+  /* ========== LOAD EXISTING CLIENT (EDIT MODE) ========== */
   useEffect(() => {
-    if (location?.state?.clientData) {
-      const c = location.state.clientData;
+    const fill = (c) =>
       setForm({
         ...EMPTY_FORM,
         fullName: c.ownerName || c.fullName || "",
@@ -101,8 +124,8 @@ export default function AddClients() {
         vehicleMake: c.bikeBrand || c.vehicleMake || "",
         vehicleModel: c.bikeModel || c.vehicleModel || "",
         vehicleYear: c.bikeYear || c.vehicleYear || "",
-        regNumber: c.regNumber || "",
-        vin: c.vin || "",
+        regNumber: toCode(c.regNumber || ""),
+        vin: toCode(c.vin || ""),
         color: c.color || "",
         fuel: c.fuel || "",
         notes: c.notes || "",
@@ -110,47 +133,23 @@ export default function AddClients() {
         adImage: c.adImage || "",
         damageImages: Array.isArray(c.damageImages) ? c.damageImages : [],
       });
-      setIsImageUploaded(!!(c.bikeImage || c.carImage));
-      setActiveImage(c.adImage || c.bikeImage || c.carImage || "");
+
+    if (location?.state?.clientData) {
+      fill(location.state.clientData);
       return;
     }
-
-    if (!id) return;
+    if (!isEdit) return;
 
     const fetchClient = async () => {
       try {
         setLoadingClient(true);
         const res = await api.get(`/api/bikes/${id}`);
-        const data = res.data || {};
-
-        setForm({
-          ...EMPTY_FORM,
-          fullName: data.ownerName || "",
-          phone: data.phone || "",
-          email: data.email || "",
-          address: data.address || "",
-          receiverName: data.receiverName || "",
-          vehicleMake: data.bikeBrand || "",
-          vehicleModel: data.bikeModel || "",
-          vehicleYear: data.bikeYear || "",
-          regNumber: data.regNumber || "",
-          vin: data.vin || "",
-          color: data.color || "",
-          fuel: data.fuel || "",
-          notes: data.notes || "",
-          carImage: data.bikeImage || "",
-          adImage: data.adImage || "",
-          damageImages: Array.isArray(data.damageImages) ? data.damageImages : [],
-        });
-
-        setIsImageUploaded(!!data.bikeImage);
-        setActiveImage(data.adImage || data.bikeImage || "");
+        fill(res.data || {});
       } catch (err) {
         console.error("Fetch client error:", err);
         toast.error(
-          err.response?.data?.message || err.message || "Failed to load client"
+          err.response?.data?.message || err.message || "Failed to load client",
         );
-        // If 403 or 404, redirect back
         if (err.response?.status === 403 || err.response?.status === 404) {
           setTimeout(() => navigate("/bike-clients"), 2000);
         }
@@ -158,295 +157,135 @@ export default function AddClients() {
         setLoadingClient(false);
       }
     };
-
     fetchClient();
-  }, [id, location?.state, navigate]);
+  }, [id, isEdit, location?.state, navigate]);
 
-  // Update active image when form images change
+  /* ========== BIKE MAKES / MODELS ========== */
   useEffect(() => {
-    setActiveImage(form.adImage || form.carImage || "");
-  }, [form.adImage, form.carImage]);
+    api
+      .get("/api/bikes-meta/local-makes")
+      .then((res) => setBikeMakes(res.data.makes || []))
+      .catch((err) => console.error("Bike makes load error", err));
+  }, []);
 
   useEffect(() => {
-    if (!form.vehicleMake || !form.vehicleModel) return;
-    if (!bikeModels.length) return;
+    if (!form.vehicleMake) {
+      setSelectedBikeMake(null);
+      setBikeModels([]);
+      setBrandSelected(false);
+      return;
+    }
 
-    const timer = setTimeout(() => {
-      const bestMatch = findBestModelMatch(form.vehicleModel, bikeModels);
+    if (!brandSelected) {
+      const found = bikeMakes.find(
+        (b) => normalizeBrand(b.make) === normalizeBrand(form.vehicleMake),
+      );
+      setSelectedBikeMake(found || null);
+    }
 
-      if (bestMatch) {
-        // only fetch image — do NOT touch input value
-        fetchBikeImage(
-          form.vehicleMake,
-          bestMatch.name,
-          form.vehicleYear
-        );
+    const timer = setTimeout(async () => {
+      try {
+        const res = await api.get("/api/bikes-meta/local-models", {
+          params: { make: form.vehicleMake },
+        });
+        setBikeModels(res.data.models || []);
+      } catch (err) {
+        console.error("Failed to load models", err);
+        setBikeModels([]);
       }
-    }, 400);
-
+    }, 250);
     return () => clearTimeout(timer);
+  }, [form.vehicleMake, bikeMakes, brandSelected]);
+
+  // Auto-fetch a bike picture when make + model are known
+  useEffect(() => {
+    if (!form.vehicleMake || !form.vehicleModel || !bikeModels.length) return;
+    const timer = setTimeout(() => {
+      const best = findBestModelMatch(form.vehicleModel, bikeModels);
+      if (best) fetchBikeImage(form.vehicleMake, best.name, form.vehicleYear);
+    }, 400);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [form.vehicleMake, form.vehicleModel, form.vehicleYear, bikeModels]);
 
-
-
-useEffect(() => {
-  const loadBikeMakes = async () => {
+  const fetchBikeImage = async (make, model, year) => {
+    const nMake = make.trim();
+    const nModel = model.trim();
+    if (!nMake || !nModel) return;
     try {
-      const res = await api.get("/api/bikes-meta/local-makes");
-      setBikeMakes(res.data.makes || []);
-    } catch (err) {
-      console.error("Bike makes load error", err);
-    }
-  };
-
-  loadBikeMakes();
-}, []);
-
-// useEffect(() => {
-//   if (!form.vehicleMake) return;
-
-//   api.get("/api/bikes-meta/local-models", {
-//     params: { make: form.vehicleMake }
-//   }).then(res => {
-//     setBikeModels(res.data.models || []);
-//     setForm(prev => ({
-//       ...prev,
-//       vehicleModel: "",
-//       carImage: ""
-//     }));
-//   });
-// }, [form.vehicleMake]);
-
-useEffect(() => {
-  // If input empty → reset everything
-  if (!form.vehicleMake) {
-    setSelectedBikeMake(null);
-    setBikeModels([]);
-    setBrandSelected(false);
-    return;
-  }
-
-  // ✅ Only auto-detect brand while typing (NOT after selection)
-  if (!brandSelected) {
-    const found = bikeMakes.find(
-      (b) =>
-        normalizeBrand(b.make) === normalizeBrand(form.vehicleMake)
-    );
-
-    if (found) {
-      setSelectedBikeMake(found);
-    } else {
-      setSelectedBikeMake(null);
-    }
-  }
-
-  // ✅ Fetch models only when brand is finalized
-  const fetchModels = async () => {
-    try {
-      const res = await api.get("/api/bikes-meta/local-models", {
-        params: { make: form.vehicleMake },
-      });
-      setBikeModels(res.data.models || []);
-    } catch (err) {
-      console.error("Failed to load models", err);
-      setBikeModels([]);
-    }
-  };
-
-  fetchModels();
-}, [form.vehicleMake, bikeMakes, brandSelected]);
-
-useEffect(() => {
-  if (!brandSelected || !form.vehicleMake) return;
-
-  const fetchModels = async () => {
-    try {
-      const res = await api.get("/api/bikes-meta/local-models", {
-        params: { make: form.vehicleMake },
-      });
-      setBikeModels(res.data.models || []);
-    } catch {
-      setBikeModels([]);
-    }
-  };
-
-  fetchModels();
-}, [brandSelected, form.vehicleMake]);
-
-// Normalize text: remove extra words, symbols, lowercase
-const normalizeBrand = (str = "") =>
-  str
-    .toLowerCase()
-    .replace(/ltd|limited|company|co|motor|motors|corp|corporation/g, "")
-    .replace(/[^a-z0-9 ]/g, "")
-    .trim();
-
-// Smart matcher: checks ANY word match
-const isBrandMatch = (input, brand) => {
-  const inputNorm = normalizeBrand(input);
-  const brandNorm = normalizeBrand(brand);
-
-  if (!inputNorm) return false;
-
-  // Exact match
-  if (inputNorm === brandNorm) return true;
-
-  // Allow single-letter match safely
-  return brandNorm.startsWith(inputNorm);
-};
-
-
-// Normalize model text
-const normalizeModel = (str = "") =>
-  str
-    .toLowerCase()
-    .replace(/[^a-z0-9 ]/g, "")
-    .replace(/\s+/g, " ")
-    .trim();
-
-// Smart match typed model against available models
-const findBestModelMatch = (typed, models) => {
-  if (!typed || !models.length) return null;
-
-  const t = normalizeModel(typed);
-
-  // Exact match first
-  let exact = models.find(
-    (m) => normalizeModel(m.name) === t
-  );
-  if (exact) return exact;
-
-  // Partial contains match
-  let partial = models.find(
-    (m) => normalizeModel(m.name).includes(t)
-  );
-  if (partial) return partial;
-
-  // Word-based match (Aerox 155 matches Yamaha Aerox 155)
-  const words = t.split(" ");
-  return models.find((m) =>
-    words.every((w) => normalizeModel(m.name).includes(w))
-  );
-};
-
-  // ========== OCR AUTOFILL FUNCTIONS ==========
-  const handleScanButtonClick = () => {
-    if (navigator.mediaDevices?.getUserMedia) cameraInputRef.current.click();
-    else fileInputRef.current.click();
-  };
-
-  // ---------- Normalization Helpers ----------
-  const cleanReg = (s = "") => String(s).toUpperCase().replace(/[^A-Z0-9]/g, "");
-  const extractYear = (s = "") => {
-    const m = String(s).match(/\b(19|20)\d{2}\b/);
-    return m ? m[0] : "";
-  };
-
-  const extractFuel = (s = "") => {
-    const fuels = ["petrol", "diesel", "electric"];
-    const t = s.toLowerCase();
-    return fuels.find((f) => t.includes(f)) || "";
-  };
-
-const normalize = (v = "") => v.trim();
-
-const fetchBikeImage = async (make, model, year) => {
-  const nMake = normalize(make);
-  const nModel = normalize(model);
-
-  if (!nMake || !nModel) return;
-
-  try {
-    setBikeImageLoading(true);
-
-    console.log("🚲 Fetch bike image:", nMake, nModel, year);
-
-    const res = await api.get(
-      `/api/bikes-meta/local-image`,
-      {
+      setBikeImageLoading(true);
+      const res = await api.get("/api/bikes-meta/local-image", {
         params: {
           make: nMake.toUpperCase(),
           model: nModel,
           year: year || undefined,
         },
-      }
-    );
-
-    console.log("🖼 API response:", res.data);
-
-    const img = res.data?.heroUrl || res.data?.thumbnailUrl;
-
-    if (img) {
-      setForm((prev) => ({
-        ...prev,
-        carImage: img,
-      }));
-    } else {
-      setForm((prev) => ({
-        ...prev,
-        carImage: "",
-      }));
+      });
+      const img = res.data?.heroUrl || res.data?.thumbnailUrl;
+      // keep a manually uploaded photo; only fill when empty or auto-filled before
+      setForm((prev) =>
+        prev.carImage && prev.carImage.startsWith("data:")
+          ? prev
+          : { ...prev, carImage: img || "" },
+      );
+    } catch (err) {
+      console.warn("Bike image not found", err?.response?.data);
+    } finally {
+      setBikeImageLoading(false);
     }
-  } catch (err) {
-    console.warn("❌ Bike image not found", err?.response?.data);
-  } finally {
-    setBikeImageLoading(false);
-  }
-};
-
-
-  // ---------- Map OCR → AddClients form ----------
-  const mapBikeOcrToForm = (p = {}) => {
-    return {
-      fullName: p.ownerName || "",
-      regNumber: p.regNo || "",
-      vehicleMake: p.maker || "",
-      vehicleModel: p.vehicleModel || "",
-      vehicleYear: p.regDate ? (p.regDate.match(/\b(19|20)\d{2}\b/)?.[0] || "") : "",
-      vin: p.chassisNo || "",
-      color: p.color || "",
-      fuel: p.fuel || "",
-      address: p.address || "",
-    };
   };
 
-  const handleRCFile = async (e) => {
+  /* ========== RC SCAN (OCR) ========== */
+  const mapBikeOcrToForm = (p = {}) => ({
+    fullName: p.ownerName || "",
+    regNumber: toCode(p.regNo || ""),
+    vehicleMake: p.maker || "",
+    vehicleModel: p.vehicleModel || "",
+    vehicleYear: p.regDate
+      ? p.regDate.match(/\b(19|20)\d{2}\b/)?.[0] || ""
+      : "",
+    vin: toCode(p.chassisNo || ""),
+    color: p.color || "",
+    fuel: p.fuel || "",
+    address: p.address || "",
+  });
+
+  const handleRCFile = (e) => {
     const file = e.target.files?.[0];
+    e.target.value = "";
     if (!file) return;
 
     setIsProcessingRC(true);
-
-    try {
-      const reader = new FileReader();
-
-      reader.onload = async (ev) => {
-        const base64 = ev.target.result;
-
-        // Run OCR (Bike OCR Processor)
-        const result = await BikeprocessImage(base64);
-
-        const parsed = result?.parsed || {};
-        console.log("🔍 OCR RAW PARSED OUTPUT:", parsed);
-
-        const mapped = mapBikeOcrToForm(parsed);
-
-        // Apply to form
-        setForm((prev) => ({ ...prev, ...mapped }));
-
-        toast.success("RC scanned — details auto-filled!");
-      };
-
-      reader.readAsDataURL(file);
-    } catch (err) {
-      console.error(err);
-      toast.error("Failed to scan RC");
-    } finally {
+    const reader = new FileReader();
+    reader.onload = async (ev) => {
+      try {
+        const result = await BikeprocessImage(ev.target.result);
+        const mapped = mapBikeOcrToForm(result?.parsed || {});
+        // only overwrite fields the scan actually found
+        const found = Object.fromEntries(
+          Object.entries(mapped).filter(([, v]) => v),
+        );
+        setForm((prev) => ({ ...prev, ...found }));
+        toast.success(
+          Object.keys(found).length
+            ? "RC scanned — details filled in"
+            : "Couldn't read the RC clearly",
+        );
+      } catch (err) {
+        console.error(err);
+        toast.error("Failed to scan RC");
+      } finally {
+        setIsProcessingRC(false);
+      }
+    };
+    reader.onerror = () => {
+      toast.error("Could not read the file");
       setIsProcessingRC(false);
-      e.target.value = "";
-    }
+    };
+    reader.readAsDataURL(file);
   };
 
-  // ========== IMAGE UPLOAD FUNCTIONS ==========
+  /* ========== IMAGES ========== */
   const toDataUrl = (file) =>
     new Promise((resolve, reject) => {
       const reader = new FileReader();
@@ -458,94 +297,61 @@ const fetchBikeImage = async (make, model, year) => {
   const handleFiles = async (files, type = "damage") => {
     try {
       if (!files || !files.length) return;
-
       if (type === "main") {
-        const file = files[0];
-        const dataUrl = await toDataUrl(file);
+        const dataUrl = await toDataUrl(files[0]);
         setForm((prev) => ({ ...prev, carImage: dataUrl }));
-        setIsImageUploaded(true);
-        toast.success("Main image uploaded");
-      } else if (type === "ad") {
-        const file = files[0];
-        const dataUrl = await toDataUrl(file);
-        setForm((prev) => ({ ...prev, adImage: dataUrl }));
-        toast.success("AD image uploaded");
+        toast.success("Bike photo added");
       } else {
         const urls = await Promise.all(Array.from(files).map(toDataUrl));
         setForm((prev) => ({
           ...prev,
           damageImages: [...(prev.damageImages || []), ...urls],
         }));
-        toast.success(`${urls.length} damage image(s) added`);
+        toast.success(
+          `${urls.length} photo${urls.length > 1 ? "s" : ""} added`,
+        );
       }
-    } catch (err) {
+    } catch {
       toast.error("Upload failed");
     }
   };
 
-  const handleDragOver = (e) => {
-    e.preventDefault();
-    setDragOver(true);
-  };
-
-  const handleDragLeave = () => setDragOver(false);
-
-  const handleDrop = (e, type) => {
-    e.preventDefault();
-    setDragOver(false);
-    handleFiles(e.dataTransfer.files, type);
-  };
-
-  const removeDamageImage = (index) => {
+  const removeDamageImage = (index) =>
     setForm((prev) => ({
       ...prev,
       damageImages: prev.damageImages.filter((_, i) => i !== index),
     }));
-    toast.success("Image removed");
-  };
 
-  // Mouse handlers for 3D rotation
-  const handleMouseDown = (e) => {
-    setIsDragging(true);
-    startPos.current = { x: e.clientX, y: e.clientY };
-    startRot.current = { ...rotation };
-  };
-
-  const handleMouseMove = (e) => {
-    if (!isDragging) return;
-    const dx = e.clientX - startPos.current.x;
-    const dy = e.clientY - startPos.current.y;
-    setRotation({
-      x: startRot.current.x + dy * 0.3,
-      y: startRot.current.y + dx * 0.3,
-    });
-  };
-
-  const handleMouseUp = () => setIsDragging(false);
-
-  const handleWheel = (e) => {
-    e.preventDefault();
-    setScale((prev) => Math.max(0.5, Math.min(3, prev + e.deltaY * -0.001)));
-  };
-
-  // ========== FORM SUBMISSION ==========
+  /* ========== SUBMIT ========== */
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    if (!form.fullName || !form.phone || !form.vehicleMake || !form.vehicleModel || !form.regNumber) {
-      toast.error("Please fill all required fields");
+    const missing = [
+      !form.fullName.trim() && "name",
+      !form.phone.trim() && "phone",
+      !form.vehicleMake.trim() && "make",
+      !form.vehicleModel.trim() && "model",
+      !form.regNumber && "registration number",
+    ].filter(Boolean);
+    if (missing.length) {
+      toast.error(`Please fill: ${missing.join(", ")}`);
       return;
     }
 
-    setLoading(true);
+    const payload = {
+      ...form,
+      regNumber: toCode(form.regNumber),
+      vin: toCode(form.vin),
+    };
 
+    setLoading(true);
     try {
-      if (id) {
-        await api.put(`/api/bikes/${id}`, form);
-        toast.success("Client updated successfully");
+      if (isEdit) {
+        await api.put(`/api/bikes/${id}`, payload);
+        toast.success("Client updated");
       } else {
-        await api.post("/api/bikes", form);
-        toast.success("Client added successfully");
+        await api.post("/api/bikes", payload);
+        toast.success("Client added");
       }
       navigate("/bike-clients");
     } catch (err) {
@@ -556,94 +362,124 @@ const fetchBikeImage = async (make, model, year) => {
     }
   };
 
-  const handleCancel = () => navigate("/bike-clients");
+  /* ========== STYLES ========== */
+  const t = isDark
+    ? {
+        page: "bg-gray-900 text-gray-100",
+        card: "bg-gray-800 border-gray-700",
+        border: "border-gray-700",
+        muted: "text-gray-400",
+        input:
+          "bg-gray-900 border-gray-600 text-gray-100 placeholder:text-gray-500 focus:border-blue-400 focus:ring-blue-400/20",
+        btn2: "border-gray-600 text-gray-200 hover:bg-gray-700",
+        tile: "border-gray-600 hover:border-blue-400",
+        drop: "border-gray-600 bg-gray-900/40",
+      }
+    : {
+        page: "bg-gray-50 text-gray-800",
+        card: "bg-white border-gray-200",
+        border: "border-gray-200",
+        muted: "text-gray-500",
+        input:
+          "bg-white border-gray-300 text-gray-800 placeholder:text-gray-400 focus:border-blue-500 focus:ring-blue-500/15",
+        btn2: "border-gray-300 text-gray-700 hover:bg-gray-50",
+        tile: "border-gray-200 hover:border-blue-500",
+        drop: "border-gray-300 bg-gray-50",
+      };
+  const inputCls = `h-9 w-full rounded-md border px-3 text-[14px] outline-none transition focus:ring-2 ${t.input}`;
+  const codeCls = `${inputCls} font-mono uppercase tracking-wide`;
 
   if (loadingClient) {
     return (
-      <div className={`min-h-screen flex items-center justify-center ${isDark ? "bg-gray-900" : "bg-gray-100"}`}>
-        <RotateCw className="w-12 h-12 animate-spin text-blue-500" />
+      <div
+        className={`flex min-h-screen items-center justify-center ${t.page}`}
+      >
+        <RotateCw className="h-6 w-6 animate-spin text-blue-500" />
       </div>
     );
   }
 
-  
+  const matchingBrands = bikeMakes
+    .filter((b) => isBrandMatch(form.vehicleMake, b.make))
+    .slice(0, 12);
+  const modelMatches = bikeModels
+    .filter((m) =>
+      m.name.toLowerCase().includes(form.vehicleModel.toLowerCase()),
+    )
+    .slice(0, 10);
+  const modelChosen = bikeModels.some(
+    (m) => m.name.toLowerCase() === form.vehicleModel.toLowerCase(),
+  );
+
   return (
-    <div className={`min-h-screen p-6 transition-all duration-300 ${isDark ? "bg-gray-900" : "bg-gradient-to-br from-slate-50 via-blue-50 to-slate-100"}`}>
-      <Toaster position="top-right" />
+    <div
+      className={`min-h-screen px-3 py-4 text-[14px] sm:px-5 lg:px-8 ${t.page}`}
+    >
+      <Toaster
+        position="top-right"
+        toastOptions={{ style: { fontSize: "14px" } }}
+      />
 
-      {/* Header */}
-      <div className="mb-8">
-        <button
-          onClick={() => navigate("/bike-clients")}
-          className={`flex items-center gap-2 px-4 py-2 rounded-lg mb-4 transition-all duration-200 ${
-            isDark
-              ? "text-gray-300 hover:bg-gray-800 hover:text-white"
-              : "text-gray-700 hover:bg-white hover:text-blue-600"
-          }`}
+      <form
+        onSubmit={handleSubmit}
+        className="mx-auto max-w-4xl space-y-4 pb-20"
+      >
+        {/* Header */}
+        <div>
+          <button
+            type="button"
+            onClick={() => navigate("/bike-clients")}
+            className={`mb-2 inline-flex items-center gap-1.5 text-[12px] font-medium ${t.muted} hover:text-blue-600`}
+          >
+            <ArrowLeft size={14} /> Back to clients
+          </button>
+          <h1 className="text-[16px] font-semibold">
+            {isEdit ? "Edit client" : "Add new client"}
+          </h1>
+          <p className={`text-[12px] ${t.muted}`}>
+            Fields marked * are required.
+          </p>
+        </div>
+
+        {/* RC scan */}
+        <div
+          className={`flex flex-col gap-3 rounded-lg border px-4 py-3 sm:flex-row sm:items-center sm:justify-between ${isDark ? "border-blue-500/20 bg-blue-500/10" : "border-blue-200 bg-blue-50"}`}
         >
-          <ArrowLeft size={20} />
-          Back to Clients
-        </button>
-
-        <h1 className="text-4xl font-bold bg-gradient-to-r from-blue-500 to-blue-600 bg-clip-text text-transparent">
-          {id ? "Edit Client" : "Add New Client"}
-        </h1>
-        <p className={`text-sm mt-2 ${isDark ? "text-gray-400" : "text-gray-600"}`}>
-          {id ? "Update client information" : "Fill in the details to register a new client"}
-        </p>
-      </div>
-
-      <form onSubmit={handleSubmit} className="space-y-8">
-        {/* OCR Scanner Section */}
-        <div className={`p-6 rounded-2xl shadow-lg border transition-all duration-300 ${
-          isDark ? "bg-gray-800 border-gray-700" : "bg-white border-gray-100"
-        }`}>
-          <h2 className={`text-2xl font-bold mb-4 flex items-center gap-2 ${isDark ? "text-white" : "text-gray-900"}`}>
-            <Scan size={24} className="text-blue-500" />
-            Quick RC Scan
-          </h2>
-
-          <div className="flex flex-wrap gap-4">
+          <div className="flex items-start gap-2.5">
+            <Scan size={16} className="mt-0.5 shrink-0 text-blue-600" />
+            <div>
+              <p className="text-[14px] font-medium">
+                Fill details from the RC
+              </p>
+              <p className={`text-[12px] ${t.muted}`}>
+                Upload or photograph the registration certificate to auto-fill
+                the form.
+              </p>
+            </div>
+          </div>
+          <div className="flex shrink-0 gap-2">
             <button
               type="button"
               onClick={() => fileInputRef.current.click()}
               disabled={isProcessingRC}
-              className={`flex items-center gap-2 px-6 py-3 rounded-xl font-medium shadow transition-all duration-300 hover:scale-105 active:scale-95 ${
-                isProcessingRC
-                  ? "bg-gray-400 cursor-not-allowed"
-                  : "bg-gradient-to-r from-blue-500 to-blue-600 text-white hover:shadow-xl"
-              }`}
+              className="inline-flex h-9 flex-1 items-center justify-center gap-1.5 rounded-md bg-blue-600 px-3 text-[14px] font-medium text-white hover:bg-blue-700 disabled:opacity-60 sm:flex-none"
             >
               {isProcessingRC ? (
-                <>
-                  <RotateCw size={20} className="animate-spin" />
-                  Processing...
-                </>
+                <RotateCw size={14} className="animate-spin" />
               ) : (
-                <>
-                  <Upload size={20} />
-                  Upload RC
-                </>
+                <Upload size={14} />
               )}
+              {isProcessingRC ? "Reading…" : "Upload RC"}
             </button>
-
             <button
               type="button"
               onClick={() => cameraInputRef.current.click()}
               disabled={isProcessingRC}
-              className={`flex items-center gap-2 px-6 py-3 rounded-xl font-medium shadow transition-all duration-300 hover:scale-105 active:scale-95 ${
-                isProcessingRC
-                  ? "bg-gray-400 cursor-not-allowed"
-                  : isDark
-                  ? "bg-gray-700 text-gray-200 hover:bg-gray-600"
-                  : "bg-gray-200 text-gray-800 hover:bg-gray-300"
-              }`}
+              className={`inline-flex h-9 flex-1 items-center justify-center gap-1.5 rounded-md border px-3 text-[14px] font-medium disabled:opacity-60 sm:flex-none ${t.btn2} ${isDark ? "" : "bg-white"}`}
             >
-              <Camera size={20} />
-              Capture RC
+              <Camera size={14} /> Camera
             </button>
           </div>
-
           <input
             ref={fileInputRef}
             type="file"
@@ -661,140 +497,112 @@ const fetchBikeImage = async (make, model, year) => {
           />
         </div>
 
-        {/* Personal Information */}
-        <div className={`p-6 rounded-2xl shadow-lg border transition-all duration-300 ${
-          isDark ? "bg-gray-800 border-gray-700" : "bg-white border-gray-100"
-        }`}>
-          <h2 className={`text-2xl font-bold mb-6 flex items-center gap-2 ${isDark ? "text-white" : "text-gray-900"}`}>
-            <User size={24} className="text-blue-500" />
-            Personal Information
-          </h2>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <InputField
-              icon={<User size={18} />}
-              iconColor="text-blue-500"
-              label="Full Name"
-              name="fullName"
-              value={form.fullName}
-              onChange={(e) => setForm({ ...form, fullName: e.target.value })}
-              placeholder="Enter full name"
-              isDark={isDark}
-              required
-            />
-
-            <InputField
-              icon={<Phone size={18} />}
-              iconColor="text-green-500"
-              label="Phone Number"
-              name="phone"
-              value={form.phone}
-              onChange={(e) => setForm({ ...form, phone: e.target.value })}
-              placeholder="Enter phone number"
-              isDark={isDark}
-              type="tel"
-              required
-            />
-
-            <InputField
-              icon={<Mail size={18} />}
-              iconColor="text-purple-500"
-              label="Email"
-              name="email"
-              value={form.email}
-              onChange={(e) => setForm({ ...form, email: e.target.value })}
-              placeholder="Enter email address"
-              isDark={isDark}
-              type="email"
-            />
-
-            <InputField
-              icon={<MapPin size={18} />}
-              iconColor="text-red-500"
-              label="Address"
-              name="address"
-              value={form.address}
-              onChange={(e) => setForm({ ...form, address: e.target.value })}
-              placeholder="Enter address"
-              isDark={isDark}
-            />
-
-            <InputField
-              icon={<Users size={18} />}
-              iconColor="text-yellow-500"
-              label="Receiver Name"
-              name="receiverName"
-              value={form.receiverName}
-              onChange={(e) => setForm({ ...form, receiverName: e.target.value })}
-              placeholder="Staff/Receiver name"
-              isDark={isDark}
-            />
+        {/* Customer */}
+        <Section t={t} icon={User} title="Customer details">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <Field t={t} label="Full name" required>
+              <input
+                value={form.fullName}
+                onChange={set("fullName")}
+                className={inputCls}
+                placeholder="Customer name"
+                autoComplete="off"
+              />
+            </Field>
+            <Field t={t} label="Phone number" required>
+              <input
+                type="tel"
+                inputMode="numeric"
+                value={form.phone}
+                onChange={(e) =>
+                  setForm((prev) => ({
+                    ...prev,
+                    phone: e.target.value.replace(/[^\d+]/g, "").slice(0, 13),
+                  }))
+                }
+                className={inputCls}
+                placeholder="9876543210"
+              />
+            </Field>
+            <Field t={t} label="Email">
+              <input
+                type="email"
+                value={form.email}
+                onChange={set("email")}
+                className={inputCls}
+                placeholder="name@example.com"
+              />
+            </Field>
+            <Field t={t} label="Received by">
+              <input
+                value={form.receiverName}
+                onChange={set("receiverName")}
+                className={inputCls}
+                placeholder="Staff name"
+              />
+            </Field>
+            <Field t={t} label="Address" className="sm:col-span-2">
+              <input
+                value={form.address}
+                onChange={set("address")}
+                className={inputCls}
+                placeholder="House, street, area, city"
+              />
+            </Field>
           </div>
-        </div>
+        </Section>
 
-        {/* Vehicle Information */}
-      <div
-        className={`p-6 rounded-2xl shadow-lg border transition-all duration-300 ${
-          isDark ? "bg-gray-800 border-gray-700" : "bg-white border-gray-100"
-        }`}
-      >
-        <h2
-          className={`text-2xl font-bold mb-6 flex items-center gap-2 ${
-            isDark ? "text-white" : "text-gray-900"
-          }`}
-        >
-          <Bike size={24} className="text-blue-500" />
-          Vehicle Details
-        </h2>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {/* ================= VEHICLE MAKE + BRAND ================= */}
-          <div className="space-y-3">
-            {/* Vehicle Make Input */}
-            <InputField
-              label="Vehicle Make"
-              value={form.vehicleMake}
-              onChange={(e) => {
-                setForm({ ...form, vehicleMake: e.target.value });
-                setShowBrandList(true);
-                setBrandSelected(false);
-                setBikeModels([]);
-                setSelectedBikeMake(null);
-              }}
-              placeholder="Enter brand name"
-              isDark={isDark}
+        {/* Vehicle */}
+        <Section t={t} icon={Bike} title="Bike details">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            {/* Make */}
+            <Field
+              t={t}
+              label="Make / brand"
               required
-            />
-            
-
-            {/* ✅ Selected Brand Logo (ALWAYS visible after selection) */}
-            {selectedBikeMake && (
-              <div className="flex items-center gap-3 mt-2">
-                <img
-                  src={selectedBikeMake.logoUrl}
-                  alt={selectedBikeMake.make}
-                  className="h-12 object-contain"
+              className="sm:col-span-2"
+            >
+              <div className="flex items-center gap-2">
+                {selectedBikeMake?.logoUrl && (
+                  <img
+                    src={selectedBikeMake.logoUrl}
+                    alt=""
+                    className={`h-9 w-9 shrink-0 rounded-md border bg-white object-contain p-1 ${t.border}`}
+                  />
+                )}
+                <input
+                  value={form.vehicleMake}
+                  onChange={(e) => {
+                    setForm((prev) => ({
+                      ...prev,
+                      vehicleMake: e.target.value,
+                    }));
+                    setShowBrandList(true);
+                    setBrandSelected(false);
+                    setBikeModels([]);
+                    setSelectedBikeMake(null);
+                  }}
+                  onFocus={() => !brandSelected && setShowBrandList(true)}
+                  className={inputCls}
+                  placeholder="Start typing, e.g. Honda"
+                  autoComplete="off"
                 />
-                <span
-                  className={`text-sm font-semibold ${
-                    isDark ? "text-gray-200" : "text-gray-700"
-                  }`}
-                >
-                  {selectedBikeMake.make}
-                </span>
+                {brandSelected && (
+                  <Check size={16} className="shrink-0 text-emerald-500" />
+                )}
               </div>
-            )}
+            </Field>
 
-            {/* ================= SELECT BRAND LIST ================= */}
-            {showBrandList && !brandSelected && bikeMakes.length > 0 && (
-              <div className="mt-3">
-                <p className="text-sm font-semibold mb-2">Select Make</p>
-
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  {bikeMakes.filter((b) =>
-                      isBrandMatch(form.vehicleMake, b.make)
-                    )
-                    .map((brand) => (
+            {showBrandList &&
+              !brandSelected &&
+              form.vehicleMake &&
+              matchingBrands.length > 0 && (
+                <div className="sm:col-span-2">
+                  <p className={`mb-1.5 text-[12px] ${t.muted}`}>
+                    Pick the brand
+                  </p>
+                  <div className="grid grid-cols-3 gap-2 sm:grid-cols-6">
+                    {matchingBrands.map((brand) => (
                       <button
                         key={brand.slug}
                         type="button"
@@ -807,296 +615,210 @@ const fetchBikeImage = async (make, model, year) => {
                           setBrandSelected(true);
                           setShowBrandList(false);
                         }}
-                        className={`border rounded-xl p-4 transition text-center ${
-                          isDark
-                            ? "border-gray-600 hover:border-green-400"
-                            : "hover:border-green-500"
-                        }`}
+                        className={`rounded-md border p-2 text-center transition ${t.tile}`}
                       >
                         <img
                           src={brand.logoUrl}
-                          alt={brand.make}
-                          className="h-12 mx-auto object-contain mb-2"
+                          alt=""
+                          className="mx-auto mb-1 h-8 object-contain"
                         />
-                        <p className="text-sm font-medium">{brand.make}</p>
+                        <p className="truncate text-[12px] font-medium">
+                          {brand.make}
+                        </p>
                       </button>
                     ))}
-                </div>
-              </div>
-            )}
-
-            {/* ================= MODEL SELECTION ================= */}
-            {brandSelected &&
-              bikeModels.length > 0 &&
-              !bikeModels.some(
-                m => m.name.toLowerCase() === form.vehicleModel.toLowerCase()
-              ) && (
-              <div className="mt-6">
-                <p className="text-sm font-semibold mb-3">Choose Model</p>
-                <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-                  {bikeModels
-                    .filter((model) =>
-                      model.name
-                        .toLowerCase()
-                        .includes(form.vehicleModel.toLowerCase())
-                    )
-                    .map((model) => (
-                      <button
-                        key={model.slug}
-                        type="button"
-                        onClick={() => {
-                          setForm((prev) => ({
-                            ...prev,
-                            vehicleModel: model.name,
-                          }));
-                        }}
-                        className={`border rounded-xl p-4 text-center transition ${
-                          form.vehicleModel === model.name
-                            ? "border-green-500 ring-2 ring-green-400"
-                            : isDark
-                            ? "border-gray-600 hover:border-green-400"
-                            : "hover:border-green-400"
-                        }`}
-                      >
-                        <img
-                          src={model.thumbnailUrl}
-                          alt={model.name}
-                          className="h-16 mx-auto object-contain mb-2"
-                        />
-                        <p className="text-sm font-medium">{model.name}</p>
-                      </button>
-                    ))}
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* ================= VEHICLE MODEL INPUT ================= */}
-          <InputField
-            label="Vehicle Model"
-            value={form.vehicleModel}
-            onChange={(e) =>
-              setForm({ ...form, vehicleModel: e.target.value })
-            }
-            placeholder={
-              bikeModels.length > 0
-                ? "Select model above or type manually"
-                : "Enter vehicle model"
-            }
-            isDark={isDark}
-            required
-          />
-
-
-          {/* ================= YEAR ================= */}
-          <InputField
-            icon={<Calendar size={18} />}
-            iconColor="text-orange-500"
-            label="Year"
-            name="vehicleYear"
-            value={form.vehicleYear}
-            onChange={(e) =>
-              setForm({ ...form, vehicleYear: e.target.value })
-            }
-            placeholder="e.g., 2020"
-            isDark={isDark}
-            type="number"
-            min="1900"
-            max={new Date().getFullYear() + 1}
-          />
-
-          {/* ================= REG NUMBER ================= */}
-          <InputField
-            icon={<Hash size={18} />}
-            iconColor="text-purple-500"
-            label="Registration Number"
-            name="regNumber"
-            value={form.regNumber}
-            onChange={(e) =>
-              setForm({ ...form, regNumber: e.target.value })
-            }
-            placeholder="e.g., MH12AB1234"
-            isDark={isDark}
-            required
-          />
-
-          {/* ================= VIN ================= */}
-          <InputField
-            icon={<Hash size={18} />}
-            iconColor="text-pink-500"
-            label="VIN / Chassis Number"
-            name="vin"
-            value={form.vin}
-            onChange={(e) =>
-              setForm({ ...form, vin: e.target.value })
-            }
-            placeholder="Enter VIN"
-            isDark={isDark}
-          />
-
-          {/* ================= COLOR ================= */}
-          <InputField
-            icon={<Palette size={18} />}
-            iconColor="text-cyan-500"
-            label="Color"
-            name="color"
-            value={form.color}
-            onChange={(e) =>
-              setForm({ ...form, color: e.target.value })
-            }
-            placeholder="e.g., Black"
-            isDark={isDark}
-          />
-
-          {/* ================= FUEL TYPE ================= */}
-          <div className="space-y-2">
-            <label
-              className={`flex items-center gap-2 text-sm font-semibold ${
-                isDark ? "text-gray-300" : "text-gray-700"
-              }`}
-            >
-              <Droplet size={18} className="text-green-500" />
-              Fuel Type
-            </label>
-
-            <select
-              name="fuel"
-              value={form.fuel}
-              onChange={(e) =>
-                setForm({ ...form, fuel: e.target.value })
-              }
-              className={`w-full px-4 py-3 rounded-xl border focus:outline-none focus:ring-2 transition-all duration-200 ${
-                isDark
-                  ? "bg-gray-700 border-gray-600 text-white focus:ring-green-500"
-                  : "bg-white border-gray-300 text-gray-900 focus:ring-green-400"
-              }`}
-            >
-              <option value="">Select Fuel Type</option>
-              <option value="Petrol">Petrol</option>
-              <option value="Electric">Electric</option>
-              <option value="Hybrid">Hybrid</option>
-              <option value="CNG">CNG</option>
-            </select>
-          </div>
-        </div>
-      </div>
-
-
-        {/* Notes */}
-        <div className={`p-6 rounded-2xl shadow-lg border transition-all duration-300 ${
-          isDark ? "bg-gray-800 border-gray-700" : "bg-white border-gray-100"
-        }`}>
-          <h2 className={`text-2xl font-bold mb-4 flex items-center gap-2 ${isDark ? "text-white" : "text-gray-900"}`}>
-            <FileText size={24} className="text-blue-500" />
-            Additional Notes
-          </h2>
-
-          <textarea
-            name="notes"
-            value={form.notes}
-            onChange={(e) => setForm({ ...form, notes: e.target.value })}
-            placeholder="Enter any additional notes..."
-            rows={4}
-            className={`w-full px-4 py-3 rounded-xl border-2 transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none ${
-              isDark
-                ? "bg-gray-700/50 border-gray-600 text-white placeholder-gray-500"
-                : "bg-gray-50 border-gray-300 text-gray-900 placeholder-gray-400"
-            }`}
-          />
-        </div>
-
-        {/* Image Upload Section */}
-        <div className={`p-6 rounded-2xl shadow-lg border transition-all duration-300 ${
-          isDark ? "bg-gray-800 border-gray-700" : "bg-white border-gray-100"
-        }`}>
-          <h2 className={`text-2xl font-bold mb-6 flex items-center gap-2 ${isDark ? "text-white" : "text-gray-900"}`}>
-            <ImageIcon size={24} className="text-blue-500" />
-            Vehicle Images
-          </h2>
-          {/* Main Image */}
-          <div className="mb-6">
-            <label
-              className={`block text-sm font-semibold mb-3 ${
-                isDark ? "text-gray-300" : "text-gray-700"
-              }`}
-            >
-              Main Vehicle Image
-            </label>
-
-            <div
-              className={`relative border-2 border-dashed rounded-xl p-6 transition-all duration-300 ${
-                isDark
-                  ? "border-gray-600 bg-gray-700/50"
-                  : "border-gray-300 bg-gray-50"
-              }`}
-            >
-              {/* 🔄 Loading */}
-              {bikeImageLoading && (
-                <div className="flex flex-col items-center justify-center h-64">
-                  <RotateCw className="w-8 h-8 animate-spin text-blue-500 mb-2" />
-                  <p className="text-sm text-gray-500">Fetching vehicle image…</p>
-                </div>
-              )}
-
-              {/* 🖼 Image found (auto OR manual) */}
-              {!bikeImageLoading && form.carImage && (
-                <div className="relative flex flex-col items-center">
-                  <img
-                    src={form.carImage}
-                    alt="Vehicle"
-                    className="w-80 h-64 object-cover rounded-lg shadow"
-                  />
-
-                  {/* Remove / Replace */}
-                  <div className="flex gap-3 mt-4">
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setForm((prev) => ({ ...prev, carImage: "" }))
-                      }
-                      className="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition"
-                    >
-                      <Trash2 size={16} className="inline mr-1" />
-                      Remove
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => mainFileRef.current.click()}
-                      className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition"
-                    >
-                      <Upload size={16} className="inline mr-1" />
-                      Replace
-                    </button>
                   </div>
                 </div>
               )}
 
-              {/* 🚫 No image found → allow manual upload */}
-              {!bikeImageLoading && !form.carImage && (
-                <div className="flex flex-col items-center justify-center h-64 text-center">
-                  <img
-                    src={fallbackImage}
-                    alt="No vehicle"
-                    className="w-48 h-32 object-contain opacity-70 mb-3"
-                  />
+            {/* Model */}
+            <Field t={t} label="Model" required className="sm:col-span-2">
+              <input
+                value={form.vehicleModel}
+                onChange={set("vehicleModel")}
+                className={inputCls}
+                placeholder={
+                  bikeModels.length
+                    ? "Pick below or type the model"
+                    : "e.g. Activa 6G"
+                }
+                autoComplete="off"
+              />
+            </Field>
 
-                  <p className="text-sm text-gray-500 mb-3">
-                    No image found for this model
+            {brandSelected &&
+              bikeModels.length > 0 &&
+              !modelChosen &&
+              modelMatches.length > 0 && (
+                <div className="sm:col-span-2">
+                  <p className={`mb-1.5 text-[12px] ${t.muted}`}>
+                    Pick the model
                   </p>
-
-                  <button
-                    type="button"
-                    onClick={() => mainFileRef.current.click()}
-                    className="px-5 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition"
-                  >
-                    <Upload size={18} className="inline mr-2" />
-                    Upload Image Manually
-                  </button>
+                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
+                    {modelMatches.map((model) => (
+                      <button
+                        key={model.slug}
+                        type="button"
+                        onClick={() =>
+                          setForm((prev) => ({
+                            ...prev,
+                            vehicleModel: model.name,
+                          }))
+                        }
+                        className={`rounded-md border p-2 text-center transition ${t.tile}`}
+                      >
+                        {model.thumbnailUrl && (
+                          <img
+                            src={model.thumbnailUrl}
+                            alt=""
+                            className="mx-auto mb-1 h-10 object-contain"
+                          />
+                        )}
+                        <p className="truncate text-[12px] font-medium">
+                          {model.name}
+                        </p>
+                      </button>
+                    ))}
+                  </div>
                 </div>
               )}
 
-              {/* Hidden file input */}
+            <Field
+              t={t}
+              label="Registration number"
+              required
+              hint="Capital letters and numbers only, e.g. KA01AB1234"
+            >
+              <input
+                value={form.regNumber}
+                onChange={setCode("regNumber")}
+                className={codeCls}
+                placeholder="KA01AB1234"
+                maxLength={15}
+                autoCapitalize="characters"
+                autoComplete="off"
+                spellCheck={false}
+              />
+            </Field>
+            <Field
+              t={t}
+              label="Chassis / VIN number"
+              hint="Converted to capitals automatically"
+            >
+              <input
+                value={form.vin}
+                onChange={setCode("vin")}
+                className={codeCls}
+                placeholder="ME4JF502XKT123456"
+                maxLength={25}
+                autoCapitalize="characters"
+                autoComplete="off"
+                spellCheck={false}
+              />
+            </Field>
+
+            <Field t={t} label="Year">
+              <input
+                type="number"
+                min="1950"
+                max={new Date().getFullYear() + 1}
+                value={form.vehicleYear}
+                onChange={set("vehicleYear")}
+                className={inputCls}
+                placeholder="2022"
+              />
+            </Field>
+            <div className="grid grid-cols-2 gap-3">
+              <Field t={t} label="Colour">
+                <input
+                  value={form.color}
+                  onChange={set("color")}
+                  className={inputCls}
+                  placeholder="Black"
+                />
+              </Field>
+              <Field t={t} label="Fuel">
+                <select
+                  value={form.fuel}
+                  onChange={set("fuel")}
+                  className={inputCls}
+                >
+                  <option value="">Select</option>
+                  <option value="Petrol">Petrol</option>
+                  <option value="Electric">Electric</option>
+                  <option value="Hybrid">Hybrid</option>
+                  <option value="CNG">CNG</option>
+                </select>
+              </Field>
+            </div>
+          </div>
+        </Section>
+
+        {/* Photos */}
+        <Section
+          t={t}
+          icon={ImageIcon}
+          title="Photos"
+          subtitle="Bike photo and any damage / inspection pictures"
+        >
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-[260px_1fr]">
+            {/* Main photo */}
+            <div>
+              <p className="mb-1 text-[12px] font-medium">Bike photo</p>
+              <div
+                className={`relative flex h-44 items-center justify-center overflow-hidden rounded-md border border-dashed ${t.drop}`}
+              >
+                {bikeImageLoading ? (
+                  <div
+                    className={`flex flex-col items-center text-[12px] ${t.muted}`}
+                  >
+                    <RotateCw
+                      size={16}
+                      className="mb-1 animate-spin text-blue-500"
+                    />{" "}
+                    Finding photo…
+                  </div>
+                ) : form.carImage ? (
+                  <>
+                    <img
+                      src={form.carImage}
+                      alt="Bike"
+                      className="h-full w-full object-contain"
+                    />
+                    <div className="absolute bottom-2 right-2 flex gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => mainFileRef.current.click()}
+                        className="inline-flex h-7 items-center gap-1 rounded-md bg-black/60 px-2 text-[12px] text-white hover:bg-black/75"
+                      >
+                        <Upload size={12} /> Replace
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setForm((prev) => ({ ...prev, carImage: "" }))
+                        }
+                        className="inline-flex h-7 w-7 items-center justify-center rounded-md bg-black/60 text-white hover:bg-rose-600"
+                        title="Remove"
+                      >
+                        <Trash2 size={12} />
+                      </button>
+                    </div>
+                  </>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => mainFileRef.current.click()}
+                    className={`flex flex-col items-center text-[12px] ${t.muted} hover:text-blue-600`}
+                  >
+                    <Upload size={18} className="mb-1" />
+                    Upload bike photo
+                    <span className="mt-0.5 opacity-75">
+                      Added automatically when the model is found
+                    </span>
+                  </button>
+                )}
+              </div>
               <input
                 ref={mainFileRef}
                 type="file"
@@ -1105,150 +827,144 @@ const fetchBikeImage = async (make, model, year) => {
                 onChange={(e) => handleFiles(e.target.files, "main")}
               />
             </div>
-          </div>
- 
-          
-          {/* Damage Images */}
-          <div>
-            <label className={`block text-sm font-semibold mb-3 ${isDark ? "text-gray-300" : "text-gray-700"}`}>
-              Damage/Inspection Images
-            </label>
-            <div
-              onDragOver={handleDragOver}
-              onDragLeave={handleDragLeave}
-              onDrop={(e) => handleDrop(e, "damage")}
-              className={`border-2 border-dashed rounded-xl p-8 text-center transition-all duration-300 ${
-                dragOver
-                  ? "border-blue-500 bg-blue-50 dark:bg-blue-900/20"
-                  : isDark
-                  ? "border-gray-600 bg-gray-700/50"
-                  : "border-gray-300 bg-gray-50"
-              }`}
-            >
-              <ImageIcon className={`w-12 h-12 mx-auto mb-4 ${isDark ? "text-gray-400" : "text-gray-500"}`} />
-              <p className={`text-sm mb-2 ${isDark ? "text-gray-400" : "text-gray-600"}`}>
-                Upload multiple damage/inspection images
+
+            {/* Damage photos */}
+            <div>
+              <p className="mb-1 text-[12px] font-medium">
+                Damage / inspection photos
               </p>
-              <button
-                type="button"
+              <div
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  setDragOver(true);
+                }}
+                onDragLeave={() => setDragOver(false)}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  setDragOver(false);
+                  handleFiles(e.dataTransfer.files, "damage");
+                }}
                 onClick={() => damageFileRef.current.click()}
-                className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
+                className={`flex h-20 cursor-pointer items-center justify-center gap-2 rounded-md border border-dashed text-[12px] transition ${
+                  dragOver
+                    ? "border-blue-500 bg-blue-500/10 text-blue-600"
+                    : `${t.drop} ${t.muted} hover:text-blue-600`
+                }`}
               >
-                Choose Files
-              </button>
+                <ImageIcon size={16} /> Drop photos here or click to choose
+              </div>
               <input
                 ref={damageFileRef}
                 type="file"
                 accept="image/*"
                 multiple
-                onChange={(e) => handleFiles(e.target.files, "damage")}
+                onChange={(e) => {
+                  handleFiles(e.target.files, "damage");
+                  e.target.value = "";
+                }}
                 className="hidden"
               />
-            </div>
 
-            {form.damageImages && form.damageImages.length > 0 && (
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-6">
-                {form.damageImages.map((img, idx) => (
-                  <div key={idx} className="relative group">
-                    <img
-                      src={img}
-                      alt={`damage-${idx}`}
-                      className="w-full h-32 object-cover rounded-lg"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => removeDamageImage(idx)}
-                      className="absolute top-2 right-2 p-2 bg-red-500 text-white rounded-lg opacity-0 group-hover:opacity-100 transition-all duration-300 hover:scale-110"
+              {form.damageImages?.length > 0 && (
+                <div className="mt-2.5 grid grid-cols-4 gap-2 sm:grid-cols-5">
+                  {form.damageImages.map((img, idx) => (
+                    <div
+                      key={idx}
+                      className={`group relative aspect-square overflow-hidden rounded-md border ${t.border}`}
                     >
-                      <Trash2 size={16} />
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
+                      <img
+                        src={img}
+                        alt={`damage-${idx + 1}`}
+                        className="h-full w-full object-cover"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => removeDamageImage(idx)}
+                        className="absolute right-1 top-1 inline-flex h-6 w-6 items-center justify-center rounded bg-black/60 text-white opacity-100 hover:bg-rose-600 sm:opacity-0 sm:group-hover:opacity-100"
+                        title="Remove"
+                      >
+                        <X size={12} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
-        </div>
+        </Section>
 
-        {/* Action Buttons */}
-        <div className="flex justify-end gap-4 pb-8">
-          <button
-            type="button"
-            onClick={handleCancel}
-            className={`flex items-center gap-2 px-6 py-3 rounded-xl font-medium shadow transition-all duration-300 hover:scale-105 active:scale-95 ${
-              isDark
-                ? "bg-gray-700 text-gray-200 hover:bg-gray-600"
-                : "bg-gray-200 text-gray-800 hover:bg-gray-300"
-            }`}
-          >
-            <X size={20} />
-            Cancel
-          </button>
+        {/* Notes */}
+        <Section t={t} icon={FileText} title="Notes">
+          <textarea
+            value={form.notes}
+            onChange={set("notes")}
+            rows={3}
+            placeholder="Anything worth remembering about this customer or bike"
+            className={`w-full resize-none rounded-md border px-3 py-2 text-[14px] outline-none transition focus:ring-2 ${t.input}`}
+          />
+        </Section>
 
-          <button
-            type="submit"
-            disabled={loading}
-            className={`flex items-center gap-2 px-6 py-3 rounded-xl text-white font-semibold shadow-lg transition-all duration-300 hover:shadow-xl ${
-              loading
-                ? "bg-gray-400 cursor-not-allowed"
-                : "bg-gradient-to-r from-green-500 to-emerald-600 hover:scale-105 active:scale-95"
-            }`}
-          >
-            {loading ? (
-              <RotateCw size={20} className="animate-spin" />
-            ) : (
-              <Save size={20} />
-            )}
-            {loading ? "Saving..." : id ? "Update Client" : "Save Client"}
-          </button>
+        {/* Sticky action bar */}
+        <div
+          className={`fixed inset-x-0 bottom-0 z-30 border-t px-3 py-2.5 backdrop-blur sm:px-5 ${isDark ? "border-gray-700 bg-gray-900/90" : "border-gray-200 bg-white/90"}`}
+        >
+          <div className="mx-auto flex max-w-4xl justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => navigate("/bike-clients")}
+              className={`h-9 rounded-md border px-4 text-[14px] font-medium ${t.btn2}`}
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={loading}
+              className="inline-flex h-9 items-center gap-1.5 rounded-md bg-blue-600 px-4 text-[14px] font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {loading ? (
+                <RotateCw size={14} className="animate-spin" />
+              ) : (
+                <Save size={14} />
+              )}
+              {loading ? "Saving…" : isEdit ? "Save changes" : "Save client"}
+            </button>
+          </div>
         </div>
       </form>
     </div>
   );
 }
 
-// ========== REUSABLE INPUT FIELD COMPONENT ==========
-function InputField({
-  icon,
-  label,
-  value,
-  onChange,
-  placeholder,
-  isDark,
-  type = "text",
-  listId,
-  required,
-  min,
-  max,
-  iconColor,
-  name,
-}) {
+/* ---------- layout helpers (outside the component so inputs keep focus) ---------- */
+function Field({ t, label, required, hint, className = "", children }) {
   return (
-    <div className="w-full">
-      <label className={`block text-sm font-semibold mb-2 flex items-center gap-2 ${
-        isDark ? "text-gray-300" : "text-gray-700"
-      }`}>
-        <span className={iconColor}>{icon}</span>
-        <span>
-          {label} {required && <span className="text-red-500">*</span>}
-        </span>
+    <div className={className}>
+      <label className="mb-1 block text-[12px] font-medium">
+        {label}
+        {required && <span className="ml-0.5 text-rose-500">*</span>}
       </label>
-      <input
-        type={type}
-        name={name}
-        list={listId}
-        value={value}
-        onChange={onChange}
-        placeholder={placeholder}
-        required={required}
-        min={min}
-        max={max}
-        autoComplete="off"
-        className={`w-full px-4 py-3 rounded-xl text-sm font-medium border-2 transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
-          isDark
-            ? "bg-gray-700/50 border-gray-600 text-white placeholder-gray-500"
-            : "bg-gray-50 border-gray-300 text-gray-900 placeholder-gray-400"
-        }`}
-      />
+      {children}
+      {hint && <p className={`mt-1 text-[12px] ${t.muted}`}>{hint}</p>}
     </div>
+  );
+}
+
+function Section({ t, icon: Icon, title, subtitle, children, right }) {
+  return (
+    <section className={`rounded-lg border ${t.card}`}>
+      <div
+        className={`flex items-start justify-between gap-3 border-b px-4 py-3 sm:px-5 ${t.border}`}
+      >
+        <div className="flex items-start gap-2.5">
+          <Icon size={16} className="mt-0.5 text-blue-600" />
+          <div>
+            <h2 className="text-[14px] font-semibold">{title}</h2>
+            {subtitle && <p className={`text-[12px] ${t.muted}`}>{subtitle}</p>}
+          </div>
+        </div>
+        {right}
+      </div>
+      <div className="p-4 sm:p-5">{children}</div>
+    </section>
   );
 }

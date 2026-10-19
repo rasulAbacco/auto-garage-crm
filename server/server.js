@@ -79,6 +79,7 @@ import puncherRoutes from "./puncher/routes/puncher.routes.js";
 // 📨 Contact Us form emails
 import contactRoutes from "./routes/contactRoutes.js";
 
+import bikeStaffSearchRoutes from "./routes/bikeStaffSearchRoutes.js";
 
 // console.log("Models in Prisma:", Object.keys(prisma));
 
@@ -210,6 +211,7 @@ app.use("/api/bike-staff-salary", protect, bikeStaffSalaryRoutes);
 app.use("/api/staff", staffRoutes);
 app.use("/api/bikes-meta", bikeMetaRoutes);
 app.use("/api/bikes-team", bikeTeamRoutes);
+app.use("/api/bike-staff", bikeStaffSearchRoutes);
 
 //car company names and models
 app.use("/api/cars", carRoutes);

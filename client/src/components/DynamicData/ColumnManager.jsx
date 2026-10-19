@@ -1,263 +1,216 @@
 import { useState } from "react";
+import { ChevronDown, Columns3, Plus, PencilLine, Trash2 } from "lucide-react";
 import AddColumnModal from "./AddColumnModal";
 import EditColumnModal from "./EditColumnModal";
+import {
+  tk,
+  btnBase,
+  ConfirmDialog,
+  TypeBadge,
+  RequiredTag,
+} from "./dynamicUi";
 
-const ColumnManager = ({
-  columns = [],
-  onAdd,
-  onEdit,
-  onDelete,
-  isDark, // ✅ Added isDark prop
-}) => {
+const ColumnManager = ({ columns = [], onAdd, onEdit, onDelete, isDark }) => {
+  const t = tk(isDark);
   const [showAdd, setShowAdd] = useState(false);
   const [editCol, setEditCol] = useState(null);
-  const [isExpanded, setIsExpanded] = useState(true); // Toggle state
+  const [isExpanded, setIsExpanded] = useState(true);
+  const [deleteCol, setDeleteCol] = useState(null);
+  const [deleting, setDeleting] = useState(false);
+
+  const confirmDelete = async () => {
+    if (!deleteCol) return;
+    setDeleting(true);
+    try {
+      await onDelete(deleteCol.id);
+      setDeleteCol(null);
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  const iconBtn = (danger) =>
+    `flex h-8 w-8 items-center justify-center rounded-xl border-2 transition ${
+      danger
+        ? isDark
+          ? "border-white/10 text-slate-300 hover:border-red-500/40 hover:bg-red-500/10 hover:text-red-400"
+          : "border-[#CBD5E1] text-slate-500 hover:border-red-300 hover:bg-red-50 hover:text-red-600"
+        : t.btnGhost
+    }`;
+
+  const th =
+    "px-4 py-3 text-[12px] font-black uppercase tracking-wider text-slate-400";
 
   return (
-    <div
-      className={`rounded-2xl border shadow-sm overflow-hidden transition-all duration-300 ${
-        isDark ? "bg-gray-800 border-gray-700" : "bg-white border-slate-100"
-      }`}
-    >
-      {/* HEADER SECTION - Always Visible */}
+    <section className={`overflow-hidden rounded-2xl border-2 ${t.card}`}>
+      {/* header */}
       <div
-        className={`flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 p-5 md:p-6 ${
-          isDark ? "bg-gray-800" : "bg-white"
-        }`}
+        className={`flex items-center gap-3 px-3 py-3 sm:px-4 ${isExpanded ? `border-b-2 ${t.cardHead}` : ""}`}
       >
-        <div className="flex items-center gap-3">
-          {/* SHRINK/EXPAND BUTTON */}
-          <button
-            onClick={() => setIsExpanded(!isExpanded)}
-            className={`p-2 rounded-xl border transition-all active:scale-90 ${
-              isDark
-                ? "text-gray-400 hover:text-blue-400 border-gray-600 hover:bg-gray-700"
-                : "text-slate-400 hover:text-blue-600 border-slate-100 hover:bg-slate-50"
-            }`}
-            title={isExpanded ? "Collapse Section" : "Expand Section"}
+        <button
+          type="button"
+          onClick={() => setIsExpanded((v) => !v)}
+          aria-expanded={isExpanded}
+          className="flex min-w-0 flex-1 items-center gap-3 text-left"
+          title={isExpanded ? "Collapse" : "Expand"}
+        >
+          <span
+            className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-xl ${t.chipNavy}`}
           >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              className={`h-5 w-5 transform transition-transform duration-300 ${
-                isExpanded ? "rotate-180" : ""
-              }`}
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2.5}
-                d="M19 9l-7 7-7-7"
-              />
-            </svg>
-          </button>
-
-          <div>
-            <h2
-              className={`text-lg font-bold tracking-tight ${
-                isDark ? "text-white" : "text-slate-900"
-              }`}
-            >
-              Column Structure
-            </h2>
-            {isExpanded && (
-              <p
-                className={`text-xs font-medium animate-in fade-in duration-500 ${
-                  isDark ? "text-gray-500" : "text-slate-500"
-                }`}
-              >
-                Define the data types and constraints
-              </p>
-            )}
-          </div>
-        </div>
-
-        <div className="flex items-center gap-3 w-full sm:w-auto">
-          {!isExpanded && columns.length > 0 && (
+            <Columns3 size={14} />
+          </span>
+          <span className="min-w-0">
             <span
-              className={`text-[10px] font-black px-3 py-1 rounded-full uppercase tracking-tighter animate-in zoom-in duration-300 ${
-                isDark
-                  ? "text-blue-400 bg-blue-900/30"
-                  : "text-blue-600 bg-blue-50"
-              }`}
+              className={`block truncate text-[14px] font-black uppercase tracking-tight ${t.heading}`}
             >
-              {columns.length} Columns Active
+              Column{" "}
+              <span className="font-light lowercase italic">structure</span>
             </span>
-          )}
-          <button
-            className={`flex-1 sm:flex-none flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl font-bold text-sm transition-all active:scale-95 shadow-lg whitespace-nowrap ${
-              isDark
-                ? "bg-blue-600 hover:bg-blue-700 text-white shadow-blue-900/20"
-                : "bg-blue-600 hover:bg-blue-700 text-white shadow-blue-100"
-            }`}
-            onClick={() => setShowAdd(true)}
-          >
-            <span>+</span> Add Column
-          </button>
-        </div>
+            <span
+              className={`block truncate text-[12px] font-medium ${t.muted}`}
+            >
+              {columns.length} column{columns.length === 1 ? "" : "s"} · data
+              types & rules
+            </span>
+          </span>
+          <ChevronDown
+            size={16}
+            className={`ml-auto shrink-0 text-slate-400 transition-transform ${isExpanded ? "rotate-180" : ""}`}
+          />
+        </button>
+        <button
+          type="button"
+          onClick={() => setShowAdd(true)}
+          className={`${btnBase} h-9 shrink-0 px-3 sm:px-4 ${t.btnPrimary}`}
+        >
+          <Plus size={14} />{" "}
+          <span className="hidden sm:inline">Add column</span>
+          <span className="sm:hidden">Add</span>
+        </button>
       </div>
 
-      {/* COLLAPSIBLE CONTENT */}
-      <div
-        className={`transition-all duration-300 ease-in-out ${
-          isExpanded
-            ? "max-h-[1000px] opacity-100 p-5 pt-0"
-            : "max-h-0 opacity-0 pointer-events-none"
-        }`}
-      >
-        <div
-          className={`overflow-x-auto border rounded-2xl shadow-sm ${
-            isDark
-              ? "border-gray-700 bg-gray-800"
-              : "border-slate-100 bg-white"
-          }`}
-        >
-          <table className="w-full text-sm text-left border-collapse">
-            <thead>
-              <tr
-                className={`border-b font-bold text-[10px] uppercase tracking-widest ${
-                  isDark
-                    ? "bg-gray-700/50 border-gray-700 text-gray-400"
-                    : "bg-slate-50/50 border-slate-100 text-slate-400"
-                }`}
+      {isExpanded && (
+        <>
+          {columns.length === 0 ? (
+            <div className="px-4 py-10 text-center">
+              <p
+                className={`text-[14px] font-black uppercase tracking-tight ${t.heading}`}
               >
-                <th className="px-6 py-4">Name</th>
-                <th className="px-6 py-4">Type</th>
-                <th className="px-6 py-4">Validation</th>
-                <th className="px-6 py-4 text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody
-              className={`divide-y ${
-                isDark ? "divide-gray-700" : "divide-slate-50"
-              }`}
-            >
-              {columns && columns.length > 0 ? (
-                columns.map((c) => (
-                  <tr
+                No columns yet
+              </p>
+              <p className={`mt-1 text-[14px] ${t.muted}`}>
+                Add columns like Name, Phone or Due date to start entering
+                records.
+              </p>
+            </div>
+          ) : (
+            <>
+              {/* desktop / tablet table */}
+              <div className="hidden overflow-x-auto sm:block">
+                <table className="w-full border-collapse text-left">
+                  <thead className={`border-b-2 ${t.cardHead}`}>
+                    <tr>
+                      <th className={th}>Name</th>
+                      <th className={th}>Type</th>
+                      <th className={th}>Validation</th>
+                      <th className={`${th} text-right`}>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {columns.map((c) => (
+                      <tr
+                        key={c.id}
+                        className={`border-b last:border-0 ${t.line} ${isDark ? "hover:bg-white/5" : "hover:bg-[#F8FAFC]"}`}
+                      >
+                        <td
+                          className={`px-4 py-3 text-[14px] font-black ${t.heading}`}
+                        >
+                          {c.name}
+                        </td>
+                        <td className="px-4 py-3">
+                          <TypeBadge type={c.type} isDark={isDark} />
+                        </td>
+                        <td className="px-4 py-3">
+                          {c.required ? (
+                            <RequiredTag />
+                          ) : (
+                            <span
+                              className={`text-[12px] font-bold uppercase tracking-wider ${t.muted}`}
+                            >
+                              Optional
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="flex justify-end gap-1.5">
+                            <button
+                              type="button"
+                              className={iconBtn(false)}
+                              onClick={() => setEditCol(c)}
+                              title="Edit column"
+                              aria-label={`Edit ${c.name}`}
+                            >
+                              <PencilLine size={14} />
+                            </button>
+                            <button
+                              type="button"
+                              className={iconBtn(true)}
+                              onClick={() => setDeleteCol(c)}
+                              title="Delete column"
+                              aria-label={`Delete ${c.name}`}
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* phone list */}
+              <div className="space-y-2 p-3 sm:hidden">
+                {columns.map((c) => (
+                  <div
                     key={c.id}
-                    className={`transition-colors ${
-                      isDark ? "hover:bg-gray-700/50" : "hover:bg-slate-50/30"
-                    }`}
+                    className={`flex items-center gap-3 rounded-xl border-2 p-2.5 ${t.inner}`}
                   >
-                    <td className="px-6 py-4">
-                      <span
-                        className={`font-bold ${
-                          isDark ? "text-gray-100" : "text-slate-800"
-                        }`}
+                    <div className="min-w-0 flex-1">
+                      <p
+                        className={`truncate text-[14px] font-black ${t.heading}`}
                       >
                         {c.name}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4">
-                      <span
-                        className={`px-2.5 py-1 rounded-lg font-bold text-[11px] uppercase tracking-tighter ${
-                          isDark
-                            ? "bg-gray-700 text-gray-300"
-                            : "bg-slate-100 text-slate-600"
-                        }`}
-                      >
-                        {c.type}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4">
-                      {c.required ? (
-                        <span
-                          className={`flex items-center gap-1.5 font-bold text-xs ${
-                            isDark ? "text-blue-400" : "text-blue-600"
-                          }`}
-                        >
-                          <span
-                            className={`w-1.5 h-1.5 rounded-full animate-pulse ${
-                              isDark ? "bg-blue-400" : "bg-blue-600"
-                            }`}
-                          ></span>
-                          Required
-                        </span>
-                      ) : (
-                        <span
-                          className={`font-medium text-xs ${
-                            isDark ? "text-gray-500" : "text-slate-400"
-                          }`}
-                        >
-                          Optional
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="flex justify-end gap-1">
-                        <button
-                          className={`p-2 rounded-lg transition-all ${
-                            isDark
-                              ? "text-blue-400 hover:bg-blue-900/30"
-                              : "text-blue-500 hover:bg-blue-50"
-                          }`}
-                          onClick={() => setEditCol(c)}
-                          title="Edit Column"
-                        >
-                          <svg
-                            xmlns="http://www.w3.org/2000/svg"
-                            className="h-4 w-4"
-                            fill="none"
-                            viewBox="0 0 24 24"
-                            stroke="currentColor"
-                          >
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              strokeWidth={2.5}
-                              d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"
-                            />
-                          </svg>
-                        </button>
-                        <button
-                          className={`p-2 rounded-lg transition-all ${
-                            isDark
-                              ? "text-rose-400 hover:bg-rose-900/30"
-                              : "text-rose-500 hover:bg-rose-50"
-                          }`}
-                          onClick={() => onDelete(c.id)}
-                          title="Delete Column"
-                        >
-                          <svg
-                            xmlns="http://www.w3.org/2000/svg"
-                            className="h-4 w-4"
-                            fill="none"
-                            viewBox="0 0 24 24"
-                            stroke="currentColor"
-                          >
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              strokeWidth={2.5}
-                              d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-4v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-                            />
-                          </svg>
-                        </button>
+                      </p>
+                      <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                        <TypeBadge type={c.type} isDark={isDark} />
+                        {c.required && <RequiredTag />}
                       </div>
-                    </td>
-                  </tr>
-                ))
-              ) : (
-                <tr>
-                  <td
-                    colSpan="4"
-                    className={`px-6 py-12 text-center font-bold italic ${
-                      isDark ? "text-gray-600" : "text-slate-300"
-                    }`}
-                  >
-                    No columns defined for this table.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
+                    </div>
+                    <button
+                      type="button"
+                      className={iconBtn(false)}
+                      onClick={() => setEditCol(c)}
+                      aria-label={`Edit ${c.name}`}
+                    >
+                      <PencilLine size={14} />
+                    </button>
+                    <button
+                      type="button"
+                      className={iconBtn(true)}
+                      onClick={() => setDeleteCol(c)}
+                      aria-label={`Delete ${c.name}`}
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+        </>
+      )}
 
-      {/* MODALS */}
       {showAdd && (
         <AddColumnModal
           isDark={isDark}
@@ -273,7 +226,22 @@ const ColumnManager = ({
           onSave={onEdit}
         />
       )}
-    </div>
+
+      <ConfirmDialog
+        isDark={isDark}
+        open={Boolean(deleteCol)}
+        title="Delete column?"
+        message={
+          deleteCol
+            ? `"${deleteCol.name}" and the values stored in it will be removed from every record.`
+            : ""
+        }
+        confirmText="Delete"
+        busy={deleting}
+        onConfirm={confirmDelete}
+        onCancel={() => !deleting && setDeleteCol(null)}
+      />
+    </section>
   );
 };
 

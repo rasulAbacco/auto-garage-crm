@@ -180,13 +180,6 @@ export default function CarSpareParts() {
                 key={i}
                 className={`relative group p-1 rounded-[2rem] border-2 transition-all duration-500 ${isDark ? "bg-[#001F3F] border-white/5 shadow-xl" : "bg-white border-[#CBD5E1]"}`}
               >
-                <div
-                  className={`px-5 py-2.5 border-b flex gap-1.5 ${isDark ? "bg-white/5" : "bg-[#F8FAFC]"}`}
-                >
-                  <div className="w-1.5 h-1.5 rounded-full bg-red-500"></div>
-                  <div className="w-1.5 h-1.5 rounded-full bg-yellow-500"></div>
-                  <div className="w-1.5 h-1.5 rounded-full bg-green-500"></div>
-                </div>
                 <div className="p-8">
                   {/* VISIBILITY FIX: Icon background theme-aware */}
                   <div
@@ -254,13 +247,8 @@ export default function CarSpareParts() {
                 }`}
               >
                 <div
-                  className={`px-6 py-3 border-b flex justify-between items-center ${isDark ? "bg-white/5 border-white/5" : "bg-[#F8FAFC] border-[#CBD5E1]"}`}
+                  className={`px-6 py-3 border-b flex justify-end items-center ${isDark ? "bg-white/5 border-white/5" : "bg-[#F8FAFC] border-[#CBD5E1]"}`}
                 >
-                  <div className="flex gap-1.5">
-                    <div className="w-2 h-2 rounded-full bg-red-500/80"></div>
-                    <div className="w-2 h-2 rounded-full bg-yellow-500/80"></div>
-                    <div className="w-2 h-2 rounded-full bg-green-500/80"></div>
-                  </div>
                   <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest italic">
                     DATA_NODE.OBJ
                   </span>

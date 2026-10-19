@@ -22,16 +22,24 @@ import {
   Send,
   Eye,
   FileDown,
-  Edit
+  Edit,
 } from "lucide-react";
 import { Toaster, toast } from "react-hot-toast";
 import api from "../../utils/axiosInstance";
+// Same type-ahead used in the car service form
+import PartAutocomplete from "../../pages/services/PartAutocomplete";
 
 /* ---------- name matching for duplicate checks ---------- */
-const typeKey = (v) => String(v || "").trim().replace(/\s+/g, " ").toLowerCase();
+const typeKey = (v) =>
+  String(v || "")
+    .trim()
+    .replace(/\s+/g, " ")
+    .toLowerCase();
 
 const findExactType = (list, name) =>
-  typeKey(name) ? list.find((i) => typeKey(i.name) === typeKey(name)) : undefined;
+  typeKey(name)
+    ? list.find((i) => typeKey(i.name) === typeKey(name))
+    : undefined;
 
 const findSimilarTypes = (list, name) => {
   const k = typeKey(name);
@@ -64,6 +72,7 @@ export default function AddService() {
     inDate: "",
     outDate: "",
     expectedDelivery: "",
+    status: "Pending",
     priority: "Normal",
     assignedMechanic: "",
     category: "",
@@ -86,8 +95,13 @@ export default function AddService() {
       unitPrice: 0,
       cgst: 0,
       sgst: 0,
+      itemCode: null, // linked inventory item (frontend only)
+      inventoryId: null,
     },
   ]);
+
+  /* 📦 Inventory list for the part search */
+  const [inventory, setInventory] = useState([]);
 
   const [categoryQuery, setCategoryQuery] = useState("");
   const [subServiceQuery, setSubServiceQuery] = useState("");
@@ -107,6 +121,34 @@ export default function AddService() {
   const subServiceDropdownRef = useRef(null);
   const fileInputRef = useRef(null);
 
+  /* 👷 Staff list for the Assigned Mechanic dropdown */
+  const [staffList, setStaffList] = useState([]);
+  const [showMechanicDropdown, setShowMechanicDropdown] = useState(false);
+  const mechanicBoxRef = useRef(null);
+
+  useEffect(() => {
+    const fetchStaff = async () => {
+      try {
+        const res = await api.get("/api/bike-staff/mechanics");
+        setStaffList(Array.isArray(res.data) ? res.data : []);
+      } catch (err) {
+        console.error("Fetch staff error:", err);
+        setStaffList([]);
+      }
+    };
+    fetchStaff();
+  }, []);
+
+  const mechanicQuery = typeKey(form.assignedMechanic);
+  const filteredStaff = staffList
+    .filter(
+      (s) =>
+        !mechanicQuery ||
+        typeKey(s.name).includes(mechanicQuery) ||
+        typeKey(s.role).includes(mechanicQuery) ||
+        String(s.phone || "").includes(mechanicQuery),
+    )
+    .slice(0, 8);
 
   /* =====================================================
      CALCULATIONS
@@ -120,23 +162,36 @@ export default function AddService() {
 
   const partsSubtotal = items
     .filter((item) => item.type === "Part")
-    .reduce((sum, item) => sum + Number(item.quantity) * Number(item.unitPrice), 0);
+    .reduce(
+      (sum, item) => sum + Number(item.quantity) * Number(item.unitPrice),
+      0,
+    );
 
   const laborSubtotal = items
     .filter((item) => item.type === "Labor")
-    .reduce((sum, item) => sum + Number(item.quantity) * Number(item.unitPrice), 0);
+    .reduce(
+      (sum, item) => sum + Number(item.quantity) * Number(item.unitPrice),
+      0,
+    );
 
   const cgstTotal = items.reduce(
-    (sum, item) => sum + (Number(item.quantity) * Number(item.unitPrice) * Number(item.cgst)) / 100,
-    0
+    (sum, item) =>
+      sum +
+      (Number(item.quantity) * Number(item.unitPrice) * Number(item.cgst)) /
+        100,
+    0,
   );
 
   const sgstTotal = items.reduce(
-    (sum, item) => sum + (Number(item.quantity) * Number(item.unitPrice) * Number(item.sgst)) / 100,
-    0
+    (sum, item) =>
+      sum +
+      (Number(item.quantity) * Number(item.unitPrice) * Number(item.sgst)) /
+        100,
+    0,
   );
 
-  const subtotalBeforeDiscount = partsSubtotal + laborSubtotal + cgstTotal + sgstTotal;
+  const subtotalBeforeDiscount =
+    partsSubtotal + laborSubtotal + cgstTotal + sgstTotal;
 
   const discountAmount =
     form.discountType === "Fixed Amount"
@@ -150,8 +205,8 @@ export default function AddService() {
      ITEM MANAGEMENT - ✅ FIXED
   ===================================================== */
   const addItem = () => {
-    setItems([
-      ...items,
+    setItems((prev) => [
+      ...prev,
       {
         id: Date.now(),
         type: "Part",
@@ -160,20 +215,28 @@ export default function AddService() {
         unitPrice: 0,
         cgst: 0,
         sgst: 0,
+        itemCode: null,
+        inventoryId: null,
       },
     ]);
   };
 
   const removeItem = (id) => {
-    if (items.length > 1) {
-      setItems(items.filter((item) => item.id !== id));
-    }
+    setItems((prev) =>
+      prev.length > 1 ? prev.filter((item) => item.id !== id) : prev,
+    );
   };
 
-  // ✅ FIXED: Automatically handle name field based on type
+  // Merge several fields into one row (used by the part search)
+  const patchItem = (id, patch) =>
+    setItems((prev) =>
+      prev.map((item) => (item.id === id ? { ...item, ...patch } : item)),
+    );
+
+  // ✅ Automatically handle name field based on type
   const updateItem = (id, field, value) => {
-    setItems(
-      items.map((item) => {
+    setItems((prev) =>
+      prev.map((item) => {
         if (item.id !== id) return item;
 
         // If changing type, automatically handle name field
@@ -182,6 +245,8 @@ export default function AddService() {
             ...item,
             type: value,
             name: value === "Labor" ? "Labor" : "", // Auto-set "Labor" or clear for Part
+            itemCode: null,
+            inventoryId: null,
           };
         }
 
@@ -190,9 +255,25 @@ export default function AddService() {
           ...item,
           [field]: field === "name" ? value : Number(value) || 0,
         };
-      })
+      }),
     );
   };
+
+  /* =====================================================
+     FETCH INVENTORY (for part search)
+  ===================================================== */
+  useEffect(() => {
+    const fetchInventory = async () => {
+      try {
+        const res = await api.get("/api/car-inventory");
+        setInventory(Array.isArray(res.data) ? res.data : []);
+      } catch (err) {
+        console.error("Fetch inventory error:", err);
+        setInventory([]);
+      }
+    };
+    fetchInventory();
+  }, []);
 
   /* =====================================================
      FILE HANDLING
@@ -261,7 +342,6 @@ export default function AddService() {
           subService: data.subService?.name || data.subServiceText || "",
         };
 
-
         if (data.serviceItems && data.serviceItems.length > 0) {
           setItems(
             data.serviceItems.map((item) => ({
@@ -272,7 +352,9 @@ export default function AddService() {
               unitPrice: Number(item.unitPrice),
               cgst: Number(item.cgst),
               sgst: Number(item.sgst),
-            }))
+              itemCode: null,
+              inventoryId: null,
+            })),
           );
         }
 
@@ -298,7 +380,9 @@ export default function AddService() {
     const fetchCategories = async () => {
       try {
         setCategoryLoading(true);
-        const res = await api.get(`/api/bike-services/types/by-bike/${form.client}`);
+        const res = await api.get(
+          `/api/bike-services/types/by-bike/${form.client}`,
+        );
         setCategories(Array.isArray(res.data) ? res.data : []);
       } catch (err) {
         console.error("Fetch categories error:", err);
@@ -323,11 +407,11 @@ export default function AddService() {
      FILTER CATEGORIES & SUBSERVICES
   ===================================================== */
   const filteredCategories = categories.filter((cat) =>
-    cat.name.toLowerCase().includes(categoryQuery.toLowerCase())
+    cat.name.toLowerCase().includes(categoryQuery.toLowerCase()),
   );
 
   const filteredSubServices = subServices.filter((sub) =>
-    sub.name.toLowerCase().includes(subServiceQuery.toLowerCase())
+    sub.name.toLowerCase().includes(subServiceQuery.toLowerCase()),
   );
 
   /* =====================================================
@@ -427,7 +511,9 @@ export default function AddService() {
   };
 
   const saveNewType = async (kind, rawName) => {
-    const name = String(rawName || "").trim().replace(/\s+/g, " ");
+    const name = String(rawName || "")
+      .trim()
+      .replace(/\s+/g, " ");
     const label = kind === "category" ? "Category" : "Sub-service";
 
     if (name.length < 2) {
@@ -440,7 +526,9 @@ export default function AddService() {
     const dup = findExactType(list, name);
     if (dup) {
       selectExistingType(kind, dup);
-      toast(`"${dup.name}" already exists – selected it for you`, { icon: "ℹ️" });
+      toast(`"${dup.name}" already exists – selected it for you`, {
+        icon: "ℹ️",
+      });
       closeAddPanel();
       return;
     }
@@ -458,7 +546,10 @@ export default function AddService() {
           name,
           bikeId: form.client || undefined,
         });
-        const cat = { ...res.data.category, subServices: res.data.category.subServices || [] };
+        const cat = {
+          ...res.data.category,
+          subServices: res.data.category.subServices || [],
+        };
         setCategories((prev) => [...prev, cat]);
         handleCategorySelect(cat);
         toast.success(`Category "${cat.name}" added`);
@@ -489,7 +580,9 @@ export default function AddService() {
         closeAddPanel();
         return;
       }
-      toast.error(err.response?.data?.message || `Failed to add ${label.toLowerCase()}`);
+      toast.error(
+        err.response?.data?.message || `Failed to add ${label.toLowerCase()}`,
+      );
     } finally {
       setSavingType(false);
     }
@@ -505,12 +598,18 @@ export default function AddService() {
     return (
       <div
         className={`mt-2 p-4 rounded-xl border-2 border-dashed ${
-          isDark ? "border-green-500/40 bg-gray-800" : "border-green-300 bg-green-50/60"
+          isDark
+            ? "border-green-500/40 bg-gray-800"
+            : "border-green-300 bg-green-50/60"
         }`}
       >
-        <p className={`text-xs font-semibold mb-2 ${isDark ? "text-gray-300" : "text-gray-700"}`}>
+        <p
+          className={`text-xs font-semibold mb-2 ${isDark ? "text-gray-300" : "text-gray-700"}`}
+        >
           Add new {label}
-          {kind === "subService" && categoryQuery ? ` in "${categoryQuery}"` : ""}
+          {kind === "subService" && categoryQuery
+            ? ` in "${categoryQuery}"`
+            : ""}
         </p>
 
         <div className="flex gap-2">
@@ -523,13 +622,16 @@ export default function AddService() {
             onKeyDown={(e) => {
               if (e.key === "Enter") {
                 e.preventDefault();
-                if (!tooShort && !exact && !savingType) saveNewType(kind, newTypeName);
+                if (!tooShort && !exact && !savingType)
+                  saveNewType(kind, newTypeName);
               }
               if (e.key === "Escape") closeAddPanel();
             }}
             placeholder={`New ${label} name`}
             className={`flex-1 min-w-0 px-3 py-2 rounded-lg border-2 text-sm focus:outline-none focus:ring-2 ${
-              exact ? "border-red-400 focus:ring-red-400" : "focus:ring-green-500"
+              exact
+                ? "border-red-400 focus:ring-red-400"
+                : "focus:ring-green-500"
             } ${isDark ? "bg-gray-700 border-gray-600 text-white" : "bg-white border-gray-200 text-gray-900"}`}
           />
           <button
@@ -538,7 +640,11 @@ export default function AddService() {
             onClick={() => saveNewType(kind, newTypeName)}
             className="px-4 py-2 rounded-lg text-sm font-semibold bg-green-600 hover:bg-green-700 text-white flex items-center gap-1 disabled:opacity-40 disabled:cursor-not-allowed"
           >
-            {savingType ? <Loader2 size={16} className="animate-spin" /> : <Plus size={16} />}
+            {savingType ? (
+              <Loader2 size={16} className="animate-spin" />
+            ) : (
+              <Plus size={16} />
+            )}
             Add
           </button>
           <button
@@ -569,7 +675,9 @@ export default function AddService() {
         )}
 
         {!exact && similar.length > 0 && (
-          <div className={`mt-2 flex flex-wrap items-center gap-2 text-xs ${isDark ? "text-gray-400" : "text-gray-600"}`}>
+          <div
+            className={`mt-2 flex flex-wrap items-center gap-2 text-xs ${isDark ? "text-gray-400" : "text-gray-600"}`}
+          >
             <span>Similar existing:</span>
             {similar.map((item) => (
               <button
@@ -580,7 +688,9 @@ export default function AddService() {
                   closeAddPanel();
                 }}
                 className={`px-2 py-1 rounded-full border ${
-                  isDark ? "border-gray-600 hover:bg-gray-700" : "border-gray-300 hover:bg-white"
+                  isDark
+                    ? "border-gray-600 hover:bg-gray-700"
+                    : "border-gray-300 hover:bg-white"
                 }`}
               >
                 {item.name}
@@ -611,6 +721,12 @@ export default function AddService() {
       ) {
         setShowSubServiceDropdown(false);
       }
+      if (
+        mechanicBoxRef.current &&
+        !mechanicBoxRef.current.contains(event.target)
+      ) {
+        setShowMechanicDropdown(false);
+      }
     };
 
     document.addEventListener("mousedown", handleClickOutside);
@@ -620,155 +736,171 @@ export default function AddService() {
   /* =====================================================
      HANDLE FORM SUBMISSION
   ===================================================== */
-const handleSubmit = async (action = "create") => {
-  // ✅ Basic validation
-  if (!form.client || !form.inDate) {
-    toast.error("Please fill in all required fields");
-    return;
-  }
-
-  if (!form.category && !form.categoryText) {
-    toast.error("Please select a service category");
-    return;
-  }
-
-  if (!form.subService && !form.subServiceText) {
-    toast.error("Please select a sub-service");
-    return;
-  }
-
-  // typed names must exist in the list (or be the old value of this service)
-  const isLegacy = (field, value) =>
-    isEditMode && typeKey(value) === typeKey(legacyTypesRef.current[field]);
-
-  if (
-    !form.category &&
-    !findExactType(categories, form.categoryText) &&
-    !isLegacy("category", form.categoryText)
-  ) {
-    toast.error(`"${form.categoryText}" is not in the list. Click "+ Add New" to add it.`);
-    return;
-  }
-
-  if (
-    !form.subService &&
-    !findExactType(subServices, form.subServiceText) &&
-    !isLegacy("subService", form.subServiceText)
-  ) {
-    toast.error(`"${form.subServiceText}" is not in the list. Click "+ Add New" to add it.`);
-    return;
-  }
-
-  setLoading(true);
-
-  try {
-    // ✅ USE FormData (IMPORTANT)
-    const formData = new FormData();
-
-    // ─────────────────────────────────
-    // BASIC FIELDS
-    // ─────────────────────────────────
-    formData.append("clientId", Number(form.client));
-    formData.append("categoryId", Number(form.category));
-    formData.append("subServiceId", Number(form.subService));
-    formData.append("inDate", form.inDate);
-    formData.append("outDate", form.outDate || "");
-    formData.append("expectedDelivery", form.expectedDelivery || "");
-    formData.append("status", form.status);
-    formData.append("priority", form.priority);
-    formData.append("assignedMechanic", form.assignedMechanic || "");
-    formData.append("notes", form.notes || "");
-    formData.append("discountType", form.discountType);
-    formData.append("discountValue", form.discountValue || 0);
-    formData.append("advancePaid", form.advancePaid || 0);
-    formData.append(
-      "invoiceStatus",
-      action === "draft" ? "draft" : form.invoiceStatus
-    );
-    formData.append("categoryText", form.categoryText || "");
-    formData.append("subServiceText", form.subServiceText || "");
-
-
-    // ─────────────────────────────────
-    // SERVICE ITEMS (ARRAY → STRING)
-    // ─────────────────────────────────
-    formData.append("parsedServiceItems", JSON.stringify(items));
-
-
-    // ─────────────────────────────────
-    // MEDIA FILES (DIRECT UPLOAD)
-    // ─────────────────────────────────
-    if (mediaFiles.length > 0) {
-      mediaFiles.forEach((file) => {
-        formData.append("files", file); // multer -> file.buffer
-      });
+  const handleSubmit = async (action = "create") => {
+    // ✅ Basic validation
+    if (!form.client || !form.inDate) {
+      toast.error("Please fill in all required fields");
+      return;
     }
 
-    // ─────────────────────────────────
-    // CREATE / UPDATE
-    // ─────────────────────────────────
-    if (isEditMode) {
-      await api.put(`/api/bike-services/${id}`, formData, {
-        headers: {
-          "Content-Type": "multipart/form-data",
-        },
-      });
-      toast.success("Service updated successfully!");
-    } else {
-      const res = await api.post("/api/bike-services", formData, {
-        headers: {
-          "Content-Type": "multipart/form-data",
-        },
-      });
-      toast.success("Service created successfully!");
+    if (!form.category && !form.categoryText) {
+      toast.error("Please select a service category");
+      return;
     }
 
-    // ─────────────────────────────────
-    // OPTIONAL ACTIONS
-    // ─────────────────────────────────
-    if (isEditMode && action === "generate") {
-      await api.post(`/api/bike-services/${id}/generate-invoice`);
-      toast.success("Invoice generated!");
+    if (!form.subService && !form.subServiceText) {
+      toast.error("Please select a sub-service");
+      return;
     }
 
-    if (isEditMode && action === "send") {
-      await api.post(`/api/bike-services/${id}/send-invoice`);
-      toast.success("Invoice sent!");
+    // typed names must exist in the list (or be the old value of this service)
+    const isLegacy = (field, value) =>
+      isEditMode && typeKey(value) === typeKey(legacyTypesRef.current[field]);
+
+    if (
+      !form.category &&
+      !findExactType(categories, form.categoryText) &&
+      !isLegacy("category", form.categoryText)
+    ) {
+      toast.error(
+        `"${form.categoryText}" is not in the list. Click "+ Add New" to add it.`,
+      );
+      return;
     }
 
-    setTimeout(() => navigate("/bike-services"), 1500);
-  } catch (err) {
-    console.error("Submit error:", err);
-    toast.error(err.response?.data?.message || "Failed to save service");
-  } finally {
-    setLoading(false);
-  }
-};
+    if (
+      !form.subService &&
+      !findExactType(subServices, form.subServiceText) &&
+      !isLegacy("subService", form.subServiceText)
+    ) {
+      toast.error(
+        `"${form.subServiceText}" is not in the list. Click "+ Add New" to add it.`,
+      );
+      return;
+    }
 
+    setLoading(true);
 
-const handleSend = () => {
-  alert("✅ Client confirmation sent successfully!");
-};
+    try {
+      // ✅ USE FormData (IMPORTANT)
+      const formData = new FormData();
+
+      // ─────────────────────────────────
+      // BASIC FIELDS
+      // ─────────────────────────────────
+      formData.append("clientId", Number(form.client));
+      formData.append("categoryId", Number(form.category));
+      formData.append("subServiceId", Number(form.subService));
+      formData.append("inDate", form.inDate);
+      formData.append("outDate", form.outDate || "");
+      formData.append("expectedDelivery", form.expectedDelivery || "");
+      formData.append("status", form.status);
+      formData.append("priority", form.priority);
+      formData.append("assignedMechanic", form.assignedMechanic || "");
+      formData.append("notes", form.notes || "");
+      formData.append("discountType", form.discountType);
+      formData.append("discountValue", form.discountValue || 0);
+      formData.append("advancePaid", form.advancePaid || 0);
+      formData.append(
+        "invoiceStatus",
+        action === "draft" ? "draft" : form.invoiceStatus,
+      );
+      formData.append("categoryText", form.categoryText || "");
+      formData.append("subServiceText", form.subServiceText || "");
+
+      // ─────────────────────────────────
+      // SERVICE ITEMS (ARRAY → STRING)
+      // ─────────────────────────────────
+      // Strip frontend-only inventory fields before saving
+      const cleanItems = items.map(
+        ({ itemCode, inventoryId, ...rest }) => rest,
+      );
+      formData.append("parsedServiceItems", JSON.stringify(cleanItems));
+
+      // ─────────────────────────────────
+      // MEDIA FILES (DIRECT UPLOAD)
+      // ─────────────────────────────────
+      if (mediaFiles.length > 0) {
+        mediaFiles.forEach((file) => {
+          formData.append("files", file); // multer -> file.buffer
+        });
+      }
+
+      // ─────────────────────────────────
+      // CREATE / UPDATE
+      // ─────────────────────────────────
+      if (isEditMode) {
+        await api.put(`/api/bike-services/${id}`, formData, {
+          headers: {
+            "Content-Type": "multipart/form-data",
+          },
+        });
+        toast.success("Service updated successfully!");
+      } else {
+        const res = await api.post("/api/bike-services", formData, {
+          headers: {
+            "Content-Type": "multipart/form-data",
+          },
+        });
+        toast.success("Service created successfully!");
+      }
+
+      // ─────────────────────────────────
+      // OPTIONAL ACTIONS
+      // ─────────────────────────────────
+      if (isEditMode && action === "generate") {
+        await api.post(`/api/bike-services/${id}/generate-invoice`);
+        toast.success("Invoice generated!");
+      }
+
+      if (isEditMode && action === "send") {
+        await api.post(`/api/bike-services/${id}/send-invoice`);
+        toast.success("Invoice sent!");
+      }
+
+      setTimeout(() => navigate("/bike-services"), 1500);
+    } catch (err) {
+      console.error("Submit error:", err);
+      toast.error(err.response?.data?.message || "Failed to save service");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSend = () => {
+    alert("✅ Client confirmation sent successfully!");
+  };
 
   return (
-    <div className={`min-h-screen py-8 px-4 sm:px-6 lg:px-8 transition-all duration-300 ${isDark ? "bg-gray-900" : "bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50"}`}>
+    <div
+      className={`min-h-screen py-8 px-4 sm:px-6 lg:px-8 transition-all duration-300 ${isDark ? "bg-gray-900" : "bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50"}`}
+    >
       <Toaster position="top-right" />
 
       <div className="max-w-5xl mx-auto">
         {/* Header */}
-        <div className={`flex items-center justify-between mb-8 p-6 rounded-2xl shadow-xl animate-fade-in ${isDark ? "bg-gradient-to-r from-gray-800 to-gray-700" : "bg-white"}`}>
+        <div
+          className={`flex items-center justify-between mb-8 p-6 rounded-2xl shadow-xl animate-fade-in ${isDark ? "bg-gradient-to-r from-gray-800 to-gray-700" : "bg-white"}`}
+        >
           <div className="flex items-center gap-4">
             <button
               onClick={() => navigate("/bike-services")}
               className={`p-3 rounded-xl transition-all duration-300 hover:scale-110 active:scale-95 ${isDark ? "bg-gray-700 hover:bg-gray-600" : "bg-gray-100 hover:bg-gray-200"}`}
             >
-              <ArrowLeft size={20} className={isDark ? "text-white" : "text-gray-700"} />
+              <ArrowLeft
+                size={20}
+                className={isDark ? "text-white" : "text-gray-700"}
+              />
             </button>
             <div>
-              <h1 className={`text-3xl font-extrabold ${isDark ? "text-white" : "text-gray-900"}`}>
+              <h1
+                className={`text-3xl font-extrabold ${isDark ? "text-white" : "text-gray-900"}`}
+              >
                 {isEditMode ? "Edit Service" : "Add New Service"}
               </h1>
-              <p className={`text-sm mt-1 ${isDark ? "text-gray-400" : "text-gray-600"}`}>
+              <p
+                className={`text-sm mt-1 ${isDark ? "text-gray-400" : "text-gray-600"}`}
+              >
                 Manage your service record easily
               </p>
             </div>
@@ -776,19 +908,29 @@ const handleSend = () => {
         </div>
 
         {/* Form */}
-        <div className={`rounded-2xl shadow-2xl overflow-hidden animate-fade-in ${isDark ? "bg-gray-800" : "bg-white"}`}>
+        <div
+          className={`rounded-2xl shadow-2xl overflow-hidden animate-fade-in ${isDark ? "bg-gray-800" : "bg-white"}`}
+        >
           <div className="p-8 space-y-6">
-            
             {/* Client & Status Row */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="space-y-2">
-                <label className={`flex items-center gap-2 text-sm font-semibold ${isDark ? "text-gray-300" : "text-gray-700"}`}>
+                <label
+                  className={`flex items-center gap-2 text-sm font-semibold ${isDark ? "text-gray-300" : "text-gray-700"}`}
+                >
                   <User size={16} className="text-blue-500" />
                   Client <span className="text-red-500">*</span>
                 </label>
                 <select
                   value={form.client}
-                  onChange={(e) => setForm({ ...form, client: e.target.value, category: "", subService: "" })}
+                  onChange={(e) =>
+                    setForm({
+                      ...form,
+                      client: e.target.value,
+                      category: "",
+                      subService: "",
+                    })
+                  }
                   className={`w-full px-4 py-3 rounded-xl border-2 transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent ${isDark ? "bg-gray-700 border-gray-600 text-white" : "bg-gray-50 border-gray-200 text-gray-900"}`}
                 >
                   <option value="">Select Client</option>
@@ -801,7 +943,9 @@ const handleSend = () => {
               </div>
 
               <div className="space-y-2">
-                <label className={`flex items-center gap-2 text-sm font-semibold ${isDark ? "text-gray-300" : "text-gray-700"}`}>
+                <label
+                  className={`flex items-center gap-2 text-sm font-semibold ${isDark ? "text-gray-300" : "text-gray-700"}`}
+                >
                   <AlertCircle size={16} className="text-yellow-500" />
                   Status
                 </label>
@@ -820,7 +964,9 @@ const handleSend = () => {
 
             {/* Priority */}
             <div className="space-y-2">
-              <label className={`flex items-center gap-2 text-sm font-semibold ${isDark ? "text-gray-300" : "text-gray-700"}`}>
+              <label
+                className={`flex items-center gap-2 text-sm font-semibold ${isDark ? "text-gray-300" : "text-gray-700"}`}
+              >
                 <Tag size={16} className="text-red-500" />
                 Priority
               </label>
@@ -837,45 +983,61 @@ const handleSend = () => {
             </div>
 
             {/* Timeline - Multiple Dates */}
-            <div className={`p-6 rounded-xl space-y-4 ${isDark ? "bg-gray-700/50" : "bg-gray-50"}`}>
-              <h3 className={`flex items-center gap-2 text-lg font-bold ${isDark ? "text-white" : "text-gray-900"}`}>
+            <div
+              className={`p-6 rounded-xl space-y-4 ${isDark ? "bg-gray-700/50" : "bg-gray-50"}`}
+            >
+              <h3
+                className={`flex items-center gap-2 text-lg font-bold ${isDark ? "text-white" : "text-gray-900"}`}
+              >
                 <Calendar size={20} className="text-blue-500" />
                 Timeline
               </h3>
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="space-y-2">
-                  <label className={`text-sm ${isDark ? "text-gray-300" : "text-gray-700"}`}>
+                  <label
+                    className={`text-sm ${isDark ? "text-gray-300" : "text-gray-700"}`}
+                  >
                     In Date <span className="text-red-500">*</span>
                   </label>
                   <input
                     type="date"
                     value={form.inDate}
-                    onChange={(e) => setForm({ ...form, inDate: e.target.value })}
+                    onChange={(e) =>
+                      setForm({ ...form, inDate: e.target.value })
+                    }
                     className={`w-full px-4 py-3 rounded-xl border-2 transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent ${isDark ? "bg-gray-700 border-gray-600 text-white" : "bg-white border-gray-200 text-gray-900"}`}
                   />
                 </div>
 
                 <div className="space-y-2">
-                  <label className={`text-sm ${isDark ? "text-gray-300" : "text-gray-700"}`}>
+                  <label
+                    className={`text-sm ${isDark ? "text-gray-300" : "text-gray-700"}`}
+                  >
                     Out Date
                   </label>
                   <input
                     type="date"
                     value={form.outDate}
-                    onChange={(e) => setForm({ ...form, outDate: e.target.value })}
+                    onChange={(e) =>
+                      setForm({ ...form, outDate: e.target.value })
+                    }
                     className={`w-full px-4 py-3 rounded-xl border-2 transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent ${isDark ? "bg-gray-700 border-gray-600 text-white" : "bg-white border-gray-200 text-gray-900"}`}
                   />
                 </div>
 
                 <div className="space-y-2">
-                  <label className={`text-sm ${isDark ? "text-gray-300" : "text-gray-700"}`}>
+                  <label
+                    className={`text-sm ${isDark ? "text-gray-300" : "text-gray-700"}`}
+                  >
                     Expected Delivery
                   </label>
                   <input
                     type="date"
                     value={form.expectedDelivery}
-                    onChange={(e) => setForm({ ...form, expectedDelivery: e.target.value })}
+                    onChange={(e) =>
+                      setForm({ ...form, expectedDelivery: e.target.value })
+                    }
                     className={`w-full px-4 py-3 rounded-xl border-2 transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent ${isDark ? "bg-gray-700 border-gray-600 text-white" : "bg-white border-gray-200 text-gray-900"}`}
                   />
                 </div>
@@ -886,15 +1048,25 @@ const handleSend = () => {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="space-y-2 relative">
                 <div className="flex items-center justify-between">
-                  <label className={`flex items-center gap-2 text-sm font-semibold ${isDark ? "text-gray-300" : "text-gray-700"}`}>
+                  <label
+                    className={`flex items-center gap-2 text-sm font-semibold ${isDark ? "text-gray-300" : "text-gray-700"}`}
+                  >
                     <Wrench size={16} className="text-green-500" />
                     Service Category <span className="text-red-500">*</span>
                   </label>
                   <button
                     type="button"
-                    onClick={() => (addPanel === "category" ? closeAddPanel() : openAddPanel("category"))}
+                    onClick={() =>
+                      addPanel === "category"
+                        ? closeAddPanel()
+                        : openAddPanel("category")
+                    }
                     disabled={!form.client || categoryLoading}
-                    title={!form.client ? "Select a client first" : "Add a new category"}
+                    title={
+                      !form.client
+                        ? "Select a client first"
+                        : "Add a new category"
+                    }
                     className="flex items-center gap-1 text-xs font-semibold text-green-600 hover:text-green-700 disabled:opacity-40 disabled:cursor-not-allowed"
                   >
                     <Plus size={14} /> Add New
@@ -907,7 +1079,9 @@ const handleSend = () => {
                   onChange={handleCategoryChange}
                   onFocus={() => setShowCategoryDropdown(true)}
                   disabled={!form.client || categoryLoading}
-                  placeholder={categoryLoading ? "Loading..." : "Select or type category"}
+                  placeholder={
+                    categoryLoading ? "Loading..." : "Select or type category"
+                  }
                   className={`w-full px-4 py-3 rounded-xl border-2 transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent ${isDark ? "bg-gray-700 border-gray-600 text-white disabled:bg-gray-600 disabled:text-gray-400" : "bg-gray-50 border-gray-200 text-gray-900 disabled:bg-gray-100 disabled:text-gray-400"}`}
                 />
 
@@ -926,21 +1100,28 @@ const handleSend = () => {
                       </div>
                     ))}
 
-                    {filteredCategories.length === 0 && !categoryQuery.trim() && (
-                      <div className={`px-4 py-3 text-sm ${isDark ? "text-gray-400" : "text-gray-500"}`}>
-                        No categories found
-                      </div>
-                    )}
+                    {filteredCategories.length === 0 &&
+                      !categoryQuery.trim() && (
+                        <div
+                          className={`px-4 py-3 text-sm ${isDark ? "text-gray-400" : "text-gray-500"}`}
+                        >
+                          No categories found
+                        </div>
+                      )}
 
-                    {categoryQuery.trim() && !findExactType(categories, categoryQuery) && (
-                      <div
-                        onClick={() => openAddPanel("category")}
-                        className={`px-4 py-3 cursor-pointer flex items-center gap-2 border-t text-green-600 font-medium ${isDark ? "border-gray-600 hover:bg-gray-600" : "border-gray-100 hover:bg-green-50"}`}
-                      >
-                        <Plus size={16} />
-                        <span>Add "<strong>{categoryQuery.trim()}</strong>" as new category</span>
-                      </div>
-                    )}
+                    {categoryQuery.trim() &&
+                      !findExactType(categories, categoryQuery) && (
+                        <div
+                          onClick={() => openAddPanel("category")}
+                          className={`px-4 py-3 cursor-pointer flex items-center gap-2 border-t text-green-600 font-medium ${isDark ? "border-gray-600 hover:bg-gray-600" : "border-gray-100 hover:bg-green-50"}`}
+                        >
+                          <Plus size={16} />
+                          <span>
+                            Add "<strong>{categoryQuery.trim()}</strong>" as new
+                            category
+                          </span>
+                        </div>
+                      )}
                   </div>
                 )}
 
@@ -949,15 +1130,25 @@ const handleSend = () => {
 
               <div className="space-y-2 relative">
                 <div className="flex items-center justify-between">
-                  <label className={`flex items-center gap-2 text-sm font-semibold ${isDark ? "text-gray-300" : "text-gray-700"}`}>
+                  <label
+                    className={`flex items-center gap-2 text-sm font-semibold ${isDark ? "text-gray-300" : "text-gray-700"}`}
+                  >
                     <Wrench size={16} className="text-purple-500" />
                     Sub-Service <span className="text-red-500">*</span>
                   </label>
                   <button
                     type="button"
-                    onClick={() => (addPanel === "subService" ? closeAddPanel() : openAddPanel("subService"))}
+                    onClick={() =>
+                      addPanel === "subService"
+                        ? closeAddPanel()
+                        : openAddPanel("subService")
+                    }
                     disabled={!form.category}
-                    title={!form.category ? "Select a category from the list first" : "Add a new sub-service"}
+                    title={
+                      !form.category
+                        ? "Select a category from the list first"
+                        : "Add a new sub-service"
+                    }
                     className="flex items-center gap-1 text-xs font-semibold text-purple-600 hover:text-purple-700 disabled:opacity-40 disabled:cursor-not-allowed"
                   >
                     <Plus size={14} /> Add New
@@ -974,61 +1165,139 @@ const handleSend = () => {
                   className={`w-full px-4 py-3 rounded-xl border-2 transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent ${isDark ? "bg-gray-700 border-gray-600 text-white disabled:bg-gray-600 disabled:text-gray-400" : "bg-gray-50 border-gray-200 text-gray-900 disabled:bg-gray-100 disabled:text-gray-400"}`}
                 />
 
-                {showSubServiceDropdown && (form.category || form.categoryText) && (
-                  <div
-                    ref={subServiceDropdownRef}
-                    className={`absolute z-50 w-full mt-1 rounded-xl shadow-2xl border-2 max-h-60 overflow-y-auto ${isDark ? "bg-gray-700 border-gray-600" : "bg-white border-gray-200"}`}
-                  >
-                    {filteredSubServices.map((sub) => (
-                      <div
-                        key={sub.id}
-                        onClick={() => handleSubServiceSelect(sub)}
-                        className={`px-4 py-3 cursor-pointer transition-colors duration-200 ${isDark ? "hover:bg-gray-600 text-white" : "hover:bg-gray-100 text-gray-900"}`}
-                      >
-                        {sub.name}
-                      </div>
-                    ))}
+                {showSubServiceDropdown &&
+                  (form.category || form.categoryText) && (
+                    <div
+                      ref={subServiceDropdownRef}
+                      className={`absolute z-50 w-full mt-1 rounded-xl shadow-2xl border-2 max-h-60 overflow-y-auto ${isDark ? "bg-gray-700 border-gray-600" : "bg-white border-gray-200"}`}
+                    >
+                      {filteredSubServices.map((sub) => (
+                        <div
+                          key={sub.id}
+                          onClick={() => handleSubServiceSelect(sub)}
+                          className={`px-4 py-3 cursor-pointer transition-colors duration-200 ${isDark ? "hover:bg-gray-600 text-white" : "hover:bg-gray-100 text-gray-900"}`}
+                        >
+                          {sub.name}
+                        </div>
+                      ))}
 
-                    {filteredSubServices.length === 0 && !subServiceQuery.trim() && (
-                      <div className={`px-4 py-3 text-sm ${isDark ? "text-gray-400" : "text-gray-500"}`}>
-                        No sub-services yet for this category
-                      </div>
-                    )}
+                      {filteredSubServices.length === 0 &&
+                        !subServiceQuery.trim() && (
+                          <div
+                            className={`px-4 py-3 text-sm ${isDark ? "text-gray-400" : "text-gray-500"}`}
+                          >
+                            No sub-services yet for this category
+                          </div>
+                        )}
 
-                    {subServiceQuery.trim() && form.category && !findExactType(subServices, subServiceQuery) && (
-                      <div
-                        onClick={() => openAddPanel("subService")}
-                        className={`px-4 py-3 cursor-pointer flex items-center gap-2 border-t text-purple-600 font-medium ${isDark ? "border-gray-600 hover:bg-gray-600" : "border-gray-100 hover:bg-purple-50"}`}
-                      >
-                        <Plus size={16} />
-                        <span>Add "<strong>{subServiceQuery.trim()}</strong>" as new sub-service</span>
-                      </div>
-                    )}
-                  </div>
-                )}
+                      {subServiceQuery.trim() &&
+                        form.category &&
+                        !findExactType(subServices, subServiceQuery) && (
+                          <div
+                            onClick={() => openAddPanel("subService")}
+                            className={`px-4 py-3 cursor-pointer flex items-center gap-2 border-t text-purple-600 font-medium ${isDark ? "border-gray-600 hover:bg-gray-600" : "border-gray-100 hover:bg-purple-50"}`}
+                          >
+                            <Plus size={16} />
+                            <span>
+                              Add "<strong>{subServiceQuery.trim()}</strong>" as
+                              new sub-service
+                            </span>
+                          </div>
+                        )}
+                    </div>
+                  )}
 
                 {addPanel === "subService" && renderAddPanel("subService")}
               </div>
             </div>
 
             {/* Assigned Mechanic */}
-            <div className="space-y-2">
-              <label className={`flex items-center gap-2 text-sm font-semibold ${isDark ? "text-gray-300" : "text-gray-700"}`}>
+            <div className="space-y-2 relative" ref={mechanicBoxRef}>
+              <label
+                className={`flex items-center gap-2 text-sm font-semibold ${isDark ? "text-gray-300" : "text-gray-700"}`}
+              >
                 <User size={16} className="text-orange-500" />
                 Assigned Mechanic
               </label>
               <input
                 type="text"
-                placeholder="Type mechanic name"
+                placeholder={
+                  staffList.length
+                    ? "Select from your staff or type a name"
+                    : "Type mechanic name"
+                }
                 value={form.assignedMechanic}
-                onChange={(e) => setForm({ ...form, assignedMechanic: e.target.value })}
+                autoComplete="off"
+                onChange={(e) => {
+                  setForm({ ...form, assignedMechanic: e.target.value });
+                  setShowMechanicDropdown(true);
+                }}
+                onFocus={() => setShowMechanicDropdown(true)}
+                onKeyDown={(e) =>
+                  e.key === "Escape" && setShowMechanicDropdown(false)
+                }
                 className={`w-full px-4 py-3 rounded-xl border-2 transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent ${isDark ? "bg-gray-700 border-gray-600 text-white" : "bg-gray-50 border-gray-200 text-gray-900"}`}
               />
+
+              {showMechanicDropdown && staffList.length > 0 && (
+                <div
+                  className={`absolute z-50 w-full mt-1 rounded-xl shadow-2xl border-2 max-h-60 overflow-y-auto ${isDark ? "bg-gray-700 border-gray-600" : "bg-white border-gray-200"}`}
+                >
+                  {filteredStaff.length > 0 ? (
+                    filteredStaff.map((s) => (
+                      <div
+                        key={s.id}
+                        onClick={() => {
+                          setForm((prev) => ({
+                            ...prev,
+                            assignedMechanic: s.name,
+                          }));
+                          setShowMechanicDropdown(false);
+                        }}
+                        className={`px-4 py-3 cursor-pointer flex items-center justify-between gap-3 transition-colors duration-200 ${
+                          typeKey(s.name) === mechanicQuery
+                            ? isDark
+                              ? "bg-gray-600"
+                              : "bg-green-50"
+                            : ""
+                        } ${isDark ? "hover:bg-gray-600 text-white" : "hover:bg-gray-100 text-gray-900"}`}
+                      >
+                        <div className="min-w-0">
+                          <p className="font-medium truncate">{s.name}</p>
+                          {s.phone && (
+                            <p
+                              className={`text-xs ${isDark ? "text-gray-400" : "text-gray-500"}`}
+                            >
+                              {s.phone}
+                            </p>
+                          )}
+                        </div>
+                        {s.role && (
+                          <span
+                            className={`shrink-0 text-[10px] uppercase tracking-wider px-2 py-0.5 rounded ${isDark ? "bg-gray-800 text-gray-300" : "bg-gray-100 text-gray-600"}`}
+                          >
+                            {s.role}
+                          </span>
+                        )}
+                      </div>
+                    ))
+                  ) : (
+                    <div
+                      className={`px-4 py-3 text-sm ${isDark ? "text-gray-400" : "text-gray-500"}`}
+                    >
+                      No staff match "{form.assignedMechanic}" — it will be
+                      saved as typed.
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
             {/* Internal Notes */}
             <div className="space-y-2">
-              <label className={`flex items-center gap-2 text-sm font-semibold ${isDark ? "text-gray-300" : "text-gray-700"}`}>
+              <label
+                className={`flex items-center gap-2 text-sm font-semibold ${isDark ? "text-gray-300" : "text-gray-700"}`}
+              >
                 <FileText size={16} className="text-indigo-500" />
                 Internal Notes (Staff Only)
               </label>
@@ -1042,9 +1311,13 @@ const handleSend = () => {
             </div>
 
             {/* Cost Breakdown with Line Items - ✅ FIXED */}
-            <div className={`p-6 rounded-xl space-y-4 ${isDark ? "bg-gray-700/50" : "bg-gray-50"}`}>
+            <div
+              className={`p-6 rounded-xl space-y-4 ${isDark ? "bg-gray-700/50" : "bg-gray-50"}`}
+            >
               <div className="flex items-center justify-between">
-                <h3 className={`flex items-center gap-2 text-lg font-bold ${isDark ? "text-white" : "text-gray-900"}`}>
+                <h3
+                  className={`flex items-center gap-2 text-lg font-bold ${isDark ? "text-white" : "text-gray-900"}`}
+                >
                   <IndianRupee size={20} className="text-green-500" />
                   Cost Breakdown
                 </h3>
@@ -1065,7 +1338,9 @@ const handleSend = () => {
                     className={`p-4 rounded-lg space-y-3 ${isDark ? "bg-gray-800" : "bg-white"}`}
                   >
                     <div className="flex items-center justify-between">
-                      <span className={`font-semibold ${isDark ? "text-white" : "text-gray-900"}`}>
+                      <span
+                        className={`font-semibold ${isDark ? "text-white" : "text-gray-900"}`}
+                      >
                         Item #{index + 1}
                       </span>
                       {items.length > 1 && (
@@ -1084,12 +1359,16 @@ const handleSend = () => {
                       <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
                         {/* Type */}
                         <div className="space-y-1">
-                          <label className={`text-xs ${isDark ? "text-gray-400" : "text-gray-600"}`}>
+                          <label
+                            className={`text-xs ${isDark ? "text-gray-400" : "text-gray-600"}`}
+                          >
                             Type
                           </label>
                           <select
                             value={item.type}
-                            onChange={(e) => updateItem(item.id, "type", e.target.value)}
+                            onChange={(e) =>
+                              updateItem(item.id, "type", e.target.value)
+                            }
                             className={`w-full px-3 py-2 rounded-lg border ${isDark ? "bg-gray-700 border-gray-600 text-white" : "bg-white border-gray-300 text-gray-900"}`}
                           >
                             <option value="Part">Part</option>
@@ -1097,37 +1376,87 @@ const handleSend = () => {
                           </select>
                         </div>
 
-                        {/* Name - Only for Part */}
+                        {/* Name - Only for Part (search inventory or type a custom part) */}
                         <div className="space-y-1 md:col-span-2">
-                          <label className={`text-xs ${isDark ? "text-gray-400" : "text-gray-600"}`}>
+                          <label
+                            className={`text-xs ${isDark ? "text-gray-400" : "text-gray-600"}`}
+                          >
                             Name
                           </label>
-                          <input
-                            type="text"
-                            placeholder="Item name"
+                          <PartAutocomplete
                             value={item.name}
-                            onChange={(e) => updateItem(item.id, "name", e.target.value)}
-                            className={`w-full px-3 py-2 rounded-lg border ${isDark ? "bg-gray-700 border-gray-600 text-white" : "bg-white border-gray-300 text-gray-900"}`}
+                            isDark={isDark}
+                            inventory={inventory}
+                            selectedCode={item.itemCode}
+                            onTextChange={(text) =>
+                              // typing manually = custom part (unlinks inventory)
+                              patchItem(item.id, {
+                                name: text,
+                                itemCode: null,
+                                inventoryId: null,
+                              })
+                            }
+                            onSelect={(inv) =>
+                              patchItem(item.id, {
+                                name: inv.itemName,
+                                unitPrice: Number(inv.sellingPrice || 0),
+                                itemCode: inv.itemCode,
+                                inventoryId: inv.id,
+                              })
+                            }
                           />
                         </div>
 
                         {/* Quantity */}
-                        <div className="space-y-1">
-                          <label className={`text-xs ${isDark ? "text-gray-400" : "text-gray-600"}`}>
-                            Qty
-                          </label>
-                          <input
-                            type="number"
-                            min="0"
-                            value={item.quantity}
-                            onChange={(e) => updateItem(item.id, "quantity", e.target.value)}
-                            className={`w-full px-3 py-2 rounded-lg border ${isDark ? "bg-gray-700 border-gray-600 text-white" : "bg-white border-gray-300 text-gray-900"}`}
-                          />
-                        </div>
+                        {(() => {
+                          const linked = item.itemCode
+                            ? inventory.find(
+                                (x) => x.itemCode === item.itemCode,
+                              )
+                            : null;
+                          const overStock =
+                            linked &&
+                            Number(item.quantity) > Number(linked.quantity);
+                          return (
+                            <div className="space-y-1">
+                              <label
+                                className={`text-xs ${isDark ? "text-gray-400" : "text-gray-600"}`}
+                              >
+                                Qty
+                              </label>
+                              <input
+                                type="number"
+                                min="0"
+                                value={item.quantity}
+                                onChange={(e) =>
+                                  updateItem(
+                                    item.id,
+                                    "quantity",
+                                    e.target.value,
+                                  )
+                                }
+                                className={`w-full px-3 py-2 rounded-lg border ${
+                                  overStock
+                                    ? "border-red-500"
+                                    : isDark
+                                      ? "border-gray-600"
+                                      : "border-gray-300"
+                                } ${isDark ? "bg-gray-700 text-white" : "bg-white text-gray-900"}`}
+                              />
+                              {overStock && (
+                                <p className="text-[11px] text-red-500">
+                                  Only {linked.quantity} in stock
+                                </p>
+                              )}
+                            </div>
+                          );
+                        })()}
 
                         {/* Unit Price */}
                         <div className="space-y-1">
-                          <label className={`text-xs ${isDark ? "text-gray-400" : "text-gray-600"}`}>
+                          <label
+                            className={`text-xs ${isDark ? "text-gray-400" : "text-gray-600"}`}
+                          >
                             Unit Price
                           </label>
                           <input
@@ -1135,14 +1464,18 @@ const handleSend = () => {
                             min="0"
                             step="0.01"
                             value={item.unitPrice}
-                            onChange={(e) => updateItem(item.id, "unitPrice", e.target.value)}
+                            onChange={(e) =>
+                              updateItem(item.id, "unitPrice", e.target.value)
+                            }
                             className={`w-full px-3 py-2 rounded-lg border ${isDark ? "bg-gray-700 border-gray-600 text-white" : "bg-white border-gray-300 text-gray-900"}`}
                           />
                         </div>
 
                         {/* CGST % */}
                         <div className="space-y-1">
-                          <label className={`text-xs ${isDark ? "text-gray-400" : "text-gray-600"}`}>
+                          <label
+                            className={`text-xs ${isDark ? "text-gray-400" : "text-gray-600"}`}
+                          >
                             CGST %
                           </label>
                           <input
@@ -1151,14 +1484,18 @@ const handleSend = () => {
                             max="100"
                             step="0.01"
                             value={item.cgst}
-                            onChange={(e) => updateItem(item.id, "cgst", e.target.value)}
+                            onChange={(e) =>
+                              updateItem(item.id, "cgst", e.target.value)
+                            }
                             className={`w-full px-3 py-2 rounded-lg border ${isDark ? "bg-gray-700 border-gray-600 text-white" : "bg-white border-gray-300 text-gray-900"}`}
                           />
                         </div>
 
                         {/* SGST % */}
                         <div className="space-y-1">
-                          <label className={`text-xs ${isDark ? "text-gray-400" : "text-gray-600"}`}>
+                          <label
+                            className={`text-xs ${isDark ? "text-gray-400" : "text-gray-600"}`}
+                          >
                             SGST %
                           </label>
                           <input
@@ -1167,7 +1504,9 @@ const handleSend = () => {
                             max="100"
                             step="0.01"
                             value={item.sgst}
-                            onChange={(e) => updateItem(item.id, "sgst", e.target.value)}
+                            onChange={(e) =>
+                              updateItem(item.id, "sgst", e.target.value)
+                            }
                             className={`w-full px-3 py-2 rounded-lg border ${isDark ? "bg-gray-700 border-gray-600 text-white" : "bg-white border-gray-300 text-gray-900"}`}
                           />
                         </div>
@@ -1177,12 +1516,16 @@ const handleSend = () => {
                       <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
                         {/* Type */}
                         <div className="space-y-1">
-                          <label className={`text-xs ${isDark ? "text-gray-400" : "text-gray-600"}`}>
+                          <label
+                            className={`text-xs ${isDark ? "text-gray-400" : "text-gray-600"}`}
+                          >
                             Type
                           </label>
                           <select
                             value={item.type}
-                            onChange={(e) => updateItem(item.id, "type", e.target.value)}
+                            onChange={(e) =>
+                              updateItem(item.id, "type", e.target.value)
+                            }
                             className={`w-full px-3 py-2 rounded-lg border ${isDark ? "bg-gray-700 border-gray-600 text-white" : "bg-white border-gray-300 text-gray-900"}`}
                           >
                             <option value="Part">Part</option>
@@ -1192,21 +1535,27 @@ const handleSend = () => {
 
                         {/* Quantity */}
                         <div className="space-y-1">
-                          <label className={`text-xs ${isDark ? "text-gray-400" : "text-gray-600"}`}>
+                          <label
+                            className={`text-xs ${isDark ? "text-gray-400" : "text-gray-600"}`}
+                          >
                             Qty
                           </label>
                           <input
                             type="number"
                             min="0"
                             value={item.quantity}
-                            onChange={(e) => updateItem(item.id, "quantity", e.target.value)}
+                            onChange={(e) =>
+                              updateItem(item.id, "quantity", e.target.value)
+                            }
                             className={`w-full px-3 py-2 rounded-lg border ${isDark ? "bg-gray-700 border-gray-600 text-white" : "bg-white border-gray-300 text-gray-900"}`}
                           />
                         </div>
 
                         {/* Unit Price */}
                         <div className="space-y-1">
-                          <label className={`text-xs ${isDark ? "text-gray-400" : "text-gray-600"}`}>
+                          <label
+                            className={`text-xs ${isDark ? "text-gray-400" : "text-gray-600"}`}
+                          >
                             Unit Price
                           </label>
                           <input
@@ -1214,14 +1563,18 @@ const handleSend = () => {
                             min="0"
                             step="0.01"
                             value={item.unitPrice}
-                            onChange={(e) => updateItem(item.id, "unitPrice", e.target.value)}
+                            onChange={(e) =>
+                              updateItem(item.id, "unitPrice", e.target.value)
+                            }
                             className={`w-full px-3 py-2 rounded-lg border ${isDark ? "bg-gray-700 border-gray-600 text-white" : "bg-white border-gray-300 text-gray-900"}`}
                           />
                         </div>
 
                         {/* CGST % */}
                         <div className="space-y-1">
-                          <label className={`text-xs ${isDark ? "text-gray-400" : "text-gray-600"}`}>
+                          <label
+                            className={`text-xs ${isDark ? "text-gray-400" : "text-gray-600"}`}
+                          >
                             CGST %
                           </label>
                           <input
@@ -1230,14 +1583,18 @@ const handleSend = () => {
                             max="100"
                             step="0.01"
                             value={item.cgst}
-                            onChange={(e) => updateItem(item.id, "cgst", e.target.value)}
+                            onChange={(e) =>
+                              updateItem(item.id, "cgst", e.target.value)
+                            }
                             className={`w-full px-3 py-2 rounded-lg border ${isDark ? "bg-gray-700 border-gray-600 text-white" : "bg-white border-gray-300 text-gray-900"}`}
                           />
                         </div>
 
                         {/* SGST % */}
                         <div className="space-y-1">
-                          <label className={`text-xs ${isDark ? "text-gray-400" : "text-gray-600"}`}>
+                          <label
+                            className={`text-xs ${isDark ? "text-gray-400" : "text-gray-600"}`}
+                          >
                             SGST %
                           </label>
                           <input
@@ -1246,7 +1603,9 @@ const handleSend = () => {
                             max="100"
                             step="0.01"
                             value={item.sgst}
-                            onChange={(e) => updateItem(item.id, "sgst", e.target.value)}
+                            onChange={(e) =>
+                              updateItem(item.id, "sgst", e.target.value)
+                            }
                             className={`w-full px-3 py-2 rounded-lg border ${isDark ? "bg-gray-700 border-gray-600 text-white" : "bg-white border-gray-300 text-gray-900"}`}
                           />
                         </div>
@@ -1254,8 +1613,12 @@ const handleSend = () => {
                     )}
 
                     {/* Item Total */}
-                    <div className={`flex justify-between items-center pt-2 border-t ${isDark ? "border-gray-600" : "border-gray-200"}`}>
-                      <span className={`text-sm ${isDark ? "text-gray-400" : "text-gray-600"}`}>
+                    <div
+                      className={`flex justify-between items-center pt-2 border-t ${isDark ? "border-gray-600" : "border-gray-200"}`}
+                    >
+                      <span
+                        className={`text-sm ${isDark ? "text-gray-400" : "text-gray-600"}`}
+                      >
                         Item Total:
                       </span>
                       <span className="text-lg font-bold text-green-600">
@@ -1267,18 +1630,20 @@ const handleSend = () => {
               </div>
             </div>
 
-          
-
             {/* Discount & Advance */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="space-y-2">
-                <label className={`flex items-center gap-2 text-sm font-semibold ${isDark ? "text-gray-300" : "text-gray-700"}`}>
+                <label
+                  className={`flex items-center gap-2 text-sm font-semibold ${isDark ? "text-gray-300" : "text-gray-700"}`}
+                >
                   <Tag size={16} className="text-red-500" />
                   Discount Type
                 </label>
                 <select
                   value={form.discountType}
-                  onChange={(e) => setForm({ ...form, discountType: e.target.value })}
+                  onChange={(e) =>
+                    setForm({ ...form, discountType: e.target.value })
+                  }
                   className={`w-full px-4 py-3 rounded-xl border-2 transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent ${isDark ? "bg-gray-700 border-gray-600 text-white" : "bg-gray-50 border-gray-200 text-gray-900"}`}
                 >
                   <option value="Fixed Amount">Fixed Amount</option>
@@ -1287,7 +1652,9 @@ const handleSend = () => {
               </div>
 
               <div className="space-y-2">
-                <label className={`flex items-center gap-2 text-sm font-semibold ${isDark ? "text-gray-300" : "text-gray-700"}`}>
+                <label
+                  className={`flex items-center gap-2 text-sm font-semibold ${isDark ? "text-gray-300" : "text-gray-700"}`}
+                >
                   <IndianRupee size={16} className="text-red-500" />
                   Discount Value
                 </label>
@@ -1297,7 +1664,9 @@ const handleSend = () => {
                   step="0.01"
                   placeholder="0.00"
                   value={form.discountValue}
-                  onChange={(e) => setForm({ ...form, discountValue: e.target.value })}
+                  onChange={(e) =>
+                    setForm({ ...form, discountValue: e.target.value })
+                  }
                   className={`w-full px-4 py-3 rounded-xl border-2 transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent ${isDark ? "bg-gray-700 border-gray-600 text-white" : "bg-gray-50 border-gray-200 text-gray-900"}`}
                 />
               </div>
@@ -1305,7 +1674,9 @@ const handleSend = () => {
 
             {/* Advance Paid */}
             <div className="space-y-2">
-              <label className={`flex items-center gap-2 text-sm font-semibold ${isDark ? "text-gray-300" : "text-gray-700"}`}>
+              <label
+                className={`flex items-center gap-2 text-sm font-semibold ${isDark ? "text-gray-300" : "text-gray-700"}`}
+              >
                 <IndianRupee size={16} className="text-blue-500" />
                 Advance Paid
               </label>
@@ -1315,59 +1686,91 @@ const handleSend = () => {
                 step="0.01"
                 placeholder="0.00"
                 value={form.advancePaid}
-                onChange={(e) => setForm({ ...form, advancePaid: e.target.value })}
+                onChange={(e) =>
+                  setForm({ ...form, advancePaid: e.target.value })
+                }
                 className={`w-full px-4 py-3 rounded-xl border-2 transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent ${isDark ? "bg-gray-700 border-gray-600 text-white" : "bg-gray-50 border-gray-200 text-gray-900"}`}
               />
             </div>
 
-              {/* Billing Summary */}
-            <div className={`p-6 rounded-xl space-y-4 ${isDark ? "bg-green-900/20" : "bg-green-50"}`}>
-              <h3 className={`flex items-center gap-2 text-lg font-bold ${isDark ? "text-white" : "text-gray-900"}`}>
+            {/* Billing Summary */}
+            <div
+              className={`p-6 rounded-xl space-y-4 ${isDark ? "bg-green-900/20" : "bg-green-50"}`}
+            >
+              <h3
+                className={`flex items-center gap-2 text-lg font-bold ${isDark ? "text-white" : "text-gray-900"}`}
+              >
                 <IndianRupee size={20} className="text-green-500" />
                 Billing Summary
               </h3>
 
               <div className="space-y-2">
                 <div className="flex justify-between">
-                  <span className={isDark ? "text-gray-300" : "text-gray-700"}>Parts Subtotal</span>
-                  <span className={`font-semibold ${isDark ? "text-white" : "text-gray-900"}`}>
+                  <span className={isDark ? "text-gray-300" : "text-gray-700"}>
+                    Parts Subtotal
+                  </span>
+                  <span
+                    className={`font-semibold ${isDark ? "text-white" : "text-gray-900"}`}
+                  >
                     ₹{partsSubtotal.toFixed(2)}
                   </span>
                 </div>
                 <div className="flex justify-between">
-                  <span className={isDark ? "text-gray-300" : "text-gray-700"}>Labor Subtotal</span>
-                  <span className={`font-semibold ${isDark ? "text-white" : "text-gray-900"}`}>
+                  <span className={isDark ? "text-gray-300" : "text-gray-700"}>
+                    Labor Subtotal
+                  </span>
+                  <span
+                    className={`font-semibold ${isDark ? "text-white" : "text-gray-900"}`}
+                  >
                     ₹{laborSubtotal.toFixed(2)}
                   </span>
                 </div>
                 <div className="flex justify-between">
-                  <span className={isDark ? "text-gray-300" : "text-gray-700"}>CGST Total</span>
-                  <span className={`font-semibold ${isDark ? "text-white" : "text-gray-900"}`}>
+                  <span className={isDark ? "text-gray-300" : "text-gray-700"}>
+                    CGST Total
+                  </span>
+                  <span
+                    className={`font-semibold ${isDark ? "text-white" : "text-gray-900"}`}
+                  >
                     ₹{cgstTotal.toFixed(2)}
                   </span>
                 </div>
                 <div className="flex justify-between">
-                  <span className={isDark ? "text-gray-300" : "text-gray-700"}>SGST Total</span>
-                  <span className={`font-semibold ${isDark ? "text-white" : "text-gray-900"}`}>
+                  <span className={isDark ? "text-gray-300" : "text-gray-700"}>
+                    SGST Total
+                  </span>
+                  <span
+                    className={`font-semibold ${isDark ? "text-white" : "text-gray-900"}`}
+                  >
                     ₹{sgstTotal.toFixed(2)}
                   </span>
                 </div>
                 <div className="flex justify-between">
-                  <span className={isDark ? "text-gray-300" : "text-gray-700"}>Discount</span>
+                  <span className={isDark ? "text-gray-300" : "text-gray-700"}>
+                    Discount
+                  </span>
                   <span className={`font-semibold text-red-600`}>
                     -₹{discountAmount.toFixed(2)}
                   </span>
                 </div>
                 <div className="flex justify-between">
-                  <span className={isDark ? "text-gray-300" : "text-gray-700"}>Advance Paid</span>
-                  <span className={`font-semibold ${isDark ? "text-white" : "text-gray-900"}`}>
+                  <span className={isDark ? "text-gray-300" : "text-gray-700"}>
+                    Advance Paid
+                  </span>
+                  <span
+                    className={`font-semibold ${isDark ? "text-white" : "text-gray-900"}`}
+                  >
                     ₹{Number(form.advancePaid || 0).toFixed(2)}
                   </span>
                 </div>
 
-                <div className={`border-t-2 pt-3 mt-3 ${isDark ? "border-gray-600" : "border-gray-300"}`}>
+                <div
+                  className={`border-t-2 pt-3 mt-3 ${isDark ? "border-gray-600" : "border-gray-300"}`}
+                >
                   <div className="flex justify-between items-center">
-                    <span className={`text-lg font-bold ${isDark ? "text-white" : "text-gray-900"}`}>
+                    <span
+                      className={`text-lg font-bold ${isDark ? "text-white" : "text-gray-900"}`}
+                    >
                       Grand Total
                     </span>
                     <span className="text-2xl font-bold text-green-600">
@@ -1375,10 +1778,14 @@ const handleSend = () => {
                     </span>
                   </div>
                   <div className="flex justify-between items-center mt-2">
-                    <span className={`text-lg font-bold ${isDark ? "text-white" : "text-gray-900"}`}>
+                    <span
+                      className={`text-lg font-bold ${isDark ? "text-white" : "text-gray-900"}`}
+                    >
                       Balance Due
                     </span>
-                    <span className={`text-2xl font-bold ${balanceDue > 0 ? "text-red-600" : "text-green-600"}`}>
+                    <span
+                      className={`text-2xl font-bold ${balanceDue > 0 ? "text-red-600" : "text-green-600"}`}
+                    >
                       ₹{balanceDue.toFixed(2)}
                     </span>
                   </div>
@@ -1388,7 +1795,9 @@ const handleSend = () => {
 
             {/* Upload Media */}
             <div className="space-y-2">
-              <label className={`flex items-center gap-2 text-sm font-semibold ${isDark ? "text-gray-300" : "text-gray-700"}`}>
+              <label
+                className={`flex items-center gap-2 text-sm font-semibold ${isDark ? "text-gray-300" : "text-gray-700"}`}
+              >
                 <Upload size={16} className="text-purple-500" />
                 Upload Media (Images/Files)
               </label>
@@ -1396,8 +1805,13 @@ const handleSend = () => {
                 onClick={() => fileInputRef.current?.click()}
                 className={`border-2 border-dashed rounded-xl p-6 text-center cursor-pointer transition-all duration-300 hover:border-green-500 ${isDark ? "border-gray-600 bg-gray-700 hover:bg-gray-600" : "border-gray-300 bg-gray-50 hover:bg-gray-100"}`}
               >
-                <Upload size={32} className={`mx-auto mb-2 ${isDark ? "text-gray-400" : "text-gray-500"}`} />
-                <p className={`text-sm ${isDark ? "text-gray-400" : "text-gray-600"}`}>
+                <Upload
+                  size={32}
+                  className={`mx-auto mb-2 ${isDark ? "text-gray-400" : "text-gray-500"}`}
+                />
+                <p
+                  className={`text-sm ${isDark ? "text-gray-400" : "text-gray-600"}`}
+                >
                   Click to choose files
                 </p>
                 <input
@@ -1419,7 +1833,9 @@ const handleSend = () => {
                     >
                       <div className="flex items-center gap-2">
                         <File size={16} className="text-blue-500" />
-                        <span className={`text-sm ${isDark ? "text-white" : "text-gray-900"}`}>
+                        <span
+                          className={`text-sm ${isDark ? "text-white" : "text-gray-900"}`}
+                        >
                           {file.name}
                         </span>
                       </div>
@@ -1446,20 +1862,17 @@ const handleSend = () => {
                 Save as Draft
               </button>
 
- 
-
-<button
-  onClick={handleSend}
-  className={`flex items-center justify-center gap-2 px-4 py-3 rounded-xl transition-all duration-300 ${
-    isDark
-      ? "bg-green-600 hover:bg-green-500 text-white disabled:bg-green-700"
-      : "bg-green-500 hover:bg-green-600 text-white disabled:bg-gray-300"
-  }`}
->
-  <Send size={16} />
-  Send Client Confirmation
-</button>
-
+              <button
+                onClick={handleSend}
+                className={`flex items-center justify-center gap-2 px-4 py-3 rounded-xl transition-all duration-300 ${
+                  isDark
+                    ? "bg-green-600 hover:bg-green-500 text-white disabled:bg-green-700"
+                    : "bg-green-500 hover:bg-green-600 text-white disabled:bg-gray-300"
+                }`}
+              >
+                <Send size={16} />
+                Send Client Confirmation
+              </button>
 
               {/* <button
                 disabled={loading || !isEditMode}
@@ -1483,7 +1896,10 @@ const handleSend = () => {
                 </>
               ) : (
                 <>
-                  <Save size={20} className="group-hover:scale-110 transition-transform" />
+                  <Save
+                    size={20}
+                    className="group-hover:scale-110 transition-transform"
+                  />
                   {isEditMode ? "Update Service" : "Create Service"}
                 </>
               )}
