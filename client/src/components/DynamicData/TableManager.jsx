@@ -8,7 +8,7 @@ import {
   X,
   ChevronRight,
 } from "lucide-react";
-import { tk, btnBase, ConfirmDialog } from "../../pages/clients/components/clientUi";
+import { tk, btnBase, ConfirmDialog } from "./DynamicUi";
 
 const TableManager = ({
   tables = [],
