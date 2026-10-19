@@ -8,7 +8,7 @@ import {
   Loader2,
   Info,
 } from "lucide-react";
-import { tk, btnBase, Banner } from "./dynamicUi";
+import { tk, btnBase, Banner } from "../../pages/clients/components/clientUi";
 
 const MAX_ROWS = 500;
 

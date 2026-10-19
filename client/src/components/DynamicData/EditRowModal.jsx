@@ -8,7 +8,7 @@ import {
   Banner,
   DynamicField,
   formatRowValues,
-} from "./dynamicUi";
+} from "../../pages/clients/components/clientUi";
 
 // Keeps the calendar day the user saved (no time-zone shift for IST etc.)
 const toDateInputValue = (value) => {

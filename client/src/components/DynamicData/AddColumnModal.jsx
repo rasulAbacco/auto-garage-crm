@@ -8,7 +8,7 @@ import {
   FieldLabel,
   ToggleRow,
   TYPES,
-} from "./dynamicUi";
+} from "../../pages/clients/components/clientUi";
 
 const AddColumnModal = ({ onClose, onSave, isDark }) => {
   const t = tk(isDark);

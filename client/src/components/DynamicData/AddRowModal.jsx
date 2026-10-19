@@ -8,7 +8,7 @@ import {
   Banner,
   DynamicField,
   formatRowValues,
-} from "./dynamicUi";
+} from "../../pages/clients/components/clientUi";
 
 const AddRowModal = ({
   tableId,
